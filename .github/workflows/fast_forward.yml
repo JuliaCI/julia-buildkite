@@ -15,6 +15,7 @@ jobs:
       - uses: actions/checkout@v2
         with:
           persist-credentials: true
+          fetch-depth: 0
       - name: Fast-forward `${{ github.event.inputs.following_branch }}` -> `${{ github.event.inputs.leading_branch }}`
         run: |
           _following_branch="$(echo ${following_branch:?} | tr -d '[:space:]')"
