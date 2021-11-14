@@ -1,0 +1,29 @@
+name: Fast Forward
+on:
+  workflow_dispatch:
+    inputs:
+      leading_branch:
+        description: ''
+        required: true
+      following_branch:
+        description: ''
+        required: true
+jobs:
+  fast_forward:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          persist-credentials: true
+      - name: Fast-forward `${{ github.event.inputs.following_branch }}` -> `${{ github.event.inputs.leading_branch }}`
+        run: |
+          _following_branch="$(echo ${following_branch:?} | tr -d '[:space:]')"
+          _leading_branch="$(echo ${leading_branch:?} | tr -d '[:space:]')"
+
+          git checkout ${_following_branch:?}
+          git merge --ff-only ${_leading_branch:?}
+          git push origin ${_following_branch:?}
+        env:
+          following_branch: ${{ github.event.inputs.following_branch }}
+          leading_branch: ${{ github.event.inputs.leading_branch }}
+        shell: bash
