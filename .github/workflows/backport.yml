@@ -1,6 +1,6 @@
 name: Backport
 on:
-  pull_request:
+  pull_request_target:
     types:
       - closed
       - labeled
@@ -9,6 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     name: Backport
     steps:
+      # For security reasons, we do not check out any code in this workflow
       - uses: tibdex/backport@e2ffd4c5a70730dfd19046859dfaf366e3de6466 # v1.1.1
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
