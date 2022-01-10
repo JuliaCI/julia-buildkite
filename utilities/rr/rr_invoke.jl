@@ -10,9 +10,13 @@
 import Pkg
 
 # We add `rr_jll` to a temporary project.
-# Note: we still use the user's default depot paths. If the user does not want to use their
-# default depot paths, they should do e.g. `export JULIA_DEPOT_PATH=$(mktemp -d)` before
-# running the `rr_invoke.jl` script.
+#
+# Note: we still use the user's default depot paths. This is important; it means that if the
+# user runs the `rr_invoke.jl` script multiple times, we don't have to redownload `rr_jll`
+# every time.
+#
+# If the user does not want to use their default depot paths, they should do e.g.
+# `export JULIA_DEPOT_PATH=$(mktemp -d)` before running the `rr_invoke.jl` script.
 Pkg.activate(mktempdir(; cleanup = true))
 
 Pkg.add(Pkg.PackageSpec(name = "rr_jll", version = v"5.5.0"))
