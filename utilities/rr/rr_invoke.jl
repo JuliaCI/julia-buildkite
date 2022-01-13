@@ -2,7 +2,7 @@
 #
 # Instead of running `rr foo bar baz ...`, you would run `julia rr_invoke.jl foo bar baz ...`
 # instead.
-# 
+#
 # Examples: julia rr_invoke.jl --version
 #           julia rr_invoke.jl --help
 #           julia rr_invoke.jl replay ...
@@ -19,7 +19,7 @@ import Pkg
 # `export JULIA_DEPOT_PATH=$(mktemp -d)` before running the `rr_invoke.jl` script.
 Pkg.activate(mktempdir(; cleanup = true))
 
-Pkg.add(Pkg.PackageSpec(name = "rr_jll", version = v"5.5.0"))
+Pkg.add(Pkg.PackageSpec(name = "rr_jll", version = "5.5.0", uuid = "e86bdf43-55f7-5ea2-9fd0-e7daa2c0f2b4"))
 
 import rr_jll
 
