@@ -95,12 +95,12 @@ mktempdir(temp_parent_dir) do dir
     # version number, Pkg will always install the latest build number. If you need to
     # install a build number that is not the latest build number, you must provide the
     # commit instead of providing the version number.
-    Pkg.add(Pkg.PackageSpec(name = "rr_jll", version = v"5.5.0"))
-    Pkg.add("Zstd_jll")
-
-    rr_jll = Base.require(Base.PkgId(Base.UUID((0xe86bdf43_55f7_5ea2_9fd0_e7daa2c0f2b4)), "rr_jll"))
-    zstd_jll = Base.require(Base.PkgId(Base.UUID((0x3161d3a3_bdf6_5164_811a_617609db77b4)), "Zstd_jll"))
+    Pkg.add(Pkg.PackageSpec(name = "rr_jll", version = "5.5.0", uuid = "e86bdf43-55f7-5ea2-9fd0-e7daa2c0f2b4"))
+    Pkg.add(Pkg.PackageSpec(name = "Zstd_jll", version = "1.5.0", uuid = "3161d3a3-bdf6-5164-811a-617609db77b4"))
+    rr_jll = Base.require(Base.PkgId(Base.UUID("e86bdf43-55f7-5ea2-9fd0-e7daa2c0f2b4"), "rr_jll"))
+    zstd_jll = Base.require(Base.PkgId(Base.UUID("3161d3a3-bdf6-5164-811a-617609db77b4"), "Zstd_jll"))
     rr(func) = Base.invokelatest(rr_jll.rr, func; adjust_LIBPATH=false)
+
     rr() do rr_path
         capture_script_path = joinpath(dir, "capture_output.sh")
         loader = Sys.WORD_SIZE == 64 ? "/lib64/ld-linux-x86-64.so.2" : "/lib/ld-linux.so.2"
@@ -197,7 +197,6 @@ mktempdir(temp_parent_dir) do dir
                 end
             end
         end
-
     end
 end
 
