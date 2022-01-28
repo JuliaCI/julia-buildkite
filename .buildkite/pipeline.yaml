@@ -1,0 +1,6 @@
+steps:
+  - label: "Test!"
+    command: "echo yay"
+    agents:
+      queue: "julia"
+      sandbox.jl: "true"
