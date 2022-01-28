@@ -1,3 +1,6 @@
 #!/bin/bash
 
 echo 'testing a post-checkout hook'
+echo 'checking the buildkite path for agent hooks'
+echo $BUILDKITE_HOOKS_PATH
+
