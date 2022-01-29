@@ -8,6 +8,6 @@ ls -alh
 echo 'remove current contents of build directory'
 rm -rf ./*
 echo 'Clone julia, main branch only:'
-git clone -b master https://github.com/JuliaLang/Julia
+git clone -b master https://github.com/JuliaLang/Julia .
 ls -alh
 
