@@ -1,13 +1,13 @@
 #!/bin/bash
 
-echo 'testing a post-checkout hook'
+echo 'Running post-checkout hook'
 echo 'Let us see where we are:'
 pwd
 echo 'and what we need to clean up:'
 ls -alh
 echo 'remove current contents of build directory'
-rm -rf ./*
+ls -A1 | xargs rm -rf
 echo 'Clone julia, main branch only:'
-git clone -b master https://github.com/JuliaLang/Julia .
+git clone -b master https://github.com/JuliaLang/Julia ./
 ls -alh
 
