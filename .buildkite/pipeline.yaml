@@ -1,4 +1,10 @@
 steps:
+  - plugins:
+    - JuliaCI/external-buildkite#v1.0:
+        this_is_first_job: true
+        version_file: 'buildkite.version'
+        external_repo: 'https://github.com/JuliaCI/julia-buildkite.git'
+        folder: '.buildkite'
   - label: "Test!"
     command: "echo yay"
     agents:
