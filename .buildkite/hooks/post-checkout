@@ -9,6 +9,9 @@ echo 'remove current contents of build directory'
 ls -A1 | xargs rm -rf
 echo 'Clone julia, main branch only:'
 git clone -b master https://github.com/JuliaLang/Julia ./
+echo 'Set environement variables that will be used by external-buildkite'
+EXTERNAL_JULIA_IGNORE_FILE=true
+EXTERNAL_JULIA_USE_COMMIT=${BUILDKITE_COMMIT?:}
 echo 'Create temporary pipeline.yaml to call external-buildkite plugin'
 cat >.buildkite/pipeline.yaml <<EOL
 steps:
