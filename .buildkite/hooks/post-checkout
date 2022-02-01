@@ -11,7 +11,7 @@ echo 'Clone julia, main branch only:'
 git clone -b master https://github.com/JuliaLang/Julia ./
 echo 'Check if BUILDKITE_COMMIT is set'
 echo $BUILDKITE_COMMIT
-echo 'Set environement variables that will be used by external-buildkite'
+echo 'Set environment variables that will be used by external-buildkite'
 EXTERNAL_JULIA_IGNORE_FILE=true
 EXTERNAL_JULIA_USE_COMMIT=${BUILDKITE_COMMIT?:}
 echo 'Create temporary pipeline.yaml to call external-buildkite plugin'
