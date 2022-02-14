@@ -8,7 +8,7 @@ ls -alh
 echo 'remove current contents of build directory'
 ls -A1 | xargs rm -rf
 echo 'Clone julia, main branch only:'
-git clone -b master https://github.com/JuliaLang/Julia ./
+git clone -b master https://github.com/JuliaCI/julia-buildkite-testing ./
 echo 'Check if BUILDKITE_COMMIT is set'
 echo $BUILDKITE_COMMIT
 echo 'Set environment variables that will be used by external-buildkite'
