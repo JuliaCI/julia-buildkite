@@ -16,7 +16,7 @@ REPO_URL="https://github.com/JuliaCI/julia-buildkite"
 # Force external-buildkite plugin to use the current branch's commit as the version to download for this and all child jobs
 if ! buildkite-agent metadata exists BUILDKITE_PLUGIN_EXTERNAL_BUILDKITE_VERSION
     buildkite-agent metadata set BUILDKITE_PLUGIN_EXTERNAL_BUILDKITE_VERSION ${BUILDKITE_COMMIT:?}
-    buildkite-agent metadata set REPO_URL ${REPO_URL:?}
+    buildkite-agent metadata set BUILDKITE_PLUGIN_EXTERNAL_BUILDKITE_REPO_URL ${REPO_URL:?}
 fi
 
 echo 'Create temporary pipeline.yaml to call external-buildkite plugin'
