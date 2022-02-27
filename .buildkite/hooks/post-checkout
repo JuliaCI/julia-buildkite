@@ -1,0 +1,20 @@
+#!/bin/bash
+
+echo 'Running post-checkout hook'
+echo 'Let us see where we are:'
+pwd
+echo 'and what we need to clean up:'
+ls -alh
+echo 'remove current contents of build directory'
+ls -A1 | xargs rm -rf
+echo 'Clone julia, main branch only:'
+git clone -b master https://github.com/JuliaCI/julia-buildkite-testing ./
+echo 'Check if BUILDKITE_COMMIT is set'
+echo $BUILDKITE_COMMIT
+echo 'Set buildkite metadata'
+REPO_URL="https://github.com/JuliaCI/julia-buildkite"
+# Force external-buildkite plugin to use the current branch's commit as the version to download for this and all child jobs
+if ! buildkite-agent meta-data exists BUILDKITE_PLUGIN_EXTERNAL_BUILDKITE_VERSION; then
+    buildkite-agent meta-data set BUILDKITE_PLUGIN_EXTERNAL_BUILDKITE_VERSION ${BUILDKITE_COMMIT:?}
+    buildkite-agent meta-data set BUILDKITE_PLUGIN_EXTERNAL_BUILDKITE_REPO_URL ${REPO_URL:?}
+fi
