@@ -14,16 +14,20 @@
 
 steps:
   - label: ":buildkite: Launch unsigned jobs"
+    plugins:
+      - JuliaCI/external-buildkite#v1:
+          version: ".buildkite-external-version"
+          repo_url: "https://github.com/JuliaCI/julia-buildkite"
     commands: |
       # Launch the miscellaneous jobs in alphabetical order.
-      buildkite-agent pipeline upload .buildkite/pipelines/main/misc/doctest.yml
-      buildkite-agent pipeline upload .buildkite/pipelines/main/misc/embedding.yml
-      buildkite-agent pipeline upload .buildkite/pipelines/main/misc/llvmpasses.yml
-      buildkite-agent pipeline upload .buildkite/pipelines/main/misc/sanitizers.yml
+      #buildkite-agent pipeline upload .buildkite/pipelines/main/misc/doctest.yml
+      #buildkite-agent pipeline upload .buildkite/pipelines/main/misc/embedding.yml
+      #buildkite-agent pipeline upload .buildkite/pipelines/main/misc/llvmpasses.yml
+      #buildkite-agent pipeline upload .buildkite/pipelines/main/misc/sanitizers.yml
 
       # Launch all of the platform jobs.
-      bash .buildkite/utilities/platforms/platforms.sh .buildkite/pipelines/main/platforms/package_linux.arches .buildkite/pipelines/main/platforms/package_linux.yml
-      bash .buildkite/utilities/platforms/platforms.sh .buildkite/pipelines/main/platforms/tester_linux.arches .buildkite/pipelines/main/platforms/tester_linux.yml
+      #bash .buildkite/utilities/platforms/platforms.sh .buildkite/pipelines/main/platforms/package_linux.arches .buildkite/pipelines/main/platforms/package_linux.yml
+      #bash .buildkite/utilities/platforms/platforms.sh .buildkite/pipelines/main/platforms/tester_linux.arches .buildkite/pipelines/main/platforms/tester_linux.yml
 
       # Launch the `whitespace` job last. Uploading it last actually causes it to start
       # first. We want this job to start first because we want it to finish as quickly
