@@ -112,18 +112,9 @@ end
 
 function buildkite_branch_and_commit()
     branch = buildkite_env("BUILDKITE_BRANCH")
-    commit = buildkite_env("BUILDKITE_COMMIT")
-    head_rev_parse = String(strip(read(`git rev-parse HEAD`, String)))
-    if strip(commit) == "HEAD"
-        commit = head_rev_parse
-    end
-    if commit !== head_rev_parse
-        msg = "mismatch"
-        @error msg commit head_rev_parse
-        throw(ErrorException(msg))
-    end
+    commit = String(strip(read(`git rev-parse HEAD`, String)))
     if !occursin(r"^[a-f0-9]{40}$", commit)
-        msg = "BUILDKITE_COMMIT does not look like a long commit SHA"
+        msg = "'$(commit)' does not look like a long commit SHA"
         @error msg commit
         throw(ErrorException(msg))
     end
