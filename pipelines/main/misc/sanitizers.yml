@@ -1,5 +1,5 @@
 steps:
-  - group: ":linux: Linux"
+  - group: "Allowed to fail"
     steps:
     - label: "asan"
       key: "asan"
@@ -30,6 +30,8 @@ steps:
         sandbox_capable: "true"
         os: "linux"
 
+  - group: ":linux: Linux"
+    steps:
     - label: "tsan"
       key: "tsan"
       plugins:
