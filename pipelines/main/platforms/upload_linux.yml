@@ -1,0 +1,55 @@
+steps:
+  - label: ":linux: upload ${TRIPLET?}"
+    key:   "upload_${TRIPLET?}"
+    depends_on:
+      # Wait for the builder to finish
+      - "build_${TRIPLET?}"
+      # Wait for the tester to finish
+      - "test_${TRIPLET?}"
+    plugins:
+      - JuliaCI/external-buildkite#v1:
+              version: ".buildkite-external-version"
+              repo_url: "https://github.com/JuliaCI/julia-buildkite"
+      - JuliaCI/julia#v1:
+          # Drop default "registries" directory, so it is not persisted from execution to execution
+          persist_depot_dirs: packages,artifacts,compiled
+          version: '1.6'
+      - staticfloat/sandbox#v1:
+          rootfs_url: https://github.com/JuliaCI/rootfs-images/releases/download/v5.1/aws_uploader.x86_64.tar.gz
+          rootfs_treehash: "f865a3a68e33de10b3b4c9c5d0c9e5f2ff5a6965"
+          uid: 1000
+          gid: 1000
+      - staticfloat/cryptic#v2:
+          variables:
+              - AWS_ACCESS_KEY_ID="U2FsdGVkX184v87+NPs3j9r/JoIuOrYt4/Z4wnRdklnY17NP8C8AMZvWYLJfT9t1"
+              - AWS_SECRET_ACCESS_KEY="U2FsdGVkX1+qptnxR/Mo5jZdH8OQfflRPiQBEhjgZIiTpn8KNCJYh/Cb8xxaUWazlcM9ceOlo0InDubL+J8zdg=="
+    timeout_in_minutes: ${TIMEOUT?}
+    commands: |
+      # First, get things like `LONG_COMMIT` and `SHORT_COMMIT`, etc...
+      TRIPLET="${TRIPLET?}" source .buildkite/utilities/calc_version_envs.sh
+
+      echo "--- Download $${UPLOAD_FILENAME} to ."
+      buildkite-agent artifact download "$${UPLOAD_FILENAME}" .
+
+      # We first upload the canonical fully-specified upload target, which is the first one:
+      echo "--- Upload to S3"
+      aws s3 cp --acl public-read "$${UPLOAD_FILENAME}" "s3://$${UPLOAD_TARGETS[0]}"
+
+      echo "--- Copy to secondary upload targets"
+      for SECONDARY_TARGET in $${UPLOAD_TARGETS[@]:1}; do
+        aws s3 cp --acl public-read "s3://$${UPLOAD_TARGETS[0]}" "s3://$${SECONDARY_TARGET}"
+      done
+
+      # Report to the user some URLs that they can use to download this from
+      echo "+++ Uploaded to targets"
+      for UPLOAD_TARGET in $${UPLOAD_TARGETS[@]}; do
+        echo " -> s3://$${UPLOAD_TARGET}"
+      done
+    agents:
+      queue: "julia"
+      # Only run on `sandbox.jl` machines (not `docker`-isolated ones) since we need nestable sandboxing
+      sandbox_capable: "true"
+      os: "linux"
+    env:
+      # Receive cryptic token from parent job
+      BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET: ${BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET?}

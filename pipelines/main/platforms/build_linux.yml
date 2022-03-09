@@ -1,0 +1,57 @@
+steps:
+  - group: ":linux: Linux"
+    steps:
+      - label: ":linux: build ${TRIPLET?}"
+        key: "build_${TRIPLET?}"
+        plugins:
+          - JuliaCI/external-buildkite#v1:
+              version: ".buildkite-external-version"
+              repo_url: "https://github.com/JuliaCI/julia-buildkite"
+          - JuliaCI/julia#v1:
+              # Drop default "registries" directory, so it is not persisted from execution to execution
+              persist_depot_dirs: packages,artifacts,compiled
+              version: '1.6'
+          - staticfloat/sandbox#v1:
+              rootfs_url: https://github.com/JuliaCI/rootfs-images/releases/download/${ROOTFS_TAG?}/package_${OS?}.${ARCH_ROOTFS?}.tar.gz
+              rootfs_treehash: "${ROOTFS_HASH?}"
+              uid: 1000
+              gid: 1000
+              workspaces:
+                # Include `/cache/repos` so that our `git` version introspection works.
+                - "/cache/repos:/cache/repos"
+        timeout_in_minutes: ${TIMEOUT?}
+        commands: |
+          # First, get things like `LONG_COMMIT` and `SHORT_COMMIT`, etc...
+          TRIPLET="${TRIPLET?}" source .buildkite/utilities/calc_version_envs.sh
+
+          echo "--- Build Julia"
+          make --output-sync -j 8 ${MAKE_FLAGS?}
+
+          echo "--- Check that the working directory is clean"
+          if [ -z "$(git status --short)" ]; then
+            echo "INFO: The working directory is clean."
+          else
+            echo "ERROR: The working directory is dirty."
+            echo "Output of git status:"
+            git status
+            exit 1
+          fi
+
+          echo "--- Print Julia version info"
+          ./julia -e 'using InteractiveUtils; InteractiveUtils.versioninfo()'
+
+          echo "--- Create build artifacts"
+          make --output-sync -j 8 binary-dist ${MAKE_FLAGS?}
+
+          # Rename the build artifact in case we want to name it differently, as is the case on `musl`.
+          if [[ "$${JULIA_BINARYDIST_FILENAME}" != "$${UPLOAD_FILENAME}" ]]; then
+              mv $${JULIA_BINARYDIST_FILENAME} $${UPLOAD_FILENAME}
+          fi
+
+          echo "--- Upload build artifacts"
+          buildkite-agent artifact upload $${UPLOAD_FILENAME}
+        agents:
+          queue: "julia"
+          # Only run on `sandbox.jl` machines (not `docker`-isolated ones) since we need nestable sandboxing
+          sandbox_capable: "true"
+          os: "linux"

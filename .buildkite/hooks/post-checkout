@@ -4,10 +4,12 @@ ls -A1 | xargs rm -rf
 echo 'Clone testing branch of julia, main branch only:'
 git clone -b master https://github.com/JuliaCI/julia-buildkite-testing ./
 echo
+git log -1
+echo
 
-echo 'Set buildkite metadata'
 # Force external-buildkite plugin to use the current branch's commit as the version to download for this and all child jobs
 if ! buildkite-agent meta-data exists BUILDKITE_PLUGIN_EXTERNAL_BUILDKITE_VERSION; then
+    echo "Override external-buildkite metadata to VERSION '${BUILDKITE_COMMIT}' and REPO_URL 'https://github.com/JuliaCI/julia-buildkite'"
     buildkite-agent meta-data set BUILDKITE_PLUGIN_EXTERNAL_BUILDKITE_VERSION "${BUILDKITE_COMMIT:?}"
     buildkite-agent meta-data set BUILDKITE_PLUGIN_EXTERNAL_BUILDKITE_REPO_URL "https://github.com/JuliaCI/julia-buildkite"
 fi
