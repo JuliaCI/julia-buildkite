@@ -1,7 +1,7 @@
 # OS       TRIPLET                 ALLOW_FAIL    ARCH_ROOTFS    TIMEOUT    USE_RR   ROOTFS_TAG    ROOTFS_HASH
 # linux    686-linux-gnu           .             i686           .          .        v4.8          b6dffc772ab4c2cd7fd4f83459308f6f0d89b957
 linux      x86_64-linux-gnu        .             x86_64         .          .        v4.8          2a058481b567f0e91b9aa3ce4ad4f09e6419355a
-linux      x86_64-linux-gnu        .             x86_64         120        rr       v4.8          2a058481b567f0e91b9aa3ce4ad4f09e6419355a
+linux      x86_64-linux-gnu        .             x86_64         150        rr       v4.8          2a058481b567f0e91b9aa3ce4ad4f09e6419355a
 
 # linux    aarch64-linux-gnu       true          aarch64        .          .        ----          ----------------------------------------
 # linux    armv7l-linux-gnueabihf  true          armv7l         .          .        ----          ----------------------------------------
