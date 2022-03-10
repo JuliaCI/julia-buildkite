@@ -55,8 +55,6 @@ end
 
 @info "We will run the command under rr"
 
-const MAX_SUPPORTED_RR_NUM_CORES = 16
-
 const build_number                      = get_from_env("BUILDKITE_BUILD_NUMBER")
 const job_name                          = get_from_env("BUILDKITE_STEP_KEY")
 const commit_full                       = get_from_env("BUILDKITE_COMMIT")
@@ -66,7 +64,8 @@ const timeout_minutes                   = parse(Int, JULIA_TEST_RR_TIMEOUT_MINUT
 const JULIA_TEST_NUM_CORES              = get(ENV,  "JULIA_TEST_NUM_CORES", "$(Sys.CPU_THREADS)")
 const julia_test_num_cores_int          = parse(Int, JULIA_TEST_NUM_CORES)
 const num_cores = min(
-    MAX_SUPPORTED_RR_NUM_CORES,
+    # We'll limit `rr` to a maximum of 16 cores.
+    16,
     Sys.CPU_THREADS,
     julia_test_num_cores_int + 1,
 )
