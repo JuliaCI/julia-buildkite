@@ -64,7 +64,7 @@ const timeout_minutes                   = parse(Int, JULIA_TEST_RR_TIMEOUT_MINUT
 const JULIA_TEST_NUM_CORES              = get(ENV,  "JULIA_TEST_NUM_CORES", "8")
 const julia_test_num_cores_int          = parse(Int, JULIA_TEST_NUM_CORES)
 const num_cores = min(
-    8,
+    16,
     Sys.CPU_THREADS,
     julia_test_num_cores_int + 1,
 )
