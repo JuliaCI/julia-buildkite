@@ -11,3 +11,6 @@ gpg --import <"${1}"
 
 # Sign the second argument as a file, creating a `.asc` file.
 gpg --armor --detach-sig --batch --yes "${2}"
+
+# Kill gpg-agent when we're done
+gpgconf --kill gpg-agent
