@@ -63,7 +63,7 @@ const commit_full                       = get_from_env("BUILDKITE_COMMIT")
 const commit_short                      = first(commit_full, 10)
 const JULIA_TEST_RR_TIMEOUT_MINUTES     = get(ENV,  "JULIA_TEST_RR_TIMEOUT_MINUTES", "120")
 const timeout_minutes                   = parse(Int, JULIA_TEST_RR_TIMEOUT_MINUTES)
-const JULIA_TEST_NUM_CORES              = get(ENV,  "JULIA_TEST_NUM_CORES", "$(MAX_SUPPORTED_RR_NUM_CORES)")
+const JULIA_TEST_NUM_CORES              = get(ENV,  "JULIA_TEST_NUM_CORES", "$(Sys.CPU_THREADS)")
 const julia_test_num_cores_int          = parse(Int, JULIA_TEST_NUM_CORES)
 const num_cores = min(
     MAX_SUPPORTED_RR_NUM_CORES,
