@@ -31,7 +31,6 @@ steps:
             llvmcall \
             llvmcall2 \
             precompile \
-            threads \
             worlds
       agents:
         queue: "julia"
