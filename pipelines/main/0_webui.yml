@@ -10,7 +10,7 @@ steps:
           sandbox_capable: "true"
         plugins:
           - JuliaCI/external-buildkite#v1:
-              version: ".buildkite-external-version"
+              version: "./.buildkite-external-version"
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
           - staticfloat/cryptic#v2:
               # Our list of pipelines that should be launched (but don't require a signature)
