@@ -3,7 +3,7 @@ steps:
   - label: ":buildkite: :unlock: Launch signed pipelines"
     plugins:
       - JuliaCI/external-buildkite#v1:
-          version: ".buildkite-external-version"
+          version: "./.buildkite-external-version"
           repo_url: "https://github.com/JuliaCI/julia-buildkite"
     commands: |
       # Explicitly pass along the cryptic token to child pipelines
