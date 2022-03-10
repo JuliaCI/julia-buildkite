@@ -6,7 +6,8 @@ TARGET="${2}"
 export GNUPGHOME="$(mktemp -d)"
 trap 'rm -rf "$GNUPGHOME"' EXIT INT TERM HUP
 
-# Import key as first argument
+# Import key as first argument.  The `touch` is a workaround for a `gpg-agent` bug.
+touch /dev/random /dev/urandom
 gpg --import <"${1}"
 
 # Sign the second argument as a file, creating a `.asc` file.
