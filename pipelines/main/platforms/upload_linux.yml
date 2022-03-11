@@ -1,6 +1,10 @@
 steps:
   - label: ":linux: upload ${TRIPLET?}"
     key:   "upload_${TRIPLET?}"
+    # We only upload to S3 if all of the following are true:
+    # 1. This is not a pull request build.
+    # 2. The branch is `master` or `release-*`.
+    if: (build.pull_request.id == null) && ((build.branch == "master") || (build.branch =~ /^release-/))
     depends_on:
       # Wait for the builder to finish
       - "build_${TRIPLET?}"
