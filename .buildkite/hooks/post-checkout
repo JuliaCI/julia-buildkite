@@ -1,8 +1,11 @@
 #!/bin/bash
 
+# Clear out current directory, we'll re-clone everything from scratch
 ls -A1 | xargs rm -rf
-echo 'Clone testing branch of julia, main branch only:'
-git clone -b master https://github.com/JuliaCI/julia-buildkite-testing ./
+
+echo 'Clone testing branch of julia, master branch only:'
+git clone https://github.com/JuliaCI/julia-buildkite-testing ./
+git reset --hard "$(buildkite-agent meta-data get --default "master" BUILDKITE_JULIA_VERSION)"
 echo
 git log -1
 echo
@@ -12,4 +15,9 @@ if ! buildkite-agent meta-data exists BUILDKITE_PLUGIN_EXTERNAL_BUILDKITE_VERSIO
     echo "Override external-buildkite metadata to VERSION '${BUILDKITE_COMMIT}' and REPO_URL 'https://github.com/JuliaCI/julia-buildkite'"
     buildkite-agent meta-data set BUILDKITE_PLUGIN_EXTERNAL_BUILDKITE_VERSION "${BUILDKITE_COMMIT:?}"
     buildkite-agent meta-data set BUILDKITE_PLUGIN_EXTERNAL_BUILDKITE_REPO_URL "https://github.com/JuliaCI/julia-buildkite"
+fi
+
+# Save the julia version we downloaded so that future jobs get the same version
+if ! buildkite-agent meta-data exists BUILDKITE_JULIA_VERSION; then
+    buildkite-agent meta-data set BUILDKITE_JULIA_VERSION "$(git rev-parse HEAD)"
 fi

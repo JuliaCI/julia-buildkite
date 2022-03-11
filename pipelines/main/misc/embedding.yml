@@ -5,7 +5,7 @@ steps:
         key: "embedding"
         plugins:
           - JuliaCI/external-buildkite#v1:
-              version: ".buildkite-external-version"
+              version: "./.buildkite-external-version"
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
           - JuliaCI/julia#v1:
               # Drop default "registries" directory, so it is not persisted from execution to execution
