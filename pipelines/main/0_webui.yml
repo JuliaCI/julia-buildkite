@@ -27,4 +27,9 @@ steps:
                 - pipeline: .buildkite/pipelines/main/launch_signed_jobs.yml
                   signature_file: .buildkite/pipelines/main/launch_signed_jobs.yml.signature
                   allow_hash_override: true
+              files:
+                - .buildkite/pipelines/main/launch_signed_jobs.yml
+                - .buildkite/pipelines/main/platforms/build_linux.arches
+                - .buildkite/pipelines/main/platforms/upload_linux.yml
+                - .buildkite/utilities/arches_pipeline_upload.sh
         command: "true"
