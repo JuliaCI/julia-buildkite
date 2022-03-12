@@ -24,6 +24,9 @@ steps:
           # First, get things like `LONG_COMMIT` and `SHORT_COMMIT`, etc...
           TRIPLET="${TRIPLET?}" source .buildkite/utilities/calc_version_envs.sh
 
+          # export JULIA_CPU_TARGET, which is picked up by the build system
+          ARCH="$${ARCH??}" source .buildkite/utilities/export_julia_cpu_target.sh
+
           echo "--- Build Julia"
           make --output-sync -j 8 ${MAKE_FLAGS?}
 
