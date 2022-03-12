@@ -10,6 +10,9 @@ steps:
       - "build_${TRIPLET?}"
       # Wait for the tester to finish
       - "test_${TRIPLET?}"
+    # Prevent multiple pipelines from uploading to S3 simultaneously
+    concurrency: 1
+    concurrency_group: 'upload/julialangnightlies'
     plugins:
       - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"
