@@ -191,10 +191,31 @@ mktempdir(temp_parent_dir) do dir
             end
 
             @info "The `rr` trace file has been saved to: $(dst_full_path)"
+            size_bytes = Base.filesize(dst_full_path)
+            size_string = Base.format_bytes(size_bytes)
+            @info "The size of the `rr` trace file is: $(size_string)"
+            max_part_size_bytes = 4_900_000_000 # 4.9 GB, or 4.563 GiB
+            if is_buildkite
+                if size_bytes < max_part_size_bytes
+                    files_to_upload = [dst_file_name]
+                else
+                    cmd = `split`
+                    push!(cmd.exec, "--bytes=$(max_part_size_bytes)")
+                    push!(cmd.exec, "$(dst_file_name)")
+                    prefix = "$(dst_file_name).part."
+                    push!(cmd.exec, prefix)
+                    run(setenv(cmd; dir = dumps_dir))
+                    files_to_upload = readdir(dumps_dir)
+                    filter!(startswith(prefix), files_to_upload)
+                    unique!(files_to_upload)
+                    sort!(files_to_upload)
+                end
+            end
             if is_buildkite
                 @info "Since this is a Buildkite run, we will upload the `rr` trace file."
-                cd(dumps_dir) do
-                    run(`buildkite-agent artifact upload $(dst_file_name)`)
+                for file_to_upload in files_to_upload
+                    cmd = `buildkite-agent artifact upload $(file_to_upload)`
+                    run(setenv(cmd; dir = dumps_dir))
                 end
             end
         end
