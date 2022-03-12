@@ -51,9 +51,6 @@ steps:
           export TMPDIR="$(pwd)/tmp"
           mkdir -p $${TMPDIR}
 
-          # By default, run all tests.
-          export TESTS="all LibGit2/online --ci"
-
           # If we're running inside of `rr`, limit the number of threads
           if [[ "${USE_RR?}" == "rr" ]]; then
             export JULIA_CMD_FOR_TESTS="$${JULIA_BINARY} .buildkite/utilities/rr/rr_capture.jl $${JULIA_BINARY}"
@@ -62,10 +59,14 @@ steps:
 
             # Give `rr` 60 minutes to run the tests
             export JULIA_TEST_RR_TIMEOUT="60"
+
+            # Don't run network tests on `rr`, as it causes the trace size to explode.
+            export TESTS="all --ci --skip Artifacts Downloads download LazyArtifacts LibGit2/online Pkg"
           else
             export JULIA_CMD_FOR_TESTS="$${JULIA_BINARY}"
             export NCORES_FOR_TESTS="Sys.CPU_THREADS"
             export JULIA_NUM_THREADS=16
+            export TESTS="all LibGit2/online --ci"
           fi
 
           echo "--- Print the list of test sets, and other useful environment variables"
