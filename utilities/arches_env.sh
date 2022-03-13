@@ -15,7 +15,7 @@ fi
 
 enforce_sanitized() {
     for value in "$@"; do
-        if ! [[ "${value}" =~ ^[a-zA-Z0-9_\.[:space:]-]*$ ]]; then
+        if ! [[ "${value}" =~ ^[a-zA-Z0-9_\.[:space:]=,-]*$ ]]; then
             echo "Arches file '${ARCHES_FILE}' contains value '${value}' with non-alphanumeric characters; refusing to parse!" >&2
             exit 1
         fi

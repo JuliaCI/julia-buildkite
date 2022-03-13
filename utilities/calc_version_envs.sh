@@ -12,6 +12,9 @@ case "${TRIPLET}" in
     *-mingw*)
         OS="windows"
         ;;
+    *-gnuassert)
+        OS="linuxassert"
+        ;;
     *-gnu*)
         OS="linux"
         ;;
