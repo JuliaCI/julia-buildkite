@@ -4,7 +4,8 @@
 ls -A1 | xargs rm -rf
 
 echo 'Clone testing branch of julia, master branch only:'
-git clone https://github.com/JuliaCI/julia-buildkite-testing ./
+# git clone https://github.com/JuliaCI/julia-buildkite-testing ./
+git clone https://github.com/JuliaLang/julia ./
 git reset --hard "$(buildkite-agent meta-data get --default "master" BUILDKITE_JULIA_VERSION)"
 echo
 git log -1
