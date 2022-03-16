@@ -46,7 +46,7 @@ steps:
           ./julia -e 'using InteractiveUtils; InteractiveUtils.versioninfo()'
 
           echo "--- Create build artifacts"
-          make --output-sync -j 8 binary-dist ${MAKE_FLAGS_SPACE_SEP?}
+          make --output-sync -j 8 binary-dist $${MAKE_FLAGS_SPACE_SEP?}
 
           # Rename the build artifact in case we want to name it differently, as is the case on `musl`.
           if [[ "$${JULIA_BINARYDIST_FILENAME}" != "$${UPLOAD_FILENAME}" ]]; then
