@@ -59,8 +59,6 @@ const build_number                      = get_from_env("BUILDKITE_BUILD_NUMBER")
 const job_name                          = get_from_env("BUILDKITE_STEP_KEY")
 const commit_full                       = get_from_env("BUILDKITE_COMMIT")
 const commit_short                      = first(commit_full, 10)
-const JULIA_TEST_RR_TIMEOUT_MINUTES     = get(ENV,  "JULIA_TEST_RR_TIMEOUT_MINUTES", "120")
-const timeout_minutes                   = parse(Int, JULIA_TEST_RR_TIMEOUT_MINUTES)
 const JULIA_TEST_NUM_CORES              = get(ENV,  "JULIA_TEST_NUM_CORES", "$(Sys.CPU_THREADS)")
 const julia_test_num_cores_int          = parse(Int, JULIA_TEST_NUM_CORES)
 const num_cores = min(
@@ -69,18 +67,65 @@ const num_cores = min(
     Sys.CPU_THREADS,
     julia_test_num_cores_int + 1,
 )
-
 ENV["JULIA_RRCAPTURE_NUM_CORES"] = "$(num_cores)"
+
+const JULIA_TEST_RR_RUNTESTS_TIMEOUT_MINUTES = get(ENV,  "JULIA_TEST_RR_RUNTESTS_TIMEOUT_MINUTES", "240")
+const JULIA_TEST_RR_CLEANUP_TIMEOUT_MINUTES  = get(ENV,  "JULIA_TEST_RR_CLEANUP_TIMEOUT_MINUTES",  "300")
+const rr_runtests_timeout_minutes = parse(Int, JULIA_TEST_RR_RUNTESTS_TIMEOUT_MINUTES)
+const rr_cleanup_timeout_minutes  = parse(Int, JULIA_TEST_RR_CLEANUP_TIMEOUT_MINUTES)
+
+if !(rr_runtests_timeout_minutes < rr_cleanup_timeout_minutes)
+    msg = "rr_runtests_timeout_minutes MUST be strictly less than rr_cleanup_timeout_minutes"
+    @error msg rr_runtests_timeout_minutes rr_cleanup_timeout_minutes
+    throw(ErrorException(msg))
+end
+
+const cleanup_minutes = rr_cleanup_timeout_minutes - rr_runtests_timeout_minutes
+if cleanup_minutes < 5
+    msg = "cleanup_minutes MUST be at least 5"
+    @error msg cleanup_minutes
+    throw(ErrorException(msg))
+end
+if cleanup_minutes < 20
+    msg = "cleanup_minutes SHOULD be at least 20"
+    @warn msg cleanup_minutes
+end
+if is_buildkite
+    const BUILDKITE_TIMEOUT = ENV["BUILDKITE_TIMEOUT"]
+    const buildkite_timeout_minutes_total   = parse(Int, BUILDKITE_TIMEOUT)
+    if !(rr_cleanup_timeout_minutes < buildkite_timeout_minutes_total)
+        msg = "rr_cleanup_timeout_minutes MUST be strictly less than buildkite_timeout_minutes_total"
+        @error msg rr_cleanup_timeout_minutes buildkite_timeout_minutes_total
+        throw(ErrorException(msg))
+    end
+    buildkite_extra_minutes_at_end = buildkite_timeout_minutes_total - rr_cleanup_timeout_minutes
+    if buildkite_extra_minutes_at_end < 20
+        msg = "buildkite_extra_minutes_at_end SHOULD be at least 20"
+        @warn msg buildkite_extra_minutes_at_end
+    end
+end
 
 @info(
     "",
+    is_buildkite,
     build_number,
     job_name,
     commit_full,
     commit_short,
-    timeout_minutes,
     num_cores,
+    rr_timeout_minutes_before_cleanup,
+    rr_timeout_minutes_after_cleanup,
+    cleanup_minutes,
 )
+
+if is_buildkite
+    @info(
+        "Buildkite-specific details:",
+        is_buildkite,
+        buildkite_timeout_minutes_total,
+        buildkite_extra_minutes_at_end,
+    )
+end
 
 const dumps_dir       = joinpath(pwd(), "dumps")
 const temp_parent_dir = joinpath(pwd(), "temp_for_rr")
@@ -136,7 +181,6 @@ mktempdir(temp_parent_dir) do dir
                 # Note: this time period includes the time to upload the `rr` trace files
                 # as Buildkite artifacts, so make sure it is long enough to allow the
                 # uploads to finish.
-                cleanup_minutes = 30
                 sleep(cleanup_minutes * 60)
 
                 if isopen(proc)
