@@ -28,7 +28,7 @@ steps:
           ARCH="$${ARCH??}" source .buildkite/utilities/export_julia_cpu_target.sh
 
           echo "--- Build Julia"
-          export MAKE_FLAGS_SPACE_SEP=`echo "${MAKE_FLAGS:?}" | tr "," " "`
+          export MAKE_FLAGS_SPACE_SEP=`echo "${MAKE_FLAGS?}" | tr "," " "`
           echo "Make flags: $${MAKE_FLAGS_SPACE_SEP?}"
           make --output-sync -j 8 $${MAKE_FLAGS_SPACE_SEP?}
 
