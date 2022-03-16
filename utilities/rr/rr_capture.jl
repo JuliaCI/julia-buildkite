@@ -113,8 +113,8 @@ end
     commit_full,
     commit_short,
     num_cores,
-    rr_timeout_minutes_before_cleanup,
-    rr_timeout_minutes_after_cleanup,
+    rr_runtests_timeout_minutes,
+    rr_cleanup_timeout_minutes,
     cleanup_minutes,
 )
 
