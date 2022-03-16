@@ -29,8 +29,8 @@ steps:
 
           echo "--- Build Julia"
           export MAKE_FLAGS_SPACE_SEP=`echo "${MAKE_FLAGS:?}" | tr "," " "`
-          echo "Make flags: $${MAKE_FLAGS_SPACE_SEP:?}"
-          make --output-sync -j 8 $${MAKE_FLAGS_SPACE_SEP:?}
+          echo "Make flags: $${MAKE_FLAGS_SPACE_SEP?}"
+          make --output-sync -j 8 $${MAKE_FLAGS_SPACE_SEP?}
 
           echo "--- Check that the working directory is clean"
           if [ -z "$(git status --short)" ]; then
