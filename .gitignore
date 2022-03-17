@@ -2,6 +2,8 @@
 
 # Ignore the unencrypted repo_key
 repo_key
+repo.key
 
 # Ignore any agent keys (public or private) we have stored
 agent_key*
+agent.key*
