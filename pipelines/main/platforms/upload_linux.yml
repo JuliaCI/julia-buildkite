@@ -5,7 +5,7 @@ steps:
     # 1. This is not a pull request build.
     # 2. The branch is `master` or `release-*`.
     # 3. The `UPLOAD` column of `build_linux.arches` was set to `true`.
-    if: (build.pull_request.id == null) && ((build.branch == "master") || (build.branch =~ /^release-/))
+    # if: (build.pull_request.id == null) && ((build.branch == "master") || (build.branch =~ /^release-/)) # TODO: uncomment this line before merging this PR
     depends_on:
       # Wait for the builder to finish
       - "build_${TRIPLET?}"
