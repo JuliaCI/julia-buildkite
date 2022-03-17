@@ -1,11 +1,11 @@
-# OS       TRIPLET                   ALLOW_FAIL    ARCH_ROOTFS    MAKE_FLAGS                              TIMEOUT       ROOTFS_TAG    ROOTFS_HASH
-# linux    i686-linux-gnu            .             i686           .                                       .             v4.8          b6dffc772ab4c2cd7fd4f83459308f6f0d89b957
-linux      x86_64-linux-gnu          .             x86_64         .                                       .             v5.1          f689ba6acab6c13a3da4ff62e3445dd61c3b5ab0
-linux      x86_64-linux-gnuassert    .             x86_64         FORCE_ASSERTIONS=1,LLVM_ASSERTIONS=1    .             v5.1          f689ba6acab6c13a3da4ff62e3445dd61c3b5ab0
-# linux    aarch64-linux-gnu         .             aarch64        .                                       .             ----          ----------------------------------------
-# linux    armv7l-linux-gnueabihf    .             armv7l         .                                       .             ----          ----------------------------------------
-# linux    powerpc64le-linux-gnu     .             powerpc64le    .                                       .             ----          ----------------------------------------
-# musl     x86_64-linux-musl         .             x86_64         .                                       .             v4.8          d13a47c87c38005bd5d97132e51789cafd852f90
+# OS       TRIPLET                   UPLOAD_GATE                 UPLOAD    ALLOW_FAIL    ARCH_ROOTFS    MAKE_FLAGS                              TIMEOUT       ROOTFS_TAG    ROOTFS_HASH
+# linux    i686-linux-gnu            i686-linux-gnu              .         .             i686           .                                       .             v4.8          b6dffc772ab4c2cd7fd4f83459308f6f0d89b957
+linux      x86_64-linux-gnu          x86_64-linux-gnu            .         .             x86_64         .                                       .             v5.1          f689ba6acab6c13a3da4ff62e3445dd61c3b5ab0
+linux      x86_64-linux-gnuassert    x86_64-linux-gnuassertrr    false     .             x86_64         FORCE_ASSERTIONS=1,LLVM_ASSERTIONS=1    .             v5.1          f689ba6acab6c13a3da4ff62e3445dd61c3b5ab0
+# linux    aarch64-linux-gnu         aarch64-linux-gnu           .         .             aarch64        .                                       .             ----          ----------------------------------------
+# linux    armv7l-linux-gnueabihf    armv7l-linux-gnueabihf      .         .             armv7l         .                                       .             ----          ----------------------------------------
+# linux    powerpc64le-linux-gnu     powerpc64le-linux-gnu       .         .             powerpc64le    .                                       .             ----          ----------------------------------------
+# musl     x86_64-linux-musl         x86_64-linux-musl           .         .             x86_64         .                                       .             v4.8          d13a47c87c38005bd5d97132e51789cafd852f90
 
 # These special lines allow us to embed default values for the columns above.
 # Any column without a default mapping here will simply substitute a `.` to the empty string
@@ -15,3 +15,6 @@ linux      x86_64-linux-gnuassert    .             x86_64         FORCE_ASSERTIO
 
 # Most jobs should finish within 1.5 hours, barring exceptionally slow hardware
 #default TIMEOUT 90
+
+# Most builds get uploaded to S3.
+#default UPLOAD true

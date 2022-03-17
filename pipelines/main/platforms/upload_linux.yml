@@ -4,15 +4,15 @@ steps:
     # We only upload to S3 if all of the following are true:
     # 1. This is not a pull request build.
     # 2. The branch is `master` or `release-*`.
-    # 3. This is not an assert build.
+    # 3. The `UPLOAD` column of `build_linux.arches` was set to `true`.
     if: (build.pull_request.id == null) && ((build.branch == "master") || (build.branch =~ /^release-/))
     depends_on:
       # Wait for the builder to finish
       - "build_${TRIPLET?}"
       # Wait for the tester to finish
-      - "test_${TRIPLET?}"
-    # Prevent multiple pipelines from uploading to S3 simultaneously
-    # It is okay for two different triplets to upload simultaneously
+      - "test_${UPLOAD_GATE?}"
+    # Prevent multiple pipelines from uploading to S3 simultaneously.
+    # It is okay for two different triplets to upload simultaneously.
     concurrency: 1
     concurrency_group: 'upload/julialangnightlies/upload_linux/${TRIPLET?}'
     plugins:
@@ -36,12 +36,9 @@ steps:
             - .buildkite/secrets/tarball_signing.gpg
     timeout_in_minutes: ${TIMEOUT?}
     commands: |
-      echo "--- Check if this is an assert build"
-      # If this is an assert build, exit immediately.
-      # We assume that this is an assert build if and only if the TRIPLET contains
-      # the substring "assert".
-      if [[ "${TRIPLET?}" == *"assert"* ]]; then
-        echo "This is an assert build, so we will not upload it to S3."
+      echo "--- Determine whether or not to upload"
+      if [[ "${UPLOAD?}" != "true" ]]; then
+        echo "UPLOAD was not set to true, so we will not upload to S3."
         echo "Exiting now..."
         exit 0
       fi
