@@ -5,7 +5,7 @@ steps:
     # 1. This is not a pull request build.
     # 2. The branch is `master` or `release-*`.
     # 3. This is not an assert build.
-    if: (build.pull_request.id == null) && ((build.branch == "master") || (build.branch =~ /^release-/))
+    if: (build.pull_request.id == null) && ((build.branch == "master") || (build.branch =~ /^release-/)) && build.env("BUILDKITE_STEP_KEY") =~ /assert/
     depends_on:
       # Wait for the builder to finish
       - "build_${TRIPLET?}"
@@ -36,16 +36,6 @@ steps:
             - .buildkite/secrets/tarball_signing.gpg
     timeout_in_minutes: ${TIMEOUT?}
     commands: |
-      echo "--- Check if this is an assert build"
-      # If this is an assert build, exit immediately.
-      # We assume that this is an assert build if and only if the TRIPLET contains
-      # the substring "assert".
-      if [[ "${TRIPLET?}" == *"assert"* ]]; then
-        echo "This is an assert build, so we will not upload it to S3."
-        echo "Exiting now..."
-        exit 0
-      fi
-
       # First, get things like `LONG_COMMIT` and `SHORT_COMMIT`, etc...
       TRIPLET="${TRIPLET?}" source .buildkite/utilities/calc_version_envs.sh
 
