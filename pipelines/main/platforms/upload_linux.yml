@@ -12,7 +12,7 @@ steps:
       # Wait for the tester to finish
       - "test_${TRIPLET?}"
     # Prevent multiple pipelines from uploading to S3 simultaneously
-    # It is okay for two different triples to upload simultaneously
+    # It is okay for two different triplets to upload simultaneously
     concurrency: 1
     concurrency_group: 'upload/julialangnightlies/upload_linux/${TRIPLET?}'
     plugins:
