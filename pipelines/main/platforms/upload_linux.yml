@@ -5,7 +5,8 @@ steps:
     # 1. This is not a pull request build.
     # 2. The branch is `master` or `release-*`.
     # 3. This is not an assert build.
-    if: (build.pull_request.id == null) && ((build.branch == "master") || (build.branch =~ /^release-/)) && build.env("BUILDKITE_STEP_KEY") =~ /assert/
+    # if: (build.pull_request.id == null) && ((build.branch == "master") || (build.branch =~ /^release-/)) && (build.env("BUILDKITE_STEP_KEY") =~ /assert/) # TODO: uncomment this line before merging the PR
+    if: (build.pull_request.id != null) && (build.env("BUILDKITE_STEP_KEY") =~ /assert/) # TODO: delete this line before merging the PR
     depends_on:
       # Wait for the builder to finish
       - "build_${TRIPLET?}"
