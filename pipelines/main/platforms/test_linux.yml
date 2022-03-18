@@ -57,9 +57,6 @@ steps:
             export NCORES_FOR_TESTS="parse(Int, ENV[\"JULIA_RRCAPTURE_NUM_CORES\"])"
             export JULIA_NUM_THREADS=1
 
-            # Give `rr` 60 minutes to run the tests
-            export JULIA_TEST_RR_TIMEOUT="60"
-
             # Don't run network tests on `rr`, as it causes the trace size to explode.
             export TESTS="all --ci --skip Artifacts Downloads download LazyArtifacts LibGit2/online Pkg"
           else
