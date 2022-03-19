@@ -22,3 +22,6 @@ fi
 if ! buildkite-agent meta-data exists BUILDKITE_JULIA_VERSION; then
     buildkite-agent meta-data set BUILDKITE_JULIA_VERSION "$(git rev-parse HEAD)"
 fi
+
+# Export S3_BUCKET_PREFIX, to force our CI to upload to a different prefix than the actual CI pipeline would.
+export S3_BUCKET_PREFIX="ephemeral/bin"
