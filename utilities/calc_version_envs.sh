@@ -53,29 +53,33 @@ JULIA_BINARYDIST_FILENAME="$(make print-JULIA_BINARYDIST_FILENAME | cut -c27- | 
 JULIA_INSTALL_DIR="julia-${TAR_VERSION}"
 JULIA_BINARY="${JULIA_INSTALL_DIR}/bin/julia"
 
+# By default, we upload to `julialangnightlies/bin`, but we allow this to be overridden
+S3_BUCKET="${S3_BUCKET:-julialangnightlies}"
+S3_BUCKET_PREFIX="${S3_BUCKET_PREFIX:-bin}"
+
 # We generally upload to multiple upload targets
 UPLOAD_TARGETS=(
     # First, we have the canonical fully-specified upload target
-    "julialangnightlies/bin/${OS?}/${ARCH?}/${MAJMIN?}/julia-${TAR_VERSION?}-${OS?}-${ARCH?}.tar.gz"
+    "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/${ARCH?}/${MAJMIN?}/julia-${TAR_VERSION?}-${OS?}-${ARCH?}.tar.gz"
 
     # Next, we have the "majmin/latest" upload target
-    "julialangnightlies/bin/${OS?}/${ARCH?}/${MAJMIN?}/julia-latest-${OS?}-${ARCH?}.tar.gz"
+    "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/${ARCH?}/${MAJMIN?}/julia-latest-${OS?}-${ARCH?}.tar.gz"
     
     # And then the general "latest" upload target
-    "julialangnightlies/bin/${OS?}/${ARCH?}/julia-latest-${OS?}-${ARCH?}.tar.gz"
+    "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/${ARCH?}/julia-latest-${OS?}-${ARCH?}.tar.gz"
 )
 UPLOAD_FILENAME="julia-${TAR_VERSION?}-${OS?}-${ARCH?}.tar.gz"
 
 # Finally, for compatibility, we keep on uploading x86_64 and i686 targets to folders called `x64`
 # and `x86`, and ending in `-linux64` and `-linux32`, although I would very much like to stop doing that.
 if [[ "${ARCH}" == "x86_64" ]]; then
-    UPLOAD_TARGETS+=( "julialangnightlies/bin/${OS?}/x64/${MAJMIN?}/julia-${TAR_VERSION?}-${OS?}64.tar.gz" )
-    UPLOAD_TARGETS+=( "julialangnightlies/bin/${OS?}/x64/${MAJMIN?}/julia-latest-${OS?}64.tar.gz" )
-    UPLOAD_TARGETS+=( "julialangnightlies/bin/${OS?}/x64/julia-latest-${OS?}64.tar.gz" )
+    UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/x64/${MAJMIN?}/julia-${TAR_VERSION?}-${OS?}64.tar.gz" )
+    UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/x64/${MAJMIN?}/julia-latest-${OS?}64.tar.gz" )
+    UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/x64/julia-latest-${OS?}64.tar.gz" )
 elif [[ "${ARCH}" == "i686" ]]; then
-    UPLOAD_TARGETS+=( "julialangnightlies/bin/${OS?}/x86/${MAJMIN?}/julia-${TAR_VERSION?}-${OS?}32.tar.gz" )
-    UPLOAD_TARGETS+=( "julialangnightlies/bin/${OS?}/x86/${MAJMIN?}/julia-latest-${OS?}32.tar.gz" )
-    UPLOAD_TARGETS+=( "julialangnightlies/bin/${OS?}/x86/julia-latest-${OS?}32.tar.gz" )
+    UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/x86/${MAJMIN?}/julia-${TAR_VERSION?}-${OS?}32.tar.gz" )
+    UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/x86/${MAJMIN?}/julia-latest-${OS?}32.tar.gz" )
+    UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/x86/julia-latest-${OS?}32.tar.gz" )
 fi
 
 echo "--- Print the full and short commit hashes"
