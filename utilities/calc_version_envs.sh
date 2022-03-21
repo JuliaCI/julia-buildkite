@@ -64,10 +64,12 @@ UPLOAD_TARGETS=(
 
     # Next, we have the "majmin/latest" upload target
     "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/${ARCH?}/${MAJMIN?}/julia-latest-${OS?}-${ARCH?}.tar.gz"
-    
-    # And then the general "latest" upload target
-    "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/${ARCH?}/julia-latest-${OS?}-${ARCH?}.tar.gz"
 )
+
+# The absolute latest upload target is only for if we're on the `master` branch
+if [[ "${BUILDKITE_BRANCH}" == "master" ]]; then
+    UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/${ARCH?}/julia-latest-${OS?}-${ARCH?}.tar.gz" )
+fi
 UPLOAD_FILENAME="julia-${TAR_VERSION?}-${OS?}-${ARCH?}.tar.gz"
 
 # Finally, for compatibility, we keep on uploading x86_64 and i686 targets to folders called `x64`
@@ -75,11 +77,19 @@ UPLOAD_FILENAME="julia-${TAR_VERSION?}-${OS?}-${ARCH?}.tar.gz"
 if [[ "${ARCH}" == "x86_64" ]]; then
     UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/x64/${MAJMIN?}/julia-${TAR_VERSION?}-${OS?}64.tar.gz" )
     UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/x64/${MAJMIN?}/julia-latest-${OS?}64.tar.gz" )
-    UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/x64/julia-latest-${OS?}64.tar.gz" )
+    
+    # Only upload to absolute latest if we're on `master`
+    if [[ "${BUILDKITE_BRANCH}" == "master" ]]; then
+        UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/x64/julia-latest-${OS?}64.tar.gz" )
+    fi
 elif [[ "${ARCH}" == "i686" ]]; then
     UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/x86/${MAJMIN?}/julia-${TAR_VERSION?}-${OS?}32.tar.gz" )
     UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/x86/${MAJMIN?}/julia-latest-${OS?}32.tar.gz" )
-    UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/x86/julia-latest-${OS?}32.tar.gz" )
+
+    # Only upload to absolute latest if we're on `master`
+    if [[ "${BUILDKITE_BRANCH}" == "master" ]]; then
+        UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/x86/julia-latest-${OS?}32.tar.gz" )
+    fi
 fi
 
 echo "--- Print the full and short commit hashes"
