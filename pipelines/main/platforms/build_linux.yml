@@ -33,15 +33,11 @@ steps:
           if [[ "$${BUILDKITE_PIPELINE_SLUG:?}" == "julia-master" ]] || [[ "$${BUILDKITE_PIPELINE_SLUG:?}" =~ ^julia-release- ]]; then
             banner="Official https://julialang.org/ release"
             echo "TAGGED_RELEASE_BANNER=\"$${banner:?}\"" >> Make.user
-          elif [[ "$${BUILDKITE_PIPELINE_SLUG:?}" == "julia-buildkite" ]]
-          then
+          elif [[ "$${BUILDKITE_PIPELINE_SLUG:?}" == "julia-buildkite" ]]; then
             banner="Not an official binary; built as part of the CI infrastructure testing"
             echo "TAGGED_RELEASE_BANNER=\"$${banner:?}\"" >> Make.user
-          else
-            :
           fi
           echo "VERBOSE=1" >> Make.user
-          wc -l Make.user
           cat Make.user
 
           echo "--- Build Julia"
