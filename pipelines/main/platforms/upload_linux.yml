@@ -2,7 +2,7 @@ steps:
   - label: ":linux: upload ${TRIPLET?}"
     key:   "upload_${TRIPLET?}"
     # We only upload to S3 if the branch is `master` or `release-*`.
-    if: ((build.branch == "master") || (build.branch =~ /^release-/))
+    if: (build.branch == "master") || (build.branch =~ /^release-/) || (build.tag =~ /^v/)
     depends_on:
       # Wait for the builder to finish
       - "build_${TRIPLET?}"
