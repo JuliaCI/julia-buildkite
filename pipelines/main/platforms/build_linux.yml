@@ -28,7 +28,6 @@ steps:
           ARCH="$${ARCH??}" source .buildkite/utilities/export_julia_cpu_target.sh
 
           echo "--- Create the Make.user file"
-          rm -f Make.user
           echo "${MAKE_FLAGS?}" | tr "," "\n" > Make.user
           if [[ "$${BUILDKITE_PIPELINE_SLUG:?}" == "julia-master" ]] || [[ "$${BUILDKITE_PIPELINE_SLUG:?}" =~ ^julia-release- ]]; then
             banner="Official https://julialang.org/ release"
