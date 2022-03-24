@@ -27,10 +27,20 @@ steps:
           # export JULIA_CPU_TARGET, which is picked up by the build system
           ARCH="$${ARCH??}" source .buildkite/utilities/export_julia_cpu_target.sh
 
+          echo "--- Create the Make.user file"
+          echo "${MAKE_FLAGS?}" | tr "," "\n" > Make.user
+          if [[ "$${BUILDKITE_PIPELINE_SLUG:?}" == "julia-master" ]] || [[ "$${BUILDKITE_PIPELINE_SLUG:?}" =~ ^julia-release- ]]; then
+            banner="Official https://julialang.org/ release"
+            echo "TAGGED_RELEASE_BANNER=\"$${banner:?}\"" >> Make.user
+          elif [[ "$${BUILDKITE_PIPELINE_SLUG:?}" == "julia-buildkite" ]]; then
+            banner="Not an official binary; built as part of the CI infrastructure testing"
+            echo "TAGGED_RELEASE_BANNER=\"$${banner:?}\"" >> Make.user
+          fi
+          echo "VERBOSE=1" >> Make.user
+          cat Make.user
+
           echo "--- Build Julia"
-          export MAKE_FLAGS_SPACE_SEP=`echo "${MAKE_FLAGS?}" | tr "," " "`
-          echo "Make flags: $${MAKE_FLAGS_SPACE_SEP?}"
-          make --output-sync -j 8 $${MAKE_FLAGS_SPACE_SEP?}
+          make --output-sync -j 8
 
           echo "--- Check that the working directory is clean"
           if [ -z "$(git status --short)" ]; then
@@ -46,7 +56,7 @@ steps:
           ./julia -e 'using InteractiveUtils; InteractiveUtils.versioninfo()'
 
           echo "--- Create build artifacts"
-          make --output-sync -j 8 binary-dist $${MAKE_FLAGS_SPACE_SEP?}
+          make --output-sync -j 8 binary-dist
 
           # Rename the build artifact in case we want to name it differently, as is the case on `musl`.
           if [[ "$${JULIA_BINARYDIST_FILENAME}" != "$${UPLOAD_FILENAME}" ]]; then
