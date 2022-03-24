@@ -8,7 +8,7 @@ echo 'Clone testing branch of julia, master branch only:'
 git clone https://github.com/JuliaLang/julia ./
 git reset --hard "$(buildkite-agent meta-data get --default "master" BUILDKITE_JULIA_VERSION)"
 echo
-git log -1
+git --no-pager log -1
 echo
 
 # Force external-buildkite plugin to use the current branch's commit as the version to download for this and all child jobs
