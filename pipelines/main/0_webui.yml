@@ -7,7 +7,7 @@ steps:
       - label: ":unlock: Unlock secrets, launch pipelines"
         agents:
           queue: "julia"
-          sandbox_capable: "true"
+          cryptic_capable: "true"
         plugins:
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"
