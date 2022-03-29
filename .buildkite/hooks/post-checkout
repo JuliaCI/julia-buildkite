@@ -1,11 +1,26 @@
 #!/bin/bash
 
-# Clear out current directory, we'll re-clone everything from scratch
-ls -A1 | xargs rm -rf
+set -euo pipefail
 
-echo 'Clone testing branch of julia, master branch only:'
-# git clone https://github.com/JuliaCI/julia-buildkite-testing ./
-git clone https://github.com/JuliaLang/julia ./
+UPSTREAM_URL="https://github.com/JuliaLang/julia.git"
+
+# All of our workers are required to provide a default for the julia cache dir
+# We're going to cache repositories in here, just like buildkite itself would:
+UPSTREAM_CACHE="${BUILDKITE_PLUGIN_JULIA_CACHE_DIR?}/repos/$(tr ':/.' '---' <<<"${UPSTREAM_URL}")"
+
+if [[ ! -d "${UPSTREAM_CACHE}" ]]; then
+    echo "Clone ${UPSTREAM_URL}"
+    mkdir -p "$(dirname "${UPSTREAM_CACHE}")"
+    git clone --mirror "${UPSTREAM_URL}" "${UPSTREAM_CACHE}"
+else
+    echo "Update cache for ${UPSTREAM_URL}"
+    git -C "${UPSTREAM_CACHE}" fetch
+fi
+
+# Clear out current directory, clone cache into it
+# The deliciously complicated `rm` invocation is thanks to https://unix.stackexchange.com/a/77313/29688
+rm -rf ..?* .[!.]* *
+git clone --reference "${UPSTREAM_CACHE}" "${UPSTREAM_URL}" "./"
 git reset --hard "$(buildkite-agent meta-data get --default "master" BUILDKITE_JULIA_VERSION)"
 echo
 git --no-pager log -1
