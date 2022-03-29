@@ -170,7 +170,7 @@ mktempdir(temp_parent_dir) do dir
 
         # Start asynchronous timer that will kill `rr`
         @async begin
-            sleep(timeout_minutes * 60)
+            sleep(rr_runtests_timeout_minutes * 60)
 
             # If we've exceeded the timeout and `rr` is still running, kill it.
             if isopen(proc)
