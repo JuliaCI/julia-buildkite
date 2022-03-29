@@ -169,7 +169,7 @@ mktempdir(temp_parent_dir) do dir
         global proc = run(setenv(`$(rr_path) record --num-cores=$(num_cores) $ARGS`, new_env), (stdin, stdout, stderr); wait=false)
 
         # Start asynchronous timer that will kill `rr`
-        @async begin
+        timer_task = @async begin
             sleep(rr_runtests_timeout_minutes * 60)
 
             # If we've exceeded the timeout and `rr` is still running, kill it.
@@ -189,6 +189,13 @@ mktempdir(temp_parent_dir) do dir
                     exit(1)
                 end
             end
+        end
+
+        sleep(10)
+        if istaskdone(timer_task)
+            # If the timer_task is already done, that means that something has gone wrong.
+            # So let's print the `TaskFailedException`.
+            wait(timer_task)
         end
 
         # Wait for `rr` to finish, either through naturally finishing its run, or `SIGTERM`.
