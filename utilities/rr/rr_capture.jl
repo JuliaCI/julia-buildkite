@@ -169,8 +169,8 @@ mktempdir(temp_parent_dir) do dir
         global proc = run(setenv(`$(rr_path) record --num-cores=$(num_cores) $ARGS`, new_env), (stdin, stdout, stderr); wait=false)
 
         # Start asynchronous timer that will kill `rr`
-        @async begin
-            sleep(timeout_minutes * 60)
+        timer_task = @async begin
+            sleep(rr_runtests_timeout_minutes * 60)
 
             # If we've exceeded the timeout and `rr` is still running, kill it.
             if isopen(proc)
@@ -189,6 +189,10 @@ mktempdir(temp_parent_dir) do dir
                     exit(1)
                 end
             end
+        end
+
+        if Base.VERSION >= v"1.7-"
+            errormonitor(timer_task)
         end
 
         # Wait for `rr` to finish, either through naturally finishing its run, or `SIGTERM`.
