@@ -191,11 +191,8 @@ mktempdir(temp_parent_dir) do dir
             end
         end
 
-        sleep(10)
-        if istaskdone(timer_task)
-            # If the timer_task is already done, that means that something has gone wrong.
-            # So let's print the `TaskFailedException`.
-            wait(timer_task)
+        if Base.VERSION >= v"1.7-"
+            errormonitor(timer_task)
         end
 
         # Wait for `rr` to finish, either through naturally finishing its run, or `SIGTERM`.
