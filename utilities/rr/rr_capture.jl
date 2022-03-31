@@ -174,7 +174,7 @@ mktempdir(temp_parent_dir) do dir
 
             # If we've exceeded the timeout and `rr` is still running, kill it.
             if isopen(proc)
-                println(stderr, "\n\nProcess timed out (with a timeout of $(timeout_minutes) minutes). Signalling `rr` for force-cleanup!")
+                println(stderr, "\n\nProcess timed out (with a timeout of $(rr_runtests_timeout_minutes) minutes). Signalling `rr` for force-cleanup!")
                 kill(proc, Base.SIGTERM)
 
                 # Give `rr` a chance to cleanup and upload.
