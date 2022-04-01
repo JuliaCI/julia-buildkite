@@ -2,7 +2,10 @@
 
 set -euo pipefail
 
-UPSTREAM_URL="https://github.com/JuliaLang/julia.git"
+# Buildkite users can trigger new builds with these values overridden to
+# test specific julia gitshas
+UPSTREAM_URL="${UPSTREAM_URL:-https://github.com/JuliaLang/julia.git}"
+UPSTREAM_BRANCH="${UPSTREAM_BRANCH:-master}"
 
 # All of our workers are required to provide a default for the julia cache dir
 # We're going to cache repositories in here, just like buildkite itself would:
@@ -17,11 +20,14 @@ else
     git -C "${UPSTREAM_CACHE}" fetch
 fi
 
-# Clear out current directory, clone cache into it
+# Clear out current directory
 # The deliciously complicated `rm` invocation is thanks to https://unix.stackexchange.com/a/77313/29688
 rm -rf ..?* .[!.]* *
+
+# git clone, then force checkout the given gitref
+UPSTREAM_GITREF="$(buildkite-agent meta-data get --default "origin/${UPSTREAM_BRANCH}" BUILDKITE_JULIA_VERSION)"
 git clone --reference "${UPSTREAM_CACHE}" "${UPSTREAM_URL}" "./"
-git reset --hard "$(buildkite-agent meta-data get --default "master" BUILDKITE_JULIA_VERSION)"
+git reset --hard "${UPSTREAM_GITREF}"
 echo
 git --no-pager log -1
 echo
