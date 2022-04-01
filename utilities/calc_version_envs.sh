@@ -36,7 +36,7 @@ SHORT_COMMIT="$(echo ${LONG_COMMIT} | cut -c1-${SHORT_COMMIT_LENGTH})"
 # Extract information about the current julia version number
 JULIA_VERSION="$(cat VERSION)"
 MAJMIN="${JULIA_VERSION:0:3}"
-
+MAJMINPAT="${JULIA_VERSION:0:5}"
 # If we're on a tag, then our "tar version" will be the julia version.
 # Otherwise, it's the short commit.
 if git describe --tags --exact-match >/dev/null 2>/dev/null; then
