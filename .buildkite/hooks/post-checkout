@@ -26,7 +26,7 @@ rm -rf ..?* .[!.]* *
 
 # git clone, then force checkout the given gitref
 UPSTREAM_GITREF="$(buildkite-agent meta-data get --default "origin/${UPSTREAM_BRANCH}" BUILDKITE_JULIA_VERSION)"
-git clone --reference "${UPSTREAM_CACHE}" "${UPSTREAM_URL}" "./"
+git clone --dissociate --reference "${UPSTREAM_CACHE}" "${UPSTREAM_URL}" "./"
 git reset --hard "${UPSTREAM_GITREF}"
 echo
 git --no-pager log -1

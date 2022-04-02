@@ -15,7 +15,7 @@ steps:
     # Prevent multiple pipelines from uploading to S3 simultaneously
     # It is okay for two different triplets to upload simultaneously
     concurrency: 1
-    concurrency_group: 'upload/julialangnightlies/upload_linux/${TRIPLET?}'
+    concurrency_group: 'upload/julialangnightlies/${TRIPLET?}'
     plugins:
       - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"
@@ -25,8 +25,8 @@ steps:
           persist_depot_dirs: packages,artifacts,compiled
           version: '1'
       - staticfloat/sandbox#v1:
-          rootfs_url: https://github.com/JuliaCI/rootfs-images/releases/download/v5.4/aws_uploader.x86_64.tar.gz
-          rootfs_treehash: "a3a152e5cdb00ef12abfc22351449ae62f7085ae"
+          rootfs_url: https://github.com/JuliaCI/rootfs-images/releases/download/v5.7/aws_uploader.x86_64.tar.gz
+          rootfs_treehash: "0d5ad94ba902eea4d9a7d220b49c144626a102ea"
           uid: 1000
           gid: 1000
       - staticfloat/cryptic#v2:
@@ -36,34 +36,7 @@ steps:
           files:
             - .buildkite/secrets/tarball_signing.gpg
     timeout_in_minutes: ${TIMEOUT?}
-    commands: |
-      # First, get things like `LONG_COMMIT` and `SHORT_COMMIT`, etc...
-      TRIPLET="${TRIPLET?}" source .buildkite/utilities/calc_version_envs.sh
-
-      echo "--- Download $${UPLOAD_FILENAME} to ."
-      buildkite-agent artifact download "$${UPLOAD_FILENAME}" .
-
-      echo "--- GPG-sign the tarball"
-      .buildkite/utilities/sign_tarball.sh .buildkite/secrets/tarball_signing.gpg "$${UPLOAD_FILENAME}"
-
-      # We first upload the canonical fully-specified upload target, which is the first one:
-      echo "--- Upload tarballs and signatures to S3"
-      aws s3 cp --acl public-read "$${UPLOAD_FILENAME}" "s3://$${UPLOAD_TARGETS[0]}"
-      aws s3 cp --acl public-read "$${UPLOAD_FILENAME}.asc" "s3://$${UPLOAD_TARGETS[0]}.asc"
-
-      echo "--- Copy to secondary upload targets"
-      # We'll do these in parallel, then wait on the background jobs
-      for SECONDARY_TARGET in $${UPLOAD_TARGETS[@]:1}; do
-        aws s3 cp --acl public-read "s3://$${UPLOAD_TARGETS[0]}" "s3://$${SECONDARY_TARGET}" &
-        aws s3 cp --acl public-read "s3://$${UPLOAD_TARGETS[0]}.asc" "s3://$${SECONDARY_TARGET}.asc" &
-      done
-      wait
-
-      # Report to the user some URLs that they can use to download this from
-      echo "+++ Uploaded to targets"
-      for UPLOAD_TARGET in $${UPLOAD_TARGETS[@]}; do
-        echo " -> s3://$${UPLOAD_TARGET}"
-      done
+    commands: "bash .buildkite/utilities/upload_julia.sh"
     agents:
       queue: "julia"
       # Only run on `sandbox.jl` machines (not `docker`-isolated ones) since we need nestable sandboxing
@@ -72,3 +45,4 @@ steps:
     env:
       # Receive cryptic token from parent job
       BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET: ${BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET?}
+      TRIPLET: "${TRIPLET?}"

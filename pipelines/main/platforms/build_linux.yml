@@ -20,53 +20,14 @@ steps:
                 # Include `/cache/repos` so that our `git` version introspection works.
                 - "/cache/repos:/cache/repos"
         timeout_in_minutes: ${TIMEOUT?}
-        commands: |
-          # First, get things like `LONG_COMMIT` and `SHORT_COMMIT`, etc...
-          TRIPLET="${TRIPLET?}" source .buildkite/utilities/calc_version_envs.sh
-
-          # export JULIA_CPU_TARGET, which is picked up by the build system
-          ARCH="$${ARCH??}" source .buildkite/utilities/export_julia_cpu_target.sh
-
-          echo "--- Create the Make.user file"
-          echo "${MAKE_FLAGS?}" | tr "," "\n" > Make.user
-          if [[ "$${BUILDKITE_PIPELINE_SLUG:?}" == "julia-master" ]] || [[ "$${BUILDKITE_PIPELINE_SLUG:?}" =~ ^julia-release- ]]; then
-            banner="Official https://julialang.org/ release"
-            echo "TAGGED_RELEASE_BANNER=\"$${banner:?}\"" >> Make.user
-          elif [[ "$${BUILDKITE_PIPELINE_SLUG:?}" == "julia-buildkite" ]]; then
-            banner="Not an official binary; built as part of the CI infrastructure testing"
-            echo "TAGGED_RELEASE_BANNER=\"$${banner:?}\"" >> Make.user
-          fi
-          echo "VERBOSE=1" >> Make.user
-          cat Make.user
-
-          echo "--- Build Julia"
-          make --output-sync -j 8
-
-          echo "--- Check that the working directory is clean"
-          if [ -z "$(git status --short)" ]; then
-            echo "INFO: The working directory is clean."
-          else
-            echo "ERROR: The working directory is dirty."
-            echo "Output of git status:"
-            git status
-            exit 1
-          fi
-
-          echo "--- Print Julia version info"
-          ./julia -e 'using InteractiveUtils; InteractiveUtils.versioninfo()'
-
-          echo "--- Create build artifacts"
-          make --output-sync -j 8 binary-dist
-
-          # Rename the build artifact in case we want to name it differently, as is the case on `musl`.
-          if [[ "$${JULIA_BINARYDIST_FILENAME}" != "$${UPLOAD_FILENAME}" ]]; then
-              mv $${JULIA_BINARYDIST_FILENAME} $${UPLOAD_FILENAME}
-          fi
-
-          echo "--- Upload build artifacts"
-          buildkite-agent artifact upload $${UPLOAD_FILENAME}
+        commands: "bash .buildkite/utilities/build_julia.sh"
         agents:
           queue: "julia"
           # Only run on `sandbox.jl` machines (not `docker`-isolated ones) since we need nestable sandboxing
           sandbox_capable: "true"
           os: "linux"
+          arch: "${ARCH?}"
+        env:
+          # Receive some environment mappings from our templating engine
+          TRIPLET: "${TRIPLET?}"
+          MAKE_FLAGS: "${MAKE_FLAGS?}"

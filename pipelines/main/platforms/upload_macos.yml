@@ -15,7 +15,7 @@ steps:
     # Prevent multiple pipelines from uploading to S3 simultaneously
     # It is okay for two different triplets to upload simultaneously
     concurrency: 1
-    concurrency_group: 'upload/julialangnightlies/upload_macos/${TRIPLET?}'
+    concurrency_group: 'upload/julialangnightlies/${TRIPLET?}'
     plugins:
       - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"
@@ -27,103 +27,8 @@ steps:
           files:
             - .buildkite/secrets/tarball_signing.gpg
             - .buildkite/secrets/macos_codesigning.keychain
-            - .buildkite/secrets/keychain_password.txt
     timeout_in_minutes: ${TIMEOUT?}
-    commands: |
-      # First, get things like `LONG_COMMIT` and `SHORT_COMMIT`, etc...
-      TRIPLET="${TRIPLET?}" source .buildkite/utilities/calc_version_envs.sh
-
-      echo "--- Variables for the dmg"
-      MACOS_CODESIGN_IDENTITY="2053E9292809B66582CA9F042B470C0929340362"
-      APP_NAME="Julia-$${MAJMIN}.app"
-      DMG_NAME="$$(basename $$JULIA_BINARYDIST_FILENAME .tar.gz).dmg"
-      APP_PATH="dmg/$${APP_NAME}"
-      MAC_PATH="contrib/mac/app"
-      KEYCHAIN_PATH="$$(pwd)/.buildkite/secrets/macos_codesigning.keychain"
-      APP_ID="org.julialang.launcherapp"
-      APP_COPYRIGHT="$$(date '+%Y') The Julia Project"
-      JULIA_VERSION_OPT_COMMIT="$${JULIA_VERSION}-$${SHORT_COMMIT}"
-      VOL_NAME="Julia-$${JULIA_VERSION_OPT_COMMIT}"
-      KEYCHAIN_PASSWORD="$$(cat .buildkite/secrets/keychain_password.txt)"
-
-      echo "--- Download $${UPLOAD_FILENAME} to ."
-      buildkite-agent artifact download "$${UPLOAD_FILENAME}" .
-
-      #Get the current keychains and put into a list
-      echo "--- Add keychain to list and unlock it"
-      security -v list-keychains -s -d user "$${KEYCHAIN_PATH}"
-      security unlock-keychain -p "$${KEYCHAIN_PASSWORD}" "$${KEYCHAIN_PATH}"
-
-      security find-identity "$${MACOS_CODESIGN_IDENTITY}" "$${KEYCHAIN_PATH}"
-      security -v list-keychains -d user
-
-      echo "--- Prepare .app file"
-      mkdir -p dmg
-      osacompile -o "$${APP_PATH}" "$${MAC_PATH}/startup.applescript"
-      rm "$${APP_PATH}/Contents/Resources/applet.icns"
-      cp "$${MAC_PATH}/julia.icns" "$${APP_PATH}/Contents/Resources/"
-      plutil -replace CFBundleDevelopmentRegion  -string "en" "$${APP_PATH}/Contents/Info.plist"
-      plutil -insert  CFBundleDisplayName        -string "Julia" "$${APP_PATH}/Contents/Info.plist"
-      plutil -replace CFBundleIconFile           -string "julia.icns" "$${APP_PATH}/Contents/Info.plist"
-      plutil -insert  CFBundleIdentifier         -string "$${APP_ID}" "$${APP_PATH}/Contents/Info.plist"
-      plutil -replace CFBundleName               -string "Julia" "$${APP_PATH}/Contents/Info.plist"
-      plutil -insert  CFBundleShortVersionString -string "$${MAJMINPAT}" "$${APP_PATH}/Contents/Info.plist"
-      plutil -insert  CFBundleVersion            -string "$${JULIA_VERSION_OPT_COMMIT}" "$${APP_PATH}/Contents/Info.plist"
-      plutil -insert  NSHumanReadableCopyright   -string "$${APP_COPYRIGHT}" "$${APP_PATH}/Contents/Info.plist"
-      mkdir -p "$${APP_PATH}/Contents/Resources/julia"
-
-      echo "--- Extract build artifacts"
-      tar zxf "$${UPLOAD_FILENAME}" -C "$${APP_PATH}/Contents/Resources/julia" --strip-components 1
-
-      find $${APP_PATH}/Contents/Resources/julia -type f -exec chmod -w {} \;
-      echo "--- Codesign the files"
-      cp -f "$${MAC_PATH}/julia.icns" dmg/.VolumeIcon.icns
-      ln -fs /Applications dmg/Applications
-      .buildkite/utilities/macos/codesign.sh --keychain "$${KEYCHAIN_PATH}" --identity "$${MACOS_CODESIGN_IDENTITY}" "$${APP_PATH}/Contents/Resources/julia"
-      codesign -s $$MACOS_CODESIGN_IDENTITY "$${APP_PATH}/Contents/MacOS/applet" --keychain "$${KEYCHAIN_PATH}" --force 
-      echo "--- create dmg"
-      hdiutil create $$DMG_NAME -size 1t -fs HFS+ -ov -volname "$${VOL_NAME}" -imagekey zlib-level=9 -srcfolder dmg
-      codesign -s $$MACOS_CODESIGN_IDENTITY --timestamp -i org.julialang.launcherapp $$DMG_NAME --keychain "$${KEYCHAIN_PATH}" --force
-      
-      # remake tar file after signing
-      mkdir "$${JULIA_INSTALL_DIR}"
-      cp -R "$${APP_PATH}/Contents/Resources/julia/" "$${JULIA_INSTALL_DIR}"
-      rm -rf "$${UPLOAD_FILENAME}"
-      tar zcvf "$${UPLOAD_FILENAME}" "$${JULIA_INSTALL_DIR}"
-
-      echo "--- GPG-sign the tarball"
-      .buildkite/utilities/sign_tarball.sh .buildkite/secrets/tarball_signing.gpg "$${UPLOAD_FILENAME}"
-
-      echo "--- Upload signed packages to buildkite"
-      buildkite-agent artifact upload "$${DMG_NAME}"
-      buildkite-agent artifact upload "$${UPLOAD_FILENAME}"
-      buildkite-agent artifact upload "$${UPLOAD_FILENAME}.asc"
-
-      # We first upload the canonical fully-specified upload target, which is the first one:
-      echo "--- Upload tarballs, dmgs and signatures to S3"
-      DMG_TARGET="$$(dirname $$UPLOAD_TARGETS[0])/$$DMG_NAME"
-      aws s3 cp --acl public-read "$${UPLOAD_FILENAME}" "s3://$${UPLOAD_TARGETS[0]}"
-      aws s3 cp --acl public-read "$${UPLOAD_FILENAME}.asc" "s3://$${UPLOAD_TARGETS[0]}.asc"
-      aws s3 cp --acl public-read "$${DMG_NAME}" "s3://$${DMG_TARGET}"
-
-      echo "--- Copy to secondary upload targets"
-      # We'll do these in parallel, then wait on the background jobs
-      for SECONDARY_TARGET in $${UPLOAD_TARGETS[@]:1}; do
-        SECONDARY_DMG_TARGET=""$$(dirname $$SECONDARY_TARGET)/$$DMG_NAME""
-        aws s3 cp --acl public-read "s3://$${DMG_TARGET}" "s3://$${SECONDARY_DMG_TARGET}" &
-        aws s3 cp --acl public-read "s3://$${UPLOAD_TARGETS[0]}" "s3://$${SECONDARY_TARGET}" &
-        aws s3 cp --acl public-read "s3://$${UPLOAD_TARGETS[0]}.asc" "s3://$${SECONDARY_TARGET}.asc" &
-      done
-      wait
-
-      # Report to the user some URLs that they can use to download this from
-      echo "+++ Uploaded to targets"
-      for UPLOAD_TARGET in $${UPLOAD_TARGETS[@]}; do
-        echo " -> s3://$${UPLOAD_TARGET}"
-        echo " -> s3://$$(dirname $$UPLOAD_TARGET)/$$DMG_NAME"
-      done
-
-      security -v delete-keychain "$$KEYCHAIN_PATH"
+    commands: "bash .buildkite/utilities/upload_julia.sh"
     agents:
       queue: "julia"
       # Only run on `sandbox.jl` machines (not `docker`-isolated ones) since we need nestable sandboxing
@@ -132,3 +37,4 @@ steps:
     env:
       # Receive cryptic token from parent job
       BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET: ${BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET?}
+      TRIPLET: "${TRIPLET?}"
