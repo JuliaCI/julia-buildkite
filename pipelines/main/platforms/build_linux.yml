@@ -1,5 +1,5 @@
 steps:
-  - group: ":linux: Linux"
+  - group: "ignoreme"
     steps:
       - label: ":linux: build ${TRIPLET?}"
         key: "build_${TRIPLET?}"
