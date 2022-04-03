@@ -9,7 +9,12 @@ steps:
       - "tsan"
       - "whitespace"
     notify:
-       - github_commit_status:
-           context: "Linux"
+     - github_commit_status:
+         context: "Linux"
     commands: |
-     echo "Hello world"
+      echo "Hello world"
+    agents:
+      queue: "julia"
+      # Only run on `sandbox.jl` machines (not `docker`-isolated ones) since we need nestable sandboxing
+      sandbox_capable: "true"
+      os: "linux"
