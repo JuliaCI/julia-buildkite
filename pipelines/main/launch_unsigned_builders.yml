@@ -13,7 +13,7 @@
 # something about the privileged steps.
 
 steps:
-  - group: ":buildkite: Infrastructure"
+  - group: "ignoreme"
     steps:
       - label: ":buildkite: Launch misc. jobs"
         plugins:
@@ -25,7 +25,7 @@ steps:
         agents:
           queue: "julia"
 
-  - group: ":linux: Linux"
+  - group: "ignoreme"
     steps:
       - label: ":buildkite: Launch jobs"
         plugins:
