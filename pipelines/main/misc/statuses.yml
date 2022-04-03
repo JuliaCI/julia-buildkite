@@ -1,0 +1,10 @@
+steps:
+  - label: "Linux"
+    depends_on:
+      - analyzegc
+      - doctest
+      - embedding
+      - llvmpasses
+      - tsan
+      - whitespace
+      
