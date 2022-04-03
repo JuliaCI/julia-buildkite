@@ -12,4 +12,4 @@ steps:
       - github_commit_status:
           context: "Linux"
      commands: |
-       true
+       echo "Hello world"
