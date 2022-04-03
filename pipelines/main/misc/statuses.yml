@@ -1,6 +1,6 @@
 steps:
   - label: "Linux"
-    key:   "Linux"
+    key: "Linux"
     depends_on:
       - analyzegc
       - doctest
@@ -8,5 +8,6 @@ steps:
       - llvmpasses
       - tsan
       - whitespace
-     command: "true"
+     commands: |
+       true
       
