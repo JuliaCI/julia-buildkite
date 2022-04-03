@@ -48,5 +48,8 @@ steps:
           bash .buildkite/utilities/arches_pipeline_upload.sh \
               .buildkite/pipelines/main/platforms/test_linux.arches \
               .buildkite/pipelines/main/platforms/test_linux.yml
+
+          # Our custom setup for groups and commit statuses
+          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/statuses.yml
         agents:
           queue: "julia"
