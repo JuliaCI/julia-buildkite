@@ -1,5 +1,5 @@
 steps:
-  - group: ":linux: Linux"
+  - group: "ignoreme"
     steps:
       - label: ":linux: :test_tube: test ${TRIPLET?}${USE_RR-}"
         key: "test_${TRIPLET?}${USE_RR-}"
