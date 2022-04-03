@@ -2,11 +2,11 @@ steps:
   - label: "Linux"
     key: "Linux"
     depends_on:
-      - analyzegc
-      - doctest
-      - embedding
-      - llvmpasses
-      - tsan
+      - "analyzegc"
+      - "doctest"
+      - "embedding"
+      - "llvmpasses"
+      - "tsan"
       - whitespace
     notify:
        - github_commit_status:
