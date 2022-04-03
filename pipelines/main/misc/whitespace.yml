@@ -1,5 +1,5 @@
 steps:
-  - group: ":buildkite: Infrastructure"
+  - group: "ignoreme"
     steps:
       - label: ":buildkite: Whitespace check"
         key: "whitespace"
