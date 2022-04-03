@@ -15,18 +15,6 @@
 steps:
   - group: "ignoreme"
     steps:
-      - label: ":buildkite: Launch misc. jobs"
-        plugins:
-          - JuliaCI/external-buildkite#v1:
-              version: "./.buildkite-external-version"
-              repo_url: "https://github.com/JuliaCI/julia-buildkite"
-        commands: |
-          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/whitespace.yml
-        agents:
-          queue: "julia"
-
-  - group: "ignoreme"
-    steps:
       - label: ":buildkite: Launch jobs"
         plugins:
           - JuliaCI/external-buildkite#v1:
@@ -38,6 +26,7 @@ steps:
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/embedding.yml
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/llvmpasses.yml
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/sanitizers.yml
+          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/whitespace.yml
 
           # Launch Linux packaging jobs
           bash .buildkite/utilities/arches_pipeline_upload.sh \
