@@ -1,5 +1,5 @@
 steps:
-  - group: ":linux: Linux"
+  - group: "ignoreme"
     steps:
     - label: "asan"
       key: "asan"
