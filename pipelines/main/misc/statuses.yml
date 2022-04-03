@@ -7,4 +7,5 @@ steps:
       - llvmpasses
       - tsan
       - whitespace
+     command: "true"
       
