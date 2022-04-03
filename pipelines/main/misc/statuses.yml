@@ -7,7 +7,7 @@ steps:
       - "embedding"
       - "llvmpasses"
       - "tsan"
-      - whitespace
+      - "whitespace"
     notify:
        - github_commit_status:
            context: "Linux"
