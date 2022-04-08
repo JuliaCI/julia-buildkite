@@ -1,3 +1,5 @@
+export PATH := $(shell pwd)/cryptic-buildkite-plugin/bin:$(PATH)
+
 decrypt:
 	cd .buildkite/cryptic_repo_root && decrypt --repo-root=$$(pwd) --verbose
 

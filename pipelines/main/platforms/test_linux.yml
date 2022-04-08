@@ -1,5 +1,5 @@
 steps:
-  - group: ":linux: Linux"
+  - group: "Test"
     steps:
       - label: ":linux: :test_tube: test ${TRIPLET?}${USE_RR-}"
         key: "test_${TRIPLET?}${USE_RR-}"
@@ -33,4 +33,3 @@ steps:
           JULIA_SHELL: "/bin/bash"
           TRIPLET: "${TRIPLET?}"
           USE_RR: "${USE_RR?}"
-        

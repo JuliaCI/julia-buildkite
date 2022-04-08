@@ -1,5 +1,5 @@
 steps:
-  - group: ":macos: Macos"
+  - group: "Test"
     steps:
       - label: ":macos: :test_tube: test ${TRIPLET?}"
         key: "test_${TRIPLET?}"

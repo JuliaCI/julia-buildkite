@@ -13,48 +13,61 @@
 # something about the privileged steps.
 
 steps:
-  - group: ":buildkite: Infrastructure"
+  - group: "Build"
+    notify:
+      - github_commit_status:
+          context: "Build"
     steps:
-      - label: ":buildkite: Launch misc. jobs"
+      - label: "Launch build jobs"
         plugins:
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
         commands: |
-          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/whitespace.yml
+          # Launch Linux build jobs
+          bash .buildkite/utilities/arches_pipeline_upload.sh \
+              .buildkite/pipelines/main/platforms/build_linux.arches \
+              .buildkite/pipelines/main/platforms/build_linux.yml
+          # Launch macOS packaging jobs
+          bash .buildkite/utilities/arches_pipeline_upload.sh \
+              .buildkite/pipelines/main/platforms/build_macos.arches \
+              .buildkite/pipelines/main/platforms/build_macos.yml
         agents:
           queue: "julia"
-
-  - group: ":linux: Linux"
+  - group: "Check"
+    notify:
+      - github_commit_status:
+          context: "Check"
     steps:
-      - label: ":buildkite: Launch jobs"
+      - label: "Launch check jobs"
         plugins:
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
         commands: |
-          # Launch the miscellaneous jobs in alphabetical order.
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/doctest.yml
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/embedding.yml
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/llvmpasses.yml
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/sanitizers.yml
-
-          # Launch Linux packaging jobs
-          bash .buildkite/utilities/arches_pipeline_upload.sh \
-              .buildkite/pipelines/main/platforms/build_linux.arches \
-              .buildkite/pipelines/main/platforms/build_linux.yml
-
-          # Launch macos packaging jobs
-          bash .buildkite/utilities/arches_pipeline_upload.sh \
-              .buildkite/pipelines/main/platforms/build_macos.arches \
-              .buildkite/pipelines/main/platforms/build_macos.yml
-
-          # Launch Linux testing jobs
+          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/whitespace.yml
+        agents:
+          queue: "julia"
+  - group: "Test"
+    notify:
+      - github_commit_status:
+          context: "Test"
+    steps:
+      - label: "Launch test jobs"
+        plugins:
+          - JuliaCI/external-buildkite#v1:
+              version: "./.buildkite-external-version"
+              repo_url: "https://github.com/JuliaCI/julia-buildkite"
+        commands: |
+          # Launch Linux test jobs
           bash .buildkite/utilities/arches_pipeline_upload.sh \
               .buildkite/pipelines/main/platforms/test_linux.arches \
               .buildkite/pipelines/main/platforms/test_linux.yml
-
-          # Launch macos testing jobs
+          # Launch macOS test jobs
           bash .buildkite/utilities/arches_pipeline_upload.sh \
               .buildkite/pipelines/main/platforms/test_macos.arches \
               .buildkite/pipelines/main/platforms/test_macos.yml
