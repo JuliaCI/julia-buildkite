@@ -25,6 +25,7 @@ steps:
         echo "--- Build julia-debug with ASAN"
         contrib/asan/build.sh ./tmp/test-asan -j$${JULIA_CPU_THREADS:?} debug
         echo "--- Run tests"
+        ASAN_SYMBOLIZER_PATH=$PWD/tmp/test-asan/toolchain/usr/tools/llvm-symbolizer \
         tmp/test-asan/asan/usr/bin/julia-debug -e 'Base.runtests(ARGS; ncores = Sys.CPU_THREADS)' \
             interpreter \
             intrinsics \
@@ -32,6 +33,8 @@ steps:
             llvmcall2 \
             precompile \
             worlds
+      # The above `ASAN_SYMBOLIZER_PATH` reflects `Make.user.asan` setting:
+      # https://github.com/JuliaLang/julia/blob/8890aea066f9023525dd78d0dee3ba871adc6c28/contrib/asan/Make.user.asan#L9
       agents:
         queue: "julia"
         sandbox_capable: "true"
