@@ -2,7 +2,7 @@
 # It is purely for keeping track of the changes we make to the webUI configuration; modifying this file has no effect.
 # We use the `cryptic` buildkite plugin to provide secrets management, which requires some integration into the WebUI's steps.
 steps:
-  - group: "Upload"
+  - group: "Web UI"
     steps:
       - label: "Unlock secrets, launch pipelines"
         agents:
