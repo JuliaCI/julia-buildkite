@@ -1,29 +1,35 @@
 # This file launches upload jobs that wait upon previous jobs, then upload their artifacts to S3
+
 steps:
-  - label: ":buildkite: :unlock: Launch signed pipelines"
-    plugins:
-      - JuliaCI/external-buildkite#v1:
-          version: "./.buildkite-external-version"
-          repo_url: "https://github.com/JuliaCI/julia-buildkite"
-    commands: |
-      # Explicitly pass along the cryptic token to child pipelines
-      export BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET
+  - group: "Upload"
+    notify:
+      - github_commit_status:
+          context: "Upload"
+    steps:
+      - label: ":buildkite: :unlock: Launch signed pipelines"
+        plugins:
+          - JuliaCI/external-buildkite#v1:
+              version: "./.buildkite-external-version"
+              repo_url: "https://github.com/JuliaCI/julia-buildkite"
+        commands: |
+          # Explicitly pass along the cryptic token to child pipelines
+          export BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET
 
-      # Launch `upload_linux` jobs to store tarballs into S3 once tests are done
-      bash .buildkite/utilities/arches_pipeline_upload.sh \
-          .buildkite/pipelines/main/platforms/upload_linux.arches \
-          .buildkite/pipelines/main/platforms/upload_linux.yml
+          # Launch `upload_linux` jobs to store tarballs into S3 once tests are done
+          bash .buildkite/utilities/arches_pipeline_upload.sh \
+              .buildkite/pipelines/main/platforms/upload_linux.arches \
+              .buildkite/pipelines/main/platforms/upload_linux.yml
 
-      # Launch `upload_macos` jobs to store tarballs into S3 once tests are done
-      bash .buildkite/utilities/arches_pipeline_upload.sh \
-          .buildkite/pipelines/main/platforms/upload_macos.arches \
-          .buildkite/pipelines/main/platforms/upload_macos.yml
+          # Launch `upload_macos` jobs to store tarballs into S3 once tests are done
+          bash .buildkite/utilities/arches_pipeline_upload.sh \
+              .buildkite/pipelines/main/platforms/upload_macos.arches \
+              .buildkite/pipelines/main/platforms/upload_macos.yml
 
-      # Don't share this with buildkite's env display
-      unset BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET
-    agents:
-      queue: "julia"
-      cryptic_capable: "true"
-    env:
-      # Receive cryptic token from parent job
-      BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET: ${BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET?}
+          # Don't share this with buildkite's env display
+          unset BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET
+        agents:
+          queue: "julia"
+          cryptic_capable: "true"
+        env:
+          # Receive cryptic token from parent job
+          BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET: ${BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET?}

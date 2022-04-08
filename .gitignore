@@ -7,3 +7,6 @@ repo.key
 # Ignore any agent keys (public or private) we have stored
 agent_key*
 agent.key*
+
+# Ignore a local clone of the `cryptic-buildkite-plugin` repository
+cryptic-buildkite-plugin/

@@ -1,5 +1,5 @@
 steps:
-  - group: ":macos: Macos"
+  - group: "Build"
     steps:
       - label: ":macos: build ${TRIPLET?}"
         key: "build_${TRIPLET?}"
@@ -17,4 +17,3 @@ steps:
           # Receive some environment mappings from our templating engine
           TRIPLET: "${TRIPLET?}"
           MAKE_FLAGS: "${MAKE_FLAGS?}"
-
