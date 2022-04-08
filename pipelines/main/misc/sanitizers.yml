@@ -36,7 +36,6 @@ steps:
         queue: "julia"
         sandbox_capable: "true"
         os: "linux"
-
     - label: "tsan"
       key: "tsan"
       plugins:

@@ -1,7 +1,7 @@
 steps:
   - group: "Test"
     steps:
-      - label: ":linux: :test_tube: test ${TRIPLET?}${USE_RR-}"
+      - label: ":linux: test ${TRIPLET?}${USE_RR-}"
         key: "test_${TRIPLET?}${USE_RR-}"
         depends_on:
           - "build_${TRIPLET?}"
