@@ -2,9 +2,6 @@
 
 steps:
   - group: "Upload"
-    notify:
-      - github_commit_status:
-          context: "Upload"
     steps:
       - label: "Launch signed pipelines"
         plugins:
