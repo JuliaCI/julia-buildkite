@@ -1,5 +1,5 @@
 steps:
-  - label: ":buildkite: Launch unsigned jobs"
+  - label: "Launch unsigned jobs"
     commands: |
       # Launch all of the `USE_BINARYBUILDER=0` jobs.
       bash .buildkite/utilities/arches_pipeline_upload.sh .buildkite/pipelines/scheduled/no_bb/no_bb_package_linux.arches .buildkite/pipelines/main/platforms/package_linux.yml

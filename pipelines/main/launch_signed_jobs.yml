@@ -6,7 +6,7 @@ steps:
       - github_commit_status:
           context: "Upload"
     steps:
-      - label: ":buildkite: :unlock: Launch signed pipelines"
+      - label: "Launch signed pipelines"
         plugins:
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"

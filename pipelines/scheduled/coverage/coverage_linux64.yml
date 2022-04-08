@@ -1,5 +1,5 @@
 steps:
-  - label: ":unlock: :coverage: Run coverage test"
+  - label: "Coverage"
     # We must accept the signed job id secret in order to propagate secrets
     env:
       BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET: ${BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET?}
