@@ -1,5 +1,5 @@
 steps:
-  - group: "Test"
+  - group: "${GROUP?}"
     steps:
       - label: ":linux: test ${TRIPLET?}${USE_RR-}"
         key: "test_${TRIPLET?}${USE_RR-}"

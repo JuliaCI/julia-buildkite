@@ -1,5 +1,5 @@
 steps:
-  - group: "Test"
+  - group: "${GROUP?}"
     steps:
       - label: ":macos: test ${TRIPLET?}"
         key: "test_${TRIPLET?}"

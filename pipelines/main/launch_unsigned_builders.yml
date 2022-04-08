@@ -25,11 +25,15 @@ steps:
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
         commands: |
           # Launch Linux build jobs
-          bash .buildkite/utilities/arches_pipeline_upload.sh \
+          GROUP="Build" \
+              ALLOW_FAIL="false" \
+              bash .buildkite/utilities/arches_pipeline_upload.sh \
               .buildkite/pipelines/main/platforms/build_linux.arches \
               .buildkite/pipelines/main/platforms/build_linux.yml
           # Launch macOS packaging jobs
-          bash .buildkite/utilities/arches_pipeline_upload.sh \
+          GROUP="Build" \
+              ALLOW_FAIL="false" \
+              bash .buildkite/utilities/arches_pipeline_upload.sh \
               .buildkite/pipelines/main/platforms/build_macos.arches \
               .buildkite/pipelines/main/platforms/build_macos.yml
         agents:
@@ -64,12 +68,53 @@ steps:
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
         commands: |
           # Launch Linux test jobs
-          bash .buildkite/utilities/arches_pipeline_upload.sh \
+          GROUP="Test" \
+              ALLOW_FAIL="false" \
+              bash .buildkite/utilities/arches_pipeline_upload.sh \
               .buildkite/pipelines/main/platforms/test_linux.arches \
               .buildkite/pipelines/main/platforms/test_linux.yml
           # Launch macOS test jobs
-          bash .buildkite/utilities/arches_pipeline_upload.sh \
+          GROUP="Test" \
+              ALLOW_FAIL="false" \
+              bash .buildkite/utilities/arches_pipeline_upload.sh \
               .buildkite/pipelines/main/platforms/test_macos.arches \
+              .buildkite/pipelines/main/platforms/test_macos.yml
+        agents:
+          queue: "julia"
+  - group: "Allow Fail"
+    steps:
+      - label: "Launch allowed-to-fail build jobs"
+        plugins:
+          - JuliaCI/external-buildkite#v1:
+              version: "./.buildkite-external-version"
+              repo_url: "https://github.com/JuliaCI/julia-buildkite"
+        commands: |
+          # Launch Linux allowed-to-fail build jobs
+          GROUP="Allow Fail" \
+              ALLOW_FAIL="true" \
+              bash .buildkite/utilities/arches_pipeline_upload.sh \
+              .buildkite/pipelines/main/platforms/build_linux.soft_fail.arches \
+              .buildkite/pipelines/main/platforms/build_linux.yml
+          # Currently, we do not have any macOS allowed-to-fail test jobs
+        agents:
+          queue: "julia"
+      - label: "Launch allowed-to-fail test jobs"
+        plugins:
+          - JuliaCI/external-buildkite#v1:
+              version: "./.buildkite-external-version"
+              repo_url: "https://github.com/JuliaCI/julia-buildkite"
+        commands: |
+          # Launch Linux allowed-to-fail test jobs
+          GROUP="Allow Fail" \
+              ALLOW_FAIL="true" \
+              bash .buildkite/utilities/arches_pipeline_upload.sh \
+              .buildkite/pipelines/main/platforms/test_linux.soft_fail.arches \
+              .buildkite/pipelines/main/platforms/test_linux.yml
+          # Launch macOS allowed-to-fail test jobs
+          GROUP="Allow Fail" \
+              ALLOW_FAIL="true" \
+              bash .buildkite/utilities/arches_pipeline_upload.sh \
+              .buildkite/pipelines/main/platforms/test_macos.soft_fail.arches \
               .buildkite/pipelines/main/platforms/test_macos.yml
         agents:
           queue: "julia"
