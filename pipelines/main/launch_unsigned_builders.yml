@@ -81,7 +81,7 @@ steps:
               .buildkite/pipelines/main/platforms/test_macos.yml
         agents:
           queue: "julia"
-  - group: "Allow Fail"
+  - group: "Allow Fail (Build)"
     steps:
       - label: "Launch allowed-to-fail build jobs"
         plugins:
@@ -90,7 +90,7 @@ steps:
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
         commands: |
           # Launch Linux allowed-to-fail build jobs
-          GROUP="Allow Fail" \
+          GROUP="Allow Fail (Build)" \
               ALLOW_FAIL="true" \
               bash .buildkite/utilities/arches_pipeline_upload.sh \
               .buildkite/pipelines/main/platforms/build_linux.soft_fail.arches \
@@ -98,6 +98,8 @@ steps:
           # Currently, we do not have any macOS allowed-to-fail test jobs
         agents:
           queue: "julia"
+  - group: "Allow Fail (Test)"
+    steps:
       - label: "Launch allowed-to-fail test jobs"
         plugins:
           - JuliaCI/external-buildkite#v1:
@@ -105,13 +107,13 @@ steps:
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
         commands: |
           # Launch Linux allowed-to-fail test jobs
-          GROUP="Allow Fail" \
+          GROUP="Allow Fail (Test)" \
               ALLOW_FAIL="true" \
               bash .buildkite/utilities/arches_pipeline_upload.sh \
               .buildkite/pipelines/main/platforms/test_linux.soft_fail.arches \
               .buildkite/pipelines/main/platforms/test_linux.yml
           # Launch macOS allowed-to-fail test jobs
-          GROUP="Allow Fail" \
+          GROUP="Allow Fail (Test)" \
               ALLOW_FAIL="true" \
               bash .buildkite/utilities/arches_pipeline_upload.sh \
               .buildkite/pipelines/main/platforms/test_macos.soft_fail.arches \
