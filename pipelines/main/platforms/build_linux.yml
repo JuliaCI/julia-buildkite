@@ -20,6 +20,7 @@ steps:
                 # Include `/cache/repos` so that our `git` version introspection works.
                 - "/cache/repos:/cache/repos"
         timeout_in_minutes: ${TIMEOUT?}
+        soft_fail: ${ALLOW_FAIL?}
         commands: "bash .buildkite/utilities/build_julia.sh"
         agents:
           queue: "julia"
