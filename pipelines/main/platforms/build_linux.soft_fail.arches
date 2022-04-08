@@ -1,0 +1,12 @@
+# OS       TRIPLET                   ALLOW_FAIL    ARCH           ARCH_ROOTFS    MAKE_FLAGS                              TIMEOUT       ROOTFS_TAG    ROOTFS_HASH
+# linux    armv7l-linux-gnueabihf    true          armv7l         armv7l         .                                                                       .             ----          ----------------------------------------
+# linux    powerpc64le-linux-gnu     true          powerpc64le    powerpc64le    .                                                                       .             ----          ----------------------------------------
+
+# These special lines allow us to embed default values for the columns above.
+# Any column without a default mapping here will simply substitute a `.` to the empty string
+
+# Of course we do not allow jobs to fail typically
+#default ALLOW_FAIL false
+
+# Most jobs should finish within 1.5 hours, barring exceptionally slow hardware
+#default TIMEOUT 90

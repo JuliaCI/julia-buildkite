@@ -1,5 +1,5 @@
 steps:
-  - group: "Build"
+  - group: "${GROUP?}"
     steps:
       - label: ":linux: build ${TRIPLET?}"
         key: "build_${TRIPLET?}"

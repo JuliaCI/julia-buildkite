@@ -1,5 +1,5 @@
 steps:
-  - group: "Build"
+  - group: "${GROUP?}"
     steps:
       - label: ":macos: build ${TRIPLET?}"
         key: "build_${TRIPLET?}"
