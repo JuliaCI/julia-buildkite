@@ -3,7 +3,7 @@ steps:
     steps:
       - label: ":macos: test ${TRIPLET?}"
         key: "test_${TRIPLET?}"
-        if: (build.env("ARCH") == "x86_64") || (build.branch == "master") || (build.branch == "main") # TODO: remove this line
+        if: (build.env("BUILDKITE_STEP_KEY") == "test_x86_64-apple-darwin") || (build.branch == "master") || (build.branch == "main") # TODO: remove this line
         depends_on:
           - "build_${TRIPLET?}"
         plugins:
