@@ -1,9 +1,9 @@
-# OS       TRIPLET                    ARCH           ARCH_ROOTFS    MAKE_FLAGS                                                              TIMEOUT       ROOTFS_TAG    ROOTFS_HASH
-# linux    i686-linux-gnu             x86_64         i686           .                                                                       .             ----          ----------------------------------------
-linux      x86_64-linux-gnu           x86_64         x86_64         CFLAGS=-Werror,CXXFLAGS=-Werror                                         .             v5.8          582b5d44bbc24d2a58ab609c5a520b3fd102e504
-linux      x86_64-linux-gnuassert     x86_64         x86_64         FORCE_ASSERTIONS=1,LLVM_ASSERTIONS=1,CFLAGS=-Werror,CXXFLAGS=-Werror    .             v5.8          582b5d44bbc24d2a58ab609c5a520b3fd102e504
-# linux    aarch64-linux-gnu          aarch64        aarch64        .                                                                       .             ----          ----------------------------------------
-musl       x86_64-linux-musl          x86_64         x86_64         .                                                                       .             v5.8          dc23dbeb02f9b85c8c8c7991ee8cfcae8f4c809b
+# OS       TRIPLET                    ARCH           ARCH_ROOTFS    MAKE_FLAGS                                                                    TIMEOUT       ROOTFS_TAG    ROOTFS_HASH
+# linux    i686-linux-gnu             x86_64         i686           .                                                                             .             ----          ----------------------------------------
+linux      x86_64-linux-gnu           x86_64         x86_64         JL_CFLAGS=-Werror,JL_CXXFLAGS=-Werror                                         .             v5.8          582b5d44bbc24d2a58ab609c5a520b3fd102e504
+linux      x86_64-linux-gnuassert     x86_64         x86_64         FORCE_ASSERTIONS=1,LLVM_ASSERTIONS=1,JL_CFLAGS=-Werror,JL_CXXFLAGS=-Werror    .             v5.8          582b5d44bbc24d2a58ab609c5a520b3fd102e504
+# linux    aarch64-linux-gnu          aarch64        aarch64        .                                                                             .             ----          ----------------------------------------
+musl       x86_64-linux-musl          x86_64         x86_64         JL_CFLAGS=-Werror,JL_CXXFLAGS=-Werror                                         .             v5.8          dc23dbeb02f9b85c8c8c7991ee8cfcae8f4c809b
 
 # These special lines allow us to embed default values for the columns above.
 # Any column without a default mapping here will simply substitute a `.` to the empty string
