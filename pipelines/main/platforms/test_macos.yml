@@ -3,6 +3,7 @@ steps:
     steps:
       - label: ":macos: test ${TRIPLET?}"
         key: "test_${TRIPLET?}"
+        if: (build.branch == "master") || (build.branch == "main") # TODO: remove this line
         depends_on:
           - "build_${TRIPLET?}"
         plugins:
