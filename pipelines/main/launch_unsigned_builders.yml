@@ -49,11 +49,12 @@ steps:
               version: "./.buildkite-external-version"
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
         commands: |
-          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/doctest.yml
-          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/embedding.yml
-          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/llvmpasses.yml
-          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/sanitizers.yml
-          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/whitespace.yml
+          true
+          # buildkite-agent pipeline upload .buildkite/pipelines/main/misc/doctest.yml
+          # buildkite-agent pipeline upload .buildkite/pipelines/main/misc/embedding.yml
+          # buildkite-agent pipeline upload .buildkite/pipelines/main/misc/llvmpasses.yml
+          # buildkite-agent pipeline upload .buildkite/pipelines/main/misc/sanitizers.yml
+          # buildkite-agent pipeline upload .buildkite/pipelines/main/misc/whitespace.yml
         agents:
           queue: "julia"
   - group: "Test"

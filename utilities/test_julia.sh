@@ -57,6 +57,8 @@ else
     export TESTS="all LibGit2/online --ci"
 fi
 
+export TESTS="Distributed Pkg REPL SharedArrays precompile stress threads"
+
 echo "--- Print the list of test sets, and other useful environment variables"
 echo "JULIA_CMD_FOR_TESTS is:    ${JULIA_CMD_FOR_TESTS:?}"
 echo "JULIA_NUM_THREADS is:      ${JULIA_NUM_THREADS:?}"

@@ -22,7 +22,11 @@ steps:
                 # Include `/cache/repos` so that our `git` version introspection works.
                 - "/cache/repos:/cache/repos"
         timeout_in_minutes: ${TIMEOUT?}
-        soft_fail: ${ALLOW_FAIL?}
+        priority: -99
+        parallelism: 500
+        concurrency: 5
+        concurrency_group: 'dpa/doing-lots-of-distributed-runs-under-rr'
+        soft_fail: false
         commands: "bash .buildkite/utilities/test_julia.sh"
         agents:
           queue: "julia"

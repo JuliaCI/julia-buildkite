@@ -2,7 +2,7 @@
 # linux    aarch64-linux-gnu          aarch64        aarch64        .          .        ----          ----------------------------------------
 # linux    armv7l-linux-gnueabihf     armv7l         armv7l         .          .        ----          ----------------------------------------
 # linux    powerpc64le-linux-gnu      powerpc64le    powerpc64le    .          .        ----          ----------------------------------------
-musl       x86_64-linux-musl          x86_64         x86_64         .          .        v5.9          417adcf6facf0933d496fa45a831a10632a7313f
+# musl       x86_64-linux-musl          x86_64         x86_64         .          .        v5.9          417adcf6facf0933d496fa45a831a10632a7313f
 
 # These special lines allow us to embed default values for the columns above.
 # Any column without a default mapping here will simply substitute a `.` to the empty string
