@@ -45,17 +45,14 @@ if [[ "${USE_RR-}" == "rr" ]]; then
     export JULIA_CMD_FOR_TESTS="${JULIA_BINARY} .buildkite/utilities/rr/rr_capture.jl ${JULIA_BINARY}"
     export NCORES_FOR_TESTS="parse(Int, ENV[\"JULIA_RRCAPTURE_NUM_CORES\"])"
     export JULIA_NUM_THREADS=1
-
-    # Don't run network tests on `rr`, as it causes the trace size to explode.
-    export TESTS="all --ci --skip Artifacts Downloads download LazyArtifacts LibGit2/online Pkg"
 else
     export JULIA_CMD_FOR_TESTS="${JULIA_BINARY}"
     export NCORES_FOR_TESTS="${JULIA_CPU_THREADS}"
     export JULIA_NUM_THREADS="${JULIA_CPU_THREADS}"
-
-    # By default, run all tests
-    export TESTS="all LibGit2/online --ci"
 fi
+
+# Run all tests
+export TESTS="all LibGit2/online --ci"
 
 echo "--- Print the list of test sets, and other useful environment variables"
 echo "JULIA_CMD_FOR_TESTS is:    ${JULIA_CMD_FOR_TESTS:?}"
