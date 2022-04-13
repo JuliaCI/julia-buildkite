@@ -41,20 +41,26 @@ if [[ "${OS}" == "linux" ]]; then
 fi
 
 # If we're running inside of `rr`, limit the number of threads
-if [[ "${USE_RR-}" == "rr" ]]; then
+if [[ "${USE_RR-}" == "rr" ]] || [[ "${USE_RR-}" == "rr-net" ]]; then
     export JULIA_CMD_FOR_TESTS="${JULIA_BINARY} .buildkite/utilities/rr/rr_capture.jl ${JULIA_BINARY}"
     export NCORES_FOR_TESTS="parse(Int, ENV[\"JULIA_RRCAPTURE_NUM_CORES\"])"
     export JULIA_NUM_THREADS=1
 
-    # Don't run network tests on `rr`, as it causes the trace size to explode.
-    export TESTS="all --ci --skip Artifacts Downloads download LazyArtifacts LibGit2/online Pkg"
+    # rr: all tests EXCEPT the network-related tests
+    # rr-net: ONLY the network-related tests
+    export NETWORK_RELATED_TESTS="Artifacts Downloads download LazyArtifacts LibGit2/online Pkg"
+    if [[ "${USE_RR-}" == "rr" ]]; then
+        export TESTS="all --ci --skip ${NETWORK_RELATED_TESTS:?}"
+    else
+        export TESTS="${NETWORK_RELATED_TESTS:?} --ci"
+    fi
 else
     export JULIA_CMD_FOR_TESTS="${JULIA_BINARY}"
     export NCORES_FOR_TESTS="${JULIA_CPU_THREADS}"
     export JULIA_NUM_THREADS="${JULIA_CPU_THREADS}"
 
-    # By default, run all tests
-    export TESTS="all LibGit2/online --ci"
+    # Run all tests
+    export TESTS="all --ci"
 fi
 
 echo "--- Print the list of test sets, and other useful environment variables"
