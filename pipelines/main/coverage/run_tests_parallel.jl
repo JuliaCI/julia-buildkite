@@ -13,7 +13,7 @@ script_native_yes = """
     Base.runtests(["cmdlineargs"]; ncores = $(ncores))
 """
 script_native_no = """
-    Base.runtests(["all", "--skip", "cmdlineargs"]; ncores = $(ncores))
+    Base.runtests(["all", "--skip", "cmdlineargs", "Pkg"]; ncores = $(ncores))
 """
 
 base_cmd       = `$(Base.julia_cmd()) --code-coverage=all`

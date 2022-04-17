@@ -35,7 +35,7 @@ if [[ "${OS}" == "macos" ]]; then
         --keychain "${KEYCHAIN_PATH}" \
         --identity "${MACOS_CODESIGN_IDENTITY}" \
         "${JULIA_INSTALL_DIR}"
-    
+
     # Immediately re-compress that tarball for upload
     echo "--- [mac] Re-compress codesigned tarball"
     rm -f "${UPLOAD_FILENAME}.tar.gz"

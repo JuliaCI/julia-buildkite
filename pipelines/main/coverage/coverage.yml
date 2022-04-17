@@ -1,0 +1,51 @@
+steps:
+  - group: "Coverage"
+    steps:
+      - label: ":linux: coverage"
+        key:   "coverage"
+        # if: build.source == "schedule" # TODO: uncomment this line before merging
+        if: (build.source == "schedule") || (pipeline.slug == "julia-buildkite") # TODO: comment out this line before merging
+        plugins:
+          - JuliaCI/external-buildkite#v1:
+                  version: "./.buildkite-external-version"
+                  repo_url: "https://github.com/JuliaCI/julia-buildkite"
+          - JuliaCI/julia#v1:
+              # Drop default "registries" directory, so it is not persisted from execution to execution
+              persist_depot_dirs: packages,artifacts,compiled
+              version: '1'
+          - staticfloat/sandbox#v1:
+              rootfs_url: https://github.com/JuliaCI/rootfs-images/releases/download/v5.8/package_linux.x86_64.tar.gz
+              rootfs_treehash: "582b5d44bbc24d2a58ab609c5a520b3fd102e504"
+              uid: 1000
+              gid: 1000
+          - staticfloat/cryptic#v2:
+              variables:
+                - CODECOV_TOKEN="U2FsdGVkX19l0fhdBabbuiEdysyEabkJLRHfxm7CNRkuGbnwPV365sxxC7Czs/CVcws0N1oB4pVwALRRMe36oA=="
+                - COVERALLS_TOKEN="U2FsdGVkX19zopI0hMNzzi2UUOvNVFD8Y0iisFnO/ryVxU7Tit8ZEaeN+gxodRx4CosUUh192F1+q3dTMWRIvw=="
+        timeout_in_minutes: 360
+        commands: |
+          echo "--- Build Julia from source"
+          make --output-sync -j 6
+
+          echo "--- Print Julia version info"
+          ./julia -e 'using InteractiveUtils; InteractiveUtils.versioninfo()'
+          ./julia -e '@info "" Sys.CPU_THREADS'
+          # this is necessary to make sure that the LibGit2 tests passes
+          git config --global init.defaultBranch master
+
+          echo "--- Run Julia tests in parallel with code coverage enabled"
+          export JULIA_NUM_THREADS=1
+          export JULIA_WORKER_TIMEOUT=1200 # 1200 seconds = 20 minutes
+          ./julia -e 'import Distributed; @info "" Distributed.worker_timeout()'
+          ./julia .buildkite/pipelines/main/coverage/run_tests_parallel.jl
+
+          echo "--- Process and upload coverage information"
+          ./julia .buildkite/pipelines/main/coverage/upload_coverage.jl
+        agents:
+          queue: "julia"
+          # Only run on `sandbox.jl` machines (not `docker`-isolated ones) since we need nestable sandboxing
+          sandbox_capable: "true"
+          os: "linux"
+        env:
+          # Receive cryptic token from parent job
+          BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET: ${BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET?}

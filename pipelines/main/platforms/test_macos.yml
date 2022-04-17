@@ -3,6 +3,7 @@ steps:
     steps:
       - label: ":macos: test ${TRIPLET?}"
         key: "test_${TRIPLET?}"
+        if: (build.source != "schedule") || (pipeline.slug == "julia-buildkite")
         depends_on:
           - "build_${TRIPLET?}"
         plugins:

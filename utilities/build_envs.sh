@@ -1,32 +1,7 @@
 #!/bin/bash
 
-# Extract information from our triplet
-export ARCH="$(cut -d- -f1 <<<"${TRIPLET}")"
-case "${TRIPLET}" in
-    *-apple-*)
-        OS="macos"
-        ;;
-    *-freebsd*)
-        OS="freebsd"
-        ;;
-    *-mingw*)
-        OS="windows"
-        ;;
-    *-gnuassert)
-        OS="linuxassert"
-        ;;
-    *-gnu*)
-        OS="linux"
-        ;;
-    *-musl*)
-        OS="musl"
-        ;;
-    *)
-        echo "Unknown triplet OS '${TRIPLET}'" >&2
-        exit 1
-        ;;
-esac
-export OS
+# First, extract information from our triplet
+source .buildkite/utilities/extract_triplet.sh
 
 # Determine JULIA_CPU_TARGETS for different architectures
 JUlIA_CPU_TARGETS=()
@@ -141,7 +116,7 @@ fi
 if [[ "${ARCH}" == "x86_64" ]]; then
     UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/x64/${MAJMIN?}/julia-${TAR_VERSION?}-${OS?}64" )
     UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/x64/${MAJMIN?}/julia-latest-${OS?}64" )
-    
+
     # Only upload to absolute latest if we're on `master`
     if [[ "${BUILDKITE_BRANCH}" == "master" ]]; then
         UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/x64/julia-latest-${OS?}64" )
