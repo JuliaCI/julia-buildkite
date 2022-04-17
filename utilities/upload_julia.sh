@@ -80,6 +80,6 @@ wait
 echo "+++ Uploaded to targets"
 for UPLOAD_TARGET in ${UPLOAD_TARGETS[@]}; do
     for EXT in "${UPLOAD_EXTENSIONS[@]}"; do
-        echo " -> s3://${UPLOAD_TARGET}.${EXT}"
+        echo " -> https://s3.amazonaws.com/${UPLOAD_TARGET}.${EXT}"
     done
 done
