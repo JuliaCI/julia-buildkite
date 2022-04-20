@@ -1,11 +1,9 @@
 steps:
-  - group: "${GROUP?}"
+  - group: "Check"
     steps:
-      - label: ":linux: test ${TRIPLET?}${USE_RR-}"
-        key: "test_${TRIPLET?}${USE_RR-}"
+      - label: "analyzegc"
+        key: "analyzegc"
         if: (build.source != "schedule") || (pipeline.slug == "julia-buildkite")
-        depends_on:
-          - "build_${TRIPLET?}"
         plugins:
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"
@@ -14,23 +12,20 @@ steps:
               # Drop default "registries" directory, so it is not persisted from execution to execution
               persist_depot_dirs: packages,artifacts,compiled
               version: '1.6'
-          - staticfloat/sandbox#v1:
-              rootfs_url: https://github.com/JuliaCI/rootfs-images/releases/download/${ROOTFS_TAG?}/tester_${OS?}.${ARCH_ROOTFS?}.tar.gz
-              rootfs_treehash: "${ROOTFS_HASH?}"
-              uid: 1000
-              gid: 1000
+          - staticfloat/sandbox#v1.2:
+              rootfs_url: https://github.com/JuliaCI/rootfs-images/releases/download/v4.8/llvm_passes.x86_64.tar.gz
+              rootfs_treehash: "c7a289a8cc544b234b1e2d7cbcce3e6815359ecd"
               workspaces:
                 # Include `/cache/repos` so that our `git` version introspection works.
                 - "/cache/repos:/cache/repos"
-        timeout_in_minutes: ${TIMEOUT?}
-        soft_fail: ${ALLOW_FAIL?}
-        commands: "bash .buildkite/utilities/test_julia.sh"
+        commands: |
+          echo "--- Install in-tree LLVM dependencies"
+          make --output-sync -j$${JULIA_CPU_THREADS:?} -C deps install-llvm install-clang install-llvm-tools install-libuv install-utf8proc install-unwind
+          echo "+++ run clangsa/analyzegc"
+          make --output-sync -j$${JULIA_CPU_THREADS:?} -C test/clangsa
+          make --output-sync -j$${JULIA_CPU_THREADS:?} -C src analyzegc
+        timeout_in_minutes: 60
         agents:
           queue: "julia"
           sandbox_capable: "true"
           os: "linux"
-          arch: "${ARCH?}"
-        env:
-          JULIA_SHELL: "/bin/bash"
-          TRIPLET: "${TRIPLET?}"
-          USE_RR: "${USE_RR?}"

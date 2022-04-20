@@ -1,5 +1,5 @@
-# OS       TRIPLET                  ARCH          MAKE_FLAGS                                TIMEOUT
-macos      x86_64-apple-darwin      x86_64        JL_CFLAGS=-Werror,JL_CXXFLAGS=-Werror     .
+# OS       TRIPLET                       ARCH           ARCH_ROOTFS    TIMEOUT    USE_RR     ROOTFS_TAG     ROOTFS_HASH
+linux      x86_64-linux-gnusrcassert     x86_64         x86_64         150        .          v5.10          de7c87873a87ff4e90c5b97ad21bc80ef07c6577
 
 # These special lines allow us to embed default values for the columns above.
 # Any column without a default mapping here will simply substitute a `.` to the empty string

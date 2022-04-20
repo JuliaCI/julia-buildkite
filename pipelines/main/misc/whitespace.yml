@@ -3,6 +3,7 @@ steps:
     steps:
       - label: "whitespace"
         key: "whitespace"
+        if: (build.source != "schedule") || (pipeline.slug == "julia-buildkite")
         plugins:
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"

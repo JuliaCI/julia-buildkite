@@ -3,6 +3,7 @@ steps:
     steps:
       - label: ":macos: build ${TRIPLET?}"
         key: "build_${TRIPLET?}"
+        if: (build.source != "schedule") || (pipeline.slug == "julia-buildkite")
         plugins:
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"

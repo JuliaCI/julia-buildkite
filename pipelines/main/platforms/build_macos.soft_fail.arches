@@ -1,5 +1,5 @@
-# OS       TRIPLET                  ARCH          MAKE_FLAGS                              TIMEOUT
-macos      aarch64-apple-darwin     aarch64       JL_CFLAGS=-Werror,JL_CXXFLAGS=-Werror   .
+# OS       TRIPLET                  ARCH          MAKE_FLAGS                                TIMEOUT
+macos      aarch64-apple-darwin     aarch64       JL_CFLAGS=-Werror,JL_CXXFLAGS=-Werror     .
 
 # TODO: move the Apple Silicon build out of the "allow fail" category once we have
 # more Apple Silicon machines.

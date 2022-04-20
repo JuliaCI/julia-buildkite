@@ -1,2 +1,0 @@
-# OS    LABEL       ALLOW_FAIL    TAR_ARCH ARCH_ROOTFS    TIMEOUT_BK    TIMEOUT_RR     IS_RR    ROOTFS_TAG    ROOTFS_HASH
-linux   64src       .             64src    x86_64         .             .              .        v4.8          f689ba6acab6c13a3da4ff62e3445dd61c3b5ab0

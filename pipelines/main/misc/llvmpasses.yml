@@ -1,35 +1,9 @@
 steps:
   - group: "Check"
     steps:
-      - label: "analyzegc"
-        key: "analyzegc"
-        plugins:
-          - JuliaCI/external-buildkite#v1:
-              version: "./.buildkite-external-version"
-              repo_url: "https://github.com/JuliaCI/julia-buildkite"
-          - JuliaCI/julia#v1:
-              # Drop default "registries" directory, so it is not persisted from execution to execution
-              persist_depot_dirs: packages,artifacts,compiled
-              version: '1.6'
-          - staticfloat/sandbox#v1.2:
-              rootfs_url: https://github.com/JuliaCI/rootfs-images/releases/download/v4.8/llvm_passes.x86_64.tar.gz
-              rootfs_treehash: "c7a289a8cc544b234b1e2d7cbcce3e6815359ecd"
-              workspaces:
-                # Include `/cache/repos` so that our `git` version introspection works.
-                - "/cache/repos:/cache/repos"
-        commands: |
-          echo "--- Install in-tree LLVM dependencies"
-          make --output-sync -j$${JULIA_CPU_THREADS:?} -C deps install-llvm install-clang install-llvm-tools install-libuv install-utf8proc install-unwind
-          echo "+++ run clangsa/analyzegc"
-          make --output-sync -j$${JULIA_CPU_THREADS:?} -C test/clangsa
-          make --output-sync -j$${JULIA_CPU_THREADS:?} -C src analyzegc
-        timeout_in_minutes: 60
-        agents:
-          queue: "julia"
-          sandbox_capable: "true"
-          os: "linux"
       - label: "llvmpasses"
         key: "llvmpasses"
+        if: (build.source != "schedule") || (pipeline.slug == "julia-buildkite")
         plugins:
           - JuliaCI/julia#v1:
               # Drop default "registries" directory, so it is not persisted from execution to execution
