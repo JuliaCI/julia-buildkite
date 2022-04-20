@@ -3,8 +3,8 @@ steps:
     steps:
       - label: ":linux: coverage"
         key:   "coverage"
-        # if: build.source == "schedule" # TODO: uncomment this line before merging
-        if: (build.source == "schedule") || (pipeline.slug == "julia-buildkite") # TODO: comment out this line before merging
+        if: build.source == "schedule" # comment out this line for testing; please uncomment it before merging your PR
+        # if: (build.source == "schedule") || (pipeline.slug == "julia-buildkite") # uncomment this line for testing; please comment it out before merging your PR
         plugins:
           - JuliaCI/external-buildkite#v1:
                   version: "./.buildkite-external-version"
