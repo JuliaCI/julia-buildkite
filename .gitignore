@@ -10,3 +10,7 @@ agent.key*
 
 # Ignore a local clone of the `cryptic-buildkite-plugin` repository
 cryptic-buildkite-plugin/
+
+# Ignore IDE files
+.vscode/
+
