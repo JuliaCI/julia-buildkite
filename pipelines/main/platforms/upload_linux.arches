@@ -1,4 +1,5 @@
 # OS       TRIPLET              TIMEOUT
+linux      i686-linux-gnu       .
 linux      x86_64-linux-gnu     .
 musl       x86_64-linux-musl    .
 
