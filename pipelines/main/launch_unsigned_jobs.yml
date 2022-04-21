@@ -30,11 +30,6 @@ steps:
               bash .buildkite/utilities/arches_pipeline_upload.sh \
               .buildkite/pipelines/main/platforms/build_linux.arches \
               .buildkite/pipelines/main/platforms/build_linux.yml
-          GROUP="Build" \
-              ALLOW_FAIL="false" \
-              bash .buildkite/utilities/arches_pipeline_upload.sh \
-              .buildkite/pipelines/main/platforms/build_linux.schedule.arches \
-              .buildkite/pipelines/main/platforms/build_linux.schedule.yml
           # Launch macOS packaging jobs
           GROUP="Build" \
               ALLOW_FAIL="false" \
@@ -81,11 +76,6 @@ steps:
               bash .buildkite/utilities/arches_pipeline_upload.sh \
               .buildkite/pipelines/main/platforms/test_linux.arches \
               .buildkite/pipelines/main/platforms/test_linux.yml
-          GROUP="Test" \
-              ALLOW_FAIL="false" \
-              bash .buildkite/utilities/arches_pipeline_upload.sh \
-              .buildkite/pipelines/main/platforms/test_linux.schedule.arches \
-              .buildkite/pipelines/main/platforms/test_linux.schedule.yml
           # Launch macOS test jobs
           GROUP="Test" \
               ALLOW_FAIL="false" \
@@ -134,5 +124,27 @@ steps:
               bash .buildkite/utilities/arches_pipeline_upload.sh \
               .buildkite/pipelines/main/platforms/test_macos.soft_fail.arches \
               .buildkite/pipelines/main/platforms/test_macos.yml
+        agents:
+          queue: "julia"
+  - group: "Source"
+    steps:
+      - label: "Launch from-source jobs"
+        plugins:
+          - JuliaCI/external-buildkite#v1:
+              version: "./.buildkite-external-version"
+              repo_url: "https://github.com/JuliaCI/julia-buildkite"
+        commands: |
+          # Launch Linux from-source build jobs
+          GROUP="Source" \
+              ALLOW_FAIL="false" \
+              bash .buildkite/utilities/arches_pipeline_upload.sh \
+              .buildkite/pipelines/main/platforms/build_linux.schedule.arches \
+              .buildkite/pipelines/main/platforms/build_linux.schedule.yml
+          # Launch Linux from-source test jobs
+          GROUP="Source" \
+              ALLOW_FAIL="false" \
+              bash .buildkite/utilities/arches_pipeline_upload.sh \
+              .buildkite/pipelines/main/platforms/test_linux.schedule.arches \
+              .buildkite/pipelines/main/platforms/test_linux.schedule.yml
         agents:
           queue: "julia"
