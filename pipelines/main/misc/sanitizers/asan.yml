@@ -40,3 +40,4 @@ steps:
         queue: "julia"
         sandbox_capable: "true"
         os: "linux"
+        arch: "x86_64"
