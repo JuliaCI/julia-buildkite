@@ -8,6 +8,7 @@ set -euo pipefail
 
 # First, get things like `SHORT_COMMIT`, `JULIA_CPU_TARGET`, `UPLOAD_TARGETS`, etc...
 source .buildkite/utilities/build_envs.sh
+source .buildkite/utilities/word.sh
 
 echo "--- Collect make options"
 # These are the flags we'll provide to `make`
@@ -37,6 +38,7 @@ done
 echo "--- Build Julia"
 make "${MFLAGS[@]}"
 
+
 echo "--- Check that the working directory is clean"
 if [ -n "$(git status --short)" ]; then
     echo "ERROR: The working directory is dirty." >&2
@@ -48,16 +50,17 @@ fi
 echo "--- Print Julia version info"
 ./julia -e 'using InteractiveUtils; InteractiveUtils.versioninfo()'
 
+echo "--- Quick consistency checks"
+./julia -e "import Test; Test.@test Sys.ARCH == :${ARCH:?}"
+./julia -e "import Test; Test.@test Sys.WORD_SIZE == ${EXPECTED_WORD_SIZE:?}"
 
 echo "--- Create build artifacts"
 make "${MFLAGS[@]}" binary-dist
-
 
 # Rename the build artifact in case we want to name it differently, as is the case on `musl`.
 if [[ "${JULIA_BINARYDIST_FILENAME}.tar.gz" != "${UPLOAD_FILENAME}.tar.gz" ]]; then
     mv "${JULIA_BINARYDIST_FILENAME}.tar.gz" "${UPLOAD_FILENAME}.tar.gz"
 fi
-
 
 echo "--- Upload build artifacts to buildkite"
 buildkite-agent artifact upload "${UPLOAD_FILENAME}.tar.gz"
