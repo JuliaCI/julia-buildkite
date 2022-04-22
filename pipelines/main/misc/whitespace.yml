@@ -29,3 +29,4 @@ steps:
           # Only run on `sandbox.jl`-capable machines (not `docker`-isolated ones) since we need nestable sandboxing
           sandbox_capable: "true"
           os: "linux"
+          arch: "x86_64"
