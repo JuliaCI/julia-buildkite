@@ -2,7 +2,7 @@
 linux      i686-linux-gnu             x86_64         i686           .                                                                             .             v5.11         b92a539ca132eb2216c5e919eb07fb952f47fbf2
 linux      x86_64-linux-gnu           x86_64         x86_64         JL_CFLAGS=-Werror,JL_CXXFLAGS=-Werror                                         .             v5.11         3c62a3dd4116a1b698c103f1e090b824e4cc9ff5
 linux      x86_64-linux-gnuassert     x86_64         x86_64         FORCE_ASSERTIONS=1,LLVM_ASSERTIONS=1,JL_CFLAGS=-Werror,JL_CXXFLAGS=-Werror    .             v5.11         3c62a3dd4116a1b698c103f1e090b824e4cc9ff5
-# linux    aarch64-linux-gnu          aarch64        aarch64        .                                                                             .             ----          ----------------------------------------
+linux      aarch64-linux-gnu          aarch64        aarch64        .                                                                             .             v5.12         6e0cf5450be71b898d039cc53426a029bc9669ea
 musl       x86_64-linux-musl          x86_64         x86_64         JL_CFLAGS=-Werror,JL_CXXFLAGS=-Werror                                         .             v5.11         c49f16f602b39bf2489291bf156171ae93816a36
 
 # These special lines allow us to embed default values for the columns above.
