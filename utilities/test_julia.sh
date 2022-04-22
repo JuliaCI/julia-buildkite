@@ -40,6 +40,19 @@ if [[ "${OS}" == "linux" ]]; then
     mkdir -p ${TMPDIR}
 fi
 
+# If we're in a 32-bit userland, try not to use too much memory in a single process,
+# as we can (and do) exhaust the address space over the course of our tests.
+# Note that we do this here because we run our `i686` tests on `x86_64` hardware.
+# Other machines that might benefit from setting an RSS limit unconditionally (such
+# as our `armv7l` boards) should set it in their sandboxed-buildkite-agent
+# `environment.local.d` directory.
+if [[ "${ARCH}" == "i686" ]]; then
+    # Assume that we only have 3.5GB available to a single process, and that a single
+    # test can take up to 2GB of RSS.  This means that we should instruct the test
+    # framework to restart any worker that comes into a test set with 1.5GB of RSS.
+    export JULIA_TEST_MAXRSS_MB=1536
+fi
+
 # If we're running inside of `rr`, limit the number of threads
 if [[ "${USE_RR-}" == "rr" ]] || [[ "${USE_RR-}" == "rr-net" ]]; then
     export JULIA_CMD_FOR_TESTS="${JULIA_BINARY} .buildkite/utilities/rr/rr_capture.jl ${JULIA_BINARY}"
@@ -59,7 +72,7 @@ else
     export NCORES_FOR_TESTS="${JULIA_CPU_THREADS}"
     export JULIA_NUM_THREADS="${JULIA_CPU_THREADS}"
 
-    # Run all tests
+    # Run all tests; `--ci` asserts that networking is available
     export TESTS="all --ci"
 fi
 
