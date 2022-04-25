@@ -1,5 +1,4 @@
 # OS       TRIPLET                    ARCH           ARCH_ROOTFS    TIMEOUT    USE_RR     ROOTFS_TAG    ROOTFS_HASH
-linux      i686-linux-gnu             x86_64         i686           .          .          v5.11         b40bb566fcb6502c2764c8d80ed5ffbe7cdcfaf3
 linux      x86_64-linux-gnu           x86_64         x86_64         .          .          v5.9          2212d69a3bc8a516ae8731ac20771d90d62206bc
 linux      x86_64-linux-gnuassert     x86_64         x86_64         360        rr         v5.9          2212d69a3bc8a516ae8731ac20771d90d62206bc
 linux      x86_64-linux-gnuassert     x86_64         x86_64         360        rr-net     v5.9          2212d69a3bc8a516ae8731ac20771d90d62206bc
