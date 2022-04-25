@@ -1,4 +1,5 @@
 # OS       TRIPLET                    ARCH           ARCH_ROOTFS    TIMEOUT    USE_RR   ROOTFS_TAG    ROOTFS_HASH
+linux      i686-linux-gnu             x86_64         i686           .          .        v5.11         b40bb566fcb6502c2764c8d80ed5ffbe7cdcfaf3
 linux      aarch64-linux-gnu          aarch64        aarch64        .          .        v5.12         f7a9c2f23795d6fc0edb6068244ef6b18349bbcd
 # linux    armv7l-linux-gnueabihf     armv7l         armv7l         .          .        ----          ----------------------------------------
 # linux    powerpc64le-linux-gnu      powerpc64le    powerpc64le    .          .        ----          ----------------------------------------
