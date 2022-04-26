@@ -50,23 +50,25 @@ if [[ "${ARCH}" == "i686" ]]; then
     # Assume that we only have 3.5GB available to a single process, and that a single
     # test can take up to 2GB of RSS.  This means that we should instruct the test
     # framework to restart any worker that comes into a test set with 1.5GB of RSS.
-    # export JULIA_TEST_MAXRSS_MB=1536
     export JULIA_TEST_MAXRSS_MB=1000
 fi
 
 # If we're running inside of `rr`, limit the number of threads
-if [[ "${USE_RR-}" == "rr" ]] || [[ "${USE_RR-}" == "rr-net" ]]; then
+if [[ -n "${USE_RR-}" ]]; then
     export JULIA_CMD_FOR_TESTS="${JULIA_BINARY} .buildkite/utilities/rr/rr_capture.jl ${JULIA_BINARY}"
     export NCORES_FOR_TESTS="parse(Int, ENV[\"JULIA_RRCAPTURE_NUM_CORES\"])"
     export JULIA_NUM_THREADS=1
 
-    # rr: all tests EXCEPT the network-related tests
-    # rr-net: ONLY the network-related tests
-    export NETWORK_RELATED_TESTS="Artifacts Downloads download LazyArtifacts LibGit2/online Pkg"
+    NETWORK_RELATED_TESTS="Artifacts Downloads download LazyArtifacts LibGit2/online Pkg"
     if [[ "${USE_RR-}" == "rr" ]]; then
-        export TESTS="all --ci --skip ${NETWORK_RELATED_TESTS:?}"
-    else
+        # rr: all tests EXCEPT the network-related tests
+        export TESTS="${TESTS} --ci --skip ${NETWORK_RELATED_TESTS:?}"
+    elif [[ "${USE_RR-}" == "rr-net" ]]; then
+        # rr-net: ONLY the network-related tests
         export TESTS="${NETWORK_RELATED_TESTS:?} --ci"
+    else
+        echo "ERROR: Unknown value for USE_RR: '${USE_RR-}'" >&2
+        exit 1
     fi
 else
     export JULIA_CMD_FOR_TESTS="${JULIA_BINARY}"
@@ -74,7 +76,7 @@ else
     export JULIA_NUM_THREADS="${JULIA_CPU_THREADS}"
 
     # Run all tests; `--ci` asserts that networking is available
-    export TESTS="all --ci"
+    export TESTS="${TESTS} --ci"
 fi
 
 echo "--- Print the list of test sets, and other useful environment variables"
