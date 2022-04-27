@@ -1,6 +1,6 @@
 # OS       TRIPLET                   ARCH           ARCH_ROOTFS    MAKE_FLAGS    TIMEOUT     ROOTFS_TAG    ROOTFS_HASH
 # linux    armv7l-linux-gnueabihf    armv7l         armv7l         .             .           ----          ----------------------------------------
-# linux    powerpc64le-linux-gnu     powerpc64le    powerpc64le    .             .           ----          ----------------------------------------
+linux      powerpc64le-linux-gnu     powerpc64le    powerpc64le    .             .           v5.23         6deae97371a99d51321ccf655dedf3a75cf9f4e6
 
 # These special lines allow us to embed default values for the columns above.
 # Any column without a default mapping here will simply substitute a `.` to the empty string

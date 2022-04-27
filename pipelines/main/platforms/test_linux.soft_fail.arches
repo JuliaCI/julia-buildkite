@@ -2,7 +2,7 @@
 linux      i686-linux-gnu             x86_64         i686           .          .        v5.19         b1aa757351ed870e8445e9183da5e16b73036f8e
 linux      aarch64-linux-gnu          aarch64        aarch64        .          .        v5.19         3d386b368ac9a8d66524c37741c330dd9334ab66
 # linux    armv7l-linux-gnueabihf     armv7l         armv7l         .          .        ----          ----------------------------------------
-# linux    powerpc64le-linux-gnu      powerpc64le    powerpc64le    .          .        ----          ----------------------------------------
+linux      powerpc64le-linux-gnu      powerpc64le    powerpc64le    .          .        v5.23         6e9d3cf34edaff51e2eb4696050d2d3bf25878f8
 musl       x86_64-linux-musl          x86_64         x86_64         .          .        v5.20         7a24baa3fa32382694b37c96d9b256561ff75ca3
 
 # These special lines allow us to embed default values for the columns above.
