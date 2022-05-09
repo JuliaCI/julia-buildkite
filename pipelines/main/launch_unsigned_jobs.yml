@@ -53,7 +53,7 @@ steps:
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/doctest.yml
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/embedding.yml
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/llvmpasses.yml
-          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/whitespace.yml
+          # buildkite-agent pipeline upload .buildkite/pipelines/main/misc/whitespace.yml
 
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/sanitizers/asan.yml
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/sanitizers/tsan.yml
