@@ -53,28 +53,44 @@ fi
 echo "--- GPG-sign the tarball"
 .buildkite/utilities/sign_tarball.sh .buildkite/secrets/tarball_signing.gpg "${UPLOAD_FILENAME}.tar.gz"
 
+# Helper function to explicitly `wait` on each given PID.
+# Because `wait` returns the exit code of the waited-upon PID,
+# this (in combination with `set -e` above) ends execution if
+# any of the backgrounded tasks failed.
+wait_pids() {
+    for PID in $*; do
+        wait "${PID}"
+    done
+}
+
 # First, upload our signed products to buildkite, for easy downloading
 echo "--- Upload signed products to buildkite"
+PIDS=()
 for EXT in "${UPLOAD_EXTENSIONS[@]}"; do
     buildkite-agent artifact upload "${UPLOAD_FILENAME}.${EXT}" &
+    PIDS+=( "$!" )
 done
-wait
+wait_pids "${PIDS[@]}"
 
 # Next, upload primary files to S3
 echo "--- Upload primary products to S3"
+PIDS=()
 for EXT in "${UPLOAD_EXTENSIONS[@]}"; do
     aws s3 cp --acl public-read "${UPLOAD_FILENAME}.${EXT}" "s3://${UPLOAD_TARGETS[0]}.${EXT}" &
+    PIDS+=( "$!" )
 done
-wait
+wait_pids "${PIDS[@]}"
 
 echo "--- Copy to secondary upload targets"
+PIDS=()
 # We'll do these in parallel, then wait on the background jobs
 for SECONDARY_TARGET in ${UPLOAD_TARGETS[@]:1}; do
     for EXT in "${UPLOAD_EXTENSIONS[@]}"; do
         aws s3 cp --acl public-read "s3://${UPLOAD_TARGETS[0]}.${EXT}" "s3://${SECONDARY_TARGET}.${EXT}" &
+        PIDS+=( "$!" )
     done
 done
-wait
+wait_pids "${PIDS[@]}"
 
 # Report to the user some URLs that they can use to download this from
 echo "+++ Uploaded to targets"
