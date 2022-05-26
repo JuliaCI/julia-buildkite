@@ -131,6 +131,21 @@ elif [[ "${ARCH}" == "i686" ]]; then
     fi
 fi
 
+# We used to name our darwin builds as `julia-*-mac64.tar.gz`, instead of `julia-*-macos-x86_64.tar.gz`.
+# Let's copy things over to the `mac` OS name for backwards compatibility:
+if [[ "${OS?}" == "macos" ]] && [[ "${ARCH?}" == "x86_64" ]]; then
+    # First, we have the canonical fully-specified upload target
+    UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/${ARCH?}/${MAJMIN?}/julia-${TAR_VERSION?}-mac64" )
+
+    # Next, we have the "majmin/latest" upload target
+    UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/${ARCH?}/${MAJMIN?}/julia-latest-mac64" )
+    if [[ "${BUILDKITE_BRANCH}" == "master" ]]; then
+        UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/x64/julia-latest-mac64" )
+    fi
+fi
+
+# This is the "main" filename that is used.  We technically don't need this for uploading,
+# but it's very convenient for shuttling binaries between buildkite steps.
 export UPLOAD_FILENAME="julia-${TAR_VERSION?}-${OS?}-${ARCH?}"
 
 echo "--- Print the full and short commit hashes"
