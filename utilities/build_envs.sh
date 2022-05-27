@@ -135,12 +135,12 @@ fi
 # Let's copy things over to the `mac` OS name for backwards compatibility:
 if [[ "${OS?}" == "macos" ]] && [[ "${ARCH?}" == "x86_64" ]]; then
     # First, we have the canonical fully-specified upload target
-    UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/${ARCH?}/${MAJMIN?}/julia-${TAR_VERSION?}-mac64" )
+    UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/mac/${ARCH?}/${MAJMIN?}/julia-${TAR_VERSION?}-mac64" )
 
     # Next, we have the "majmin/latest" upload target
-    UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/${ARCH?}/${MAJMIN?}/julia-latest-mac64" )
+    UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/mac/${ARCH?}/${MAJMIN?}/julia-latest-mac64" )
     if [[ "${BUILDKITE_BRANCH}" == "master" ]]; then
-        UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/x64/julia-latest-mac64" )
+        UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/mac/x64/julia-latest-mac64" )
     fi
 fi
 
