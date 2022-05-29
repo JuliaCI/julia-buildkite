@@ -1,3 +1,9 @@
+## Dependencies
+
+1. [shyaml](https://github.com/0k/shyaml)
+
+## Instructions
+
 If you are a maintainer, and you want to re-sign all of the signatures, here are the steps:
 
 ```
