@@ -1,0 +1,26 @@
+steps:
+  - group: "Test"
+    notify:
+      - github_commit_status:
+          context: "Test"
+    steps:
+      - label: "Launch test jobs"
+        plugins:
+          - JuliaCI/external-buildkite#v1:
+              version: "./.buildkite-external-version"
+              repo_url: "https://github.com/JuliaCI/julia-buildkite"
+        commands: |
+          # Launch Linux test jobs
+          GROUP="Test" \
+              ALLOW_FAIL="false" \
+              bash .buildkite/utilities/arches_pipeline_upload.sh \
+              .buildkite/pipelines/main/platforms/test_linux.arches \
+              .buildkite/pipelines/main/platforms/test_linux.yml
+          # Launch macOS test jobs
+          GROUP="Test" \
+              ALLOW_FAIL="false" \
+              bash .buildkite/utilities/arches_pipeline_upload.sh \
+              .buildkite/pipelines/main/platforms/test_macos.arches \
+              .buildkite/pipelines/main/platforms/test_macos.yml
+        agents:
+          queue: "julia"

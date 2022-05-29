@@ -3,7 +3,6 @@ steps:
     steps:
       - label: ":linux: test ${TRIPLET?}${USE_RR-}"
         key: "test_${TRIPLET?}${USE_RR-}"
-        if: (build.source != "schedule") || (pipeline.slug == "julia-buildkite")
         depends_on:
           - "build_${TRIPLET?}"
         plugins:

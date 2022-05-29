@@ -13,138 +13,26 @@
 # something about the privileged steps.
 
 steps:
-  - group: "Build"
-    notify:
-      - github_commit_status:
-          context: "Build"
+  - group: "Upload"
     steps:
-      - label: "Launch build jobs"
+      - label: "Launch the unsigned launchers"
         plugins:
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
         commands: |
-          # Launch Linux build jobs
-          GROUP="Build" \
-              ALLOW_FAIL="false" \
-              bash .buildkite/utilities/arches_pipeline_upload.sh \
-              .buildkite/pipelines/main/platforms/build_linux.arches \
-              .buildkite/pipelines/main/platforms/build_linux.yml
-          # Launch macOS packaging jobs
-          GROUP="Build" \
-              ALLOW_FAIL="false" \
-              bash .buildkite/utilities/arches_pipeline_upload.sh \
-              .buildkite/pipelines/main/platforms/build_macos.arches \
-              .buildkite/pipelines/main/platforms/build_macos.yml
-        agents:
-          queue: "julia"
-  - group: "Check"
-    notify:
-      - github_commit_status:
-          context: "Check"
-    steps:
-      - label: "Launch check jobs"
-        plugins:
-          - JuliaCI/external-buildkite#v1:
-              version: "./.buildkite-external-version"
-              repo_url: "https://github.com/JuliaCI/julia-buildkite"
-        commands: |
-          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/analyzegc.yml
-          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/doctest.yml
-          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/embedding.yml
-          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/llvmpasses.yml
-          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/whitespace.yml
+          if [[ "$${BUILDKITE_SOURCE?}" == "schedule" ]] || [[ "$${BUILDKITE_PIPELINE_SLUG?}" == "julia-buildkite" ]]; then
+            # We only run these jobs if the build IS a scheduled build.
+            buildkite-agent pipeline upload .buildkite/pipelines/main/launch_unsigned/launch_source.yml
+          fi
 
-          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/sanitizers/asan.yml
-          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/sanitizers/tsan.yml
-        agents:
-          queue: "julia"
-  - group: "Test"
-    notify:
-      - github_commit_status:
-          context: "Test"
-    steps:
-      - label: "Launch test jobs"
-        plugins:
-          - JuliaCI/external-buildkite#v1:
-              version: "./.buildkite-external-version"
-              repo_url: "https://github.com/JuliaCI/julia-buildkite"
-        commands: |
-          # Launch Linux test jobs
-          GROUP="Test" \
-              ALLOW_FAIL="false" \
-              bash .buildkite/utilities/arches_pipeline_upload.sh \
-              .buildkite/pipelines/main/platforms/test_linux.arches \
-              .buildkite/pipelines/main/platforms/test_linux.yml
-          # Launch macOS test jobs
-          GROUP="Test" \
-              ALLOW_FAIL="false" \
-              bash .buildkite/utilities/arches_pipeline_upload.sh \
-              .buildkite/pipelines/main/platforms/test_macos.arches \
-              .buildkite/pipelines/main/platforms/test_macos.yml
-        agents:
-          queue: "julia"
-  - group: "Allow Fail"
-    steps:
-      - label: "Launch allowed-to-fail build jobs"
-        plugins:
-          - JuliaCI/external-buildkite#v1:
-              version: "./.buildkite-external-version"
-              repo_url: "https://github.com/JuliaCI/julia-buildkite"
-        commands: |
-          # Launch Linux allowed-to-fail build jobs
-          GROUP="Allow Fail" \
-              ALLOW_FAIL="true" \
-              bash .buildkite/utilities/arches_pipeline_upload.sh \
-              .buildkite/pipelines/main/platforms/build_linux.soft_fail.arches \
-              .buildkite/pipelines/main/platforms/build_linux.yml
-          # Launch macOS allowed-to-fail build jobs
-          GROUP="Allow Fail" \
-              ALLOW_FAIL="true" \
-              bash .buildkite/utilities/arches_pipeline_upload.sh \
-              .buildkite/pipelines/main/platforms/build_macos.soft_fail.arches \
-              .buildkite/pipelines/main/platforms/build_macos.yml
-        agents:
-          queue: "julia"
-      - label: "Launch allowed-to-fail test jobs"
-        plugins:
-          - JuliaCI/external-buildkite#v1:
-              version: "./.buildkite-external-version"
-              repo_url: "https://github.com/JuliaCI/julia-buildkite"
-        commands: |
-          # Launch Linux allowed-to-fail test jobs
-          GROUP="Allow Fail" \
-              ALLOW_FAIL="true" \
-              bash .buildkite/utilities/arches_pipeline_upload.sh \
-              .buildkite/pipelines/main/platforms/test_linux.soft_fail.arches \
-              .buildkite/pipelines/main/platforms/test_linux.yml
-          # Launch macOS allowed-to-fail test jobs
-          GROUP="Allow Fail" \
-              ALLOW_FAIL="true" \
-              bash .buildkite/utilities/arches_pipeline_upload.sh \
-              .buildkite/pipelines/main/platforms/test_macos.soft_fail.arches \
-              .buildkite/pipelines/main/platforms/test_macos.yml
-        agents:
-          queue: "julia"
-  - group: "Source"
-    steps:
-      - label: "Launch from-source jobs"
-        plugins:
-          - JuliaCI/external-buildkite#v1:
-              version: "./.buildkite-external-version"
-              repo_url: "https://github.com/JuliaCI/julia-buildkite"
-        commands: |
-          # Launch Linux from-source build jobs
-          GROUP="Source" \
-              ALLOW_FAIL="false" \
-              bash .buildkite/utilities/arches_pipeline_upload.sh \
-              .buildkite/pipelines/main/platforms/build_linux.schedule.arches \
-              .buildkite/pipelines/main/platforms/build_linux.schedule.yml
-          # Launch Linux from-source test jobs
-          GROUP="Source" \
-              ALLOW_FAIL="false" \
-              bash .buildkite/utilities/arches_pipeline_upload.sh \
-              .buildkite/pipelines/main/platforms/test_linux.schedule.arches \
-              .buildkite/pipelines/main/platforms/test_linux.schedule.yml
+          # if [[ "$${BUILDKITE_SOURCE?}" != "schedule" ]] || [[ "$${BUILDKITE_PIPELINE_SLUG?}" == "julia-buildkite" ]]; then # TODO: uncomment this line
+          if [[ "$${BUILDKITE_SOURCE?}" == "schedule" ]]; then # TODO: delete this line
+            # We only run these jobs if the build is NOT a scheduled build.
+            buildkite-agent pipeline upload .buildkite/pipelines/main/launch_unsigned/launch_allowfail.yml
+            buildkite-agent pipeline upload .buildkite/pipelines/main/launch_unsigned/launch_build.yml
+            buildkite-agent pipeline upload .buildkite/pipelines/main/launch_unsigned/launch_check.yml
+            buildkite-agent pipeline upload .buildkite/pipelines/main/launch_unsigned/launch_test.yml
+          fi
         agents:
           queue: "julia"

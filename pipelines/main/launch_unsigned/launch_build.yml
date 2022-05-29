@@ -1,0 +1,26 @@
+steps:
+  - group: "Build"
+    notify:
+      - github_commit_status:
+          context: "Build"
+    steps:
+      - label: "Launch build jobs"
+        plugins:
+          - JuliaCI/external-buildkite#v1:
+              version: "./.buildkite-external-version"
+              repo_url: "https://github.com/JuliaCI/julia-buildkite"
+        commands: |
+          # Launch Linux build jobs
+          GROUP="Build" \
+              ALLOW_FAIL="false" \
+              bash .buildkite/utilities/arches_pipeline_upload.sh \
+              .buildkite/pipelines/main/platforms/build_linux.arches \
+              .buildkite/pipelines/main/platforms/build_linux.yml
+          # Launch macOS packaging jobs
+          GROUP="Build" \
+              ALLOW_FAIL="false" \
+              bash .buildkite/utilities/arches_pipeline_upload.sh \
+              .buildkite/pipelines/main/platforms/build_macos.arches \
+              .buildkite/pipelines/main/platforms/build_macos.yml
+        agents:
+          queue: "julia"

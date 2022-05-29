@@ -2,6 +2,13 @@
 
 steps:
   - group: "Upload"
+    # We only upload to S3 if one of the following criteria are true:
+    # 1. The branch is `master`.
+    # 2. The branch is `release-*`.
+    # 3. The build is a tag build AND the tag is `v*`.
+    # 4. The pipeline is `julia-buildkite`.
+    # if: ((build.source != "schedule") && ((build.branch == "master") || (build.branch =~ /^release-/) || (build.tag =~ /^v/))) || (pipeline.slug == "julia-buildkite") # TODO: uncomment this line
+    if: build.source == "schedule" # TODO: delete this line
     steps:
       - label: "Launch upload jobs"
         plugins:
