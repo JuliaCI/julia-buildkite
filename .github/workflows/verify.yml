@@ -1,24 +1,25 @@
-name: Backport
+name: Verify Signatures
 on:
   pull_request:
-    types:
-      - closed
-      - labeled
+    branches:
+      - main
+  push:
+    branches:
+      - main
+    tags: '*'
+  workflow_dispatch:
 concurrency:
   # Skip intermediate builds: all builds except for builds on the `main` branch
   # Cancel intermediate builds: only pull request builds
   group: ${{ github.workflow }}-${{ github.ref }}-${{ github.ref != 'refs/heads/main' || github.run_number }}
   cancel-in-progress: ${{ startsWith(github.ref, 'refs/pull/') }}
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 jobs:
-  backport:
+  verify:
     runs-on: ubuntu-latest
-    name: Backport
-    if: github.event.pull_request.merged
     steps:
-      # For security reasons, we do not check out any code in this workflow
-      - uses: tibdex/backport@e2ffd4c5a70730dfd19046859dfaf366e3de6466 # v1.1.1
+      - uses: actions/checkout@v2
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          persist-credentials: false
+      - run: make verify_treehashes
