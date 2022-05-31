@@ -69,18 +69,21 @@ SHORT_COMMIT_LENGTH=10
 export LONG_COMMIT="$(git rev-parse HEAD)"
 export SHORT_COMMIT="$(echo ${LONG_COMMIT} | cut -c1-${SHORT_COMMIT_LENGTH})"
 
+set -x
 # Extract information about the current julia version number
 export JULIA_VERSION="$(cat VERSION)"
 export MAJMIN="$(cut -d. -f1-2 <<<"${JULIA_VERSION}")"
 export MAJMINPAT="$(cut -d- -f1 <<<"${JULIA_VERSION}")"
 # If we're on a tag, then our "tar version" will be the julia version.
 # Otherwise, it's the short commit.
+git describe --tags --exact-match
 if git describe --tags --exact-match >/dev/null 2>/dev/null; then
     TAR_VERSION="${JULIA_VERSION}"
 else
     TAR_VERSION="${SHORT_COMMIT}"
 fi
 export TAR_VERSION
+set +x
 
 
 
