@@ -85,5 +85,12 @@ echo "OPENBLAS_NUM_THREADS is:   ${OPENBLAS_NUM_THREADS:?}"
 echo "TESTS is:                  ${TESTS:?}"
 echo "USE_RR is:                 ${USE_RR-}"
 
+# Show our core dump file pattern and size limit if we're going to be recording them
+if [[ -z "${USE_RR-}" ]] && [[ "${OS}" == "linux" || "${OS}" == "musl" ]]; then
+    ulimit -c unlimited
+    echo "Core dump pattern:         $(cat /proc/sys/kernel/core_pattern)"
+    echo "Core dump size limit:      $(ulimit -c)"
+fi
+
 echo "--- Run the Julia test suite"
 ${JULIA_CMD_FOR_TESTS:?} -e "Base.runtests(\"${TESTS:?}\"; ncores = ${NCORES_FOR_TESTS:?})"

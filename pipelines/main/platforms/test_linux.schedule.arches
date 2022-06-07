@@ -1,5 +1,5 @@
 # OS       TRIPLET                       ARCH           ARCH_ROOTFS    TIMEOUT    USE_RR     ROOTFS_TAG     ROOTFS_HASH
-linux      x86_64-linux-gnusrcassert     x86_64         x86_64         150        .          v5.10          de7c87873a87ff4e90c5b97ad21bc80ef07c6577
+linux      x86_64-linux-gnusrcassert     x86_64         x86_64         150        .          v5.20          d4199ba65775a1b4ff74521ae77987076e4508fb
 
 # These special lines allow us to embed default values for the columns above.
 # Any column without a default mapping here will simply substitute a `.` to the empty string
