@@ -1,9 +1,9 @@
 # OS       TRIPLET                    ARCH           ARCH_ROOTFS    TIMEOUT    USE_RR   ROOTFS_TAG    ROOTFS_HASH
-linux      i686-linux-gnu             x86_64         i686           .          .        v5.11         b40bb566fcb6502c2764c8d80ed5ffbe7cdcfaf3
-linux      aarch64-linux-gnu          aarch64        aarch64        .          .        v5.12         f7a9c2f23795d6fc0edb6068244ef6b18349bbcd
+linux      i686-linux-gnu             x86_64         i686           .          .        v5.19         b1aa757351ed870e8445e9183da5e16b73036f8e
+linux      aarch64-linux-gnu          aarch64        aarch64        .          .        v5.19         3d386b368ac9a8d66524c37741c330dd9334ab66
 # linux    armv7l-linux-gnueabihf     armv7l         armv7l         .          .        ----          ----------------------------------------
 # linux    powerpc64le-linux-gnu      powerpc64le    powerpc64le    .          .        ----          ----------------------------------------
-musl       x86_64-linux-musl          x86_64         x86_64         .          .        v5.9          417adcf6facf0933d496fa45a831a10632a7313f
+musl       x86_64-linux-musl          x86_64         x86_64         .          .        v5.20         7a24baa3fa32382694b37c96d9b256561ff75ca3
 
 # These special lines allow us to embed default values for the columns above.
 # Any column without a default mapping here will simply substitute a `.` to the empty string
