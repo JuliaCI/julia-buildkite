@@ -40,6 +40,8 @@ cp -aR "${JULIA_INSTALL_DIR?}" "${APP_PATH}/Contents/Resources/julia"
 # a maximum, it has no effect on download or unpack size.
 # We define this in a function because we need to do it again later.
 function create_dmg() {
+    rm -f "${DMG_NAME}"
+
     hdiutil create \
         "${DMG_NAME}" \
         -size 1t \
