@@ -14,6 +14,7 @@ steps:
               create_bundle: "true"
               gdb_commands:
                 - "thread apply all bt"
+                - "info files"
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"
               repo_url: "https://github.com/JuliaCI/julia-buildkite"

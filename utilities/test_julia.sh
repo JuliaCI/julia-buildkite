@@ -55,7 +55,10 @@ if [[ "${ARCH}" == "i686" ]]; then
     # test can take up to 2GB of RSS.  This means that we should instruct the test
     # framework to restart any worker that comes into a test set with 1.5GB of RSS.
     # export JULIA_TEST_MAXRSS_MB=1536
-    export JULIA_TEST_MAXRSS_MB=500
+
+    # FIXME: Purposefully disabling this to generate OOMs
+    #export JULIA_TEST_MAXRSS_MB=500
+    true
 fi
 
 # If we're running inside of `rr`, limit the number of threads
