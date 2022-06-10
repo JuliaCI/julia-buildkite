@@ -5,5 +5,5 @@ macos      aarch64-apple-darwin        aarch64    .
 # These special lines allow us to embed default values for the columns above.
 # Any column without a default mapping here will simply substitute a `.` to the empty string
 
-# Most jobs should finish within 1.5 hours, barring exceptionally slow hardware
-#default TIMEOUT 90
+# Uploads should not take much time
+#default TIMEOUT 30
