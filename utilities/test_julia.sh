@@ -77,6 +77,9 @@ else
     export TESTS="all --ci"
 fi
 
+# Auto-set timeout to buildkite timeout minus 45m for most users
+export JL_TERM_TIMEOUT="$((${BUILDKITE_TIMEOUT:-240}-45))m"
+
 echo "--- Print the list of test sets, and other useful environment variables"
 echo "JULIA_CMD_FOR_TESTS is:    ${JULIA_CMD_FOR_TESTS:?}"
 echo "JULIA_NUM_THREADS is:      ${JULIA_NUM_THREADS:?}"
@@ -84,6 +87,7 @@ echo "NCORES_FOR_TESTS is:       ${NCORES_FOR_TESTS:?}"
 echo "OPENBLAS_NUM_THREADS is:   ${OPENBLAS_NUM_THREADS:?}"
 echo "TESTS is:                  ${TESTS:?}"
 echo "USE_RR is:                 ${USE_RR-}"
+echo "JL_TERM_TIMEOUT is:        ${JL_TERM_TIMEOUT}"
 
 # Show our core dump file pattern and size limit if we're going to be recording them
 if [[ -z "${USE_RR-}" ]] && [[ "${OS}" == "linux" || "${OS}" == "musl" ]]; then
@@ -93,4 +97,4 @@ if [[ -z "${USE_RR-}" ]] && [[ "${OS}" == "linux" || "${OS}" == "musl" ]]; then
 fi
 
 echo "--- Run the Julia test suite"
-${JULIA_CMD_FOR_TESTS:?} -e "Base.runtests(\"${TESTS:?}\"; ncores = ${NCORES_FOR_TESTS:?})"
+"${JULIA_BINARY}" ".buildkite/utilities/timeout.jl" ${JULIA_CMD_FOR_TESTS:?} -e "Base.runtests(\"${TESTS:?}\"; ncores = ${NCORES_FOR_TESTS:?})"

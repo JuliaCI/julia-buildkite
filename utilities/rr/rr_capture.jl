@@ -1,6 +1,5 @@
-import Dates
-import Pkg
-import Tar
+import Dates, Pkg, Tar
+include(joinpath(dirname(@__DIR__), "proc_utils.jl"))
 
 function get_bool_from_env(name::AbstractString, default_value::Bool)
     value = get(ENV, name, "$(default_value)") |> strip |> lowercase
@@ -19,34 +18,6 @@ function get_from_env(name::AbstractString)
     end
     result = convert(String, strip(value))::String
     return result
-end
-
-function my_exit(process::Base.Process)
-    wait(process)
-
-    @info(
-        "",
-        process.exitcode,
-        process.termsignal,
-    )
-
-    # Pass the exit code back up
-    if process.termsignal != 0
-        ccall(:raise, Cvoid, (Cint,), process.termsignal)
-
-        # If for some reason the signal did not cause an exit, we'll exit manually.
-        # We need to make sure that we exit with a non-zero exit code.
-        if process.exitcode != 0
-            exit(process.exitcode)
-        else
-            exit(1)
-        end
-    end
-    exit(process.exitcode)
-end
-
-if Base.VERSION < v"1.6"
-    throw(ErrorException("The `$(basename(@__FILE__))` script requires Julia 1.6 or greater"))
 end
 
 if length(ARGS) < 1
@@ -69,42 +40,6 @@ const num_cores = min(
 )
 ENV["JULIA_RRCAPTURE_NUM_CORES"] = "$(num_cores)"
 
-const JULIA_TEST_RR_RUNTESTS_TIMEOUT_MINUTES = get(ENV,  "JULIA_TEST_RR_RUNTESTS_TIMEOUT_MINUTES", "240")
-const JULIA_TEST_RR_CLEANUP_TIMEOUT_MINUTES  = get(ENV,  "JULIA_TEST_RR_CLEANUP_TIMEOUT_MINUTES",  "300")
-const rr_runtests_timeout_minutes = parse(Int, JULIA_TEST_RR_RUNTESTS_TIMEOUT_MINUTES)
-const rr_cleanup_timeout_minutes  = parse(Int, JULIA_TEST_RR_CLEANUP_TIMEOUT_MINUTES)
-
-if !(rr_runtests_timeout_minutes < rr_cleanup_timeout_minutes)
-    msg = "rr_runtests_timeout_minutes MUST be strictly less than rr_cleanup_timeout_minutes"
-    @error msg rr_runtests_timeout_minutes rr_cleanup_timeout_minutes
-    throw(ErrorException(msg))
-end
-
-const cleanup_minutes = rr_cleanup_timeout_minutes - rr_runtests_timeout_minutes
-if cleanup_minutes < 5
-    msg = "cleanup_minutes MUST be at least 5"
-    @error msg cleanup_minutes
-    throw(ErrorException(msg))
-end
-if cleanup_minutes < 20
-    msg = "cleanup_minutes SHOULD be at least 20"
-    @warn msg cleanup_minutes
-end
-if is_buildkite
-    const BUILDKITE_TIMEOUT = ENV["BUILDKITE_TIMEOUT"]
-    const buildkite_timeout_minutes_total   = parse(Int, BUILDKITE_TIMEOUT)
-    if !(rr_cleanup_timeout_minutes < buildkite_timeout_minutes_total)
-        msg = "rr_cleanup_timeout_minutes MUST be strictly less than buildkite_timeout_minutes_total"
-        @error msg rr_cleanup_timeout_minutes buildkite_timeout_minutes_total
-        throw(ErrorException(msg))
-    end
-    buildkite_extra_minutes_at_end = buildkite_timeout_minutes_total - rr_cleanup_timeout_minutes
-    if buildkite_extra_minutes_at_end < 20
-        msg = "buildkite_extra_minutes_at_end SHOULD be at least 20"
-        @warn msg buildkite_extra_minutes_at_end
-    end
-end
-
 @info(
     "",
     is_buildkite,
@@ -113,17 +48,12 @@ end
     commit_full,
     commit_short,
     num_cores,
-    rr_runtests_timeout_minutes,
-    rr_cleanup_timeout_minutes,
-    cleanup_minutes,
 )
 
 if is_buildkite
     @info(
         "Buildkite-specific details:",
         is_buildkite,
-        buildkite_timeout_minutes_total,
-        buildkite_extra_minutes_at_end,
     )
 end
 
@@ -158,45 +88,18 @@ mktempdir(temp_parent_dir) do dir
             """)
         end
         chmod(capture_script_path, 0o755)
+        timeout_script_path = joinpath(dirname(@__DIR__), "timeout.jl")
 
         new_env = copy(ENV)
         new_env["_RR_TRACE_DIR"] = joinpath(dir, "rr_traces")
         new_env["RR_LOG"]          = "all:debug"
         new_env["RR_UNDER_RR_LOG"] = "all:debug"
-        new_env["RR_LOG_BUFFER"]="100000"
+        new_env["RR_LOG_BUFFER"] = "100000"
         new_env["JULIA_RR"] = capture_script_path
         t_start = time()
-        global proc = run(setenv(`$(rr_path) record --num-cores=$(num_cores) $ARGS`, new_env), (stdin, stdout, stderr); wait=false)
 
-        # Start asynchronous timer that will kill `rr`
-        timer_task = @async begin
-            sleep(rr_runtests_timeout_minutes * 60)
-
-            # If we've exceeded the timeout and `rr` is still running, kill it.
-            if isopen(proc)
-                println(stderr, "\n\nProcess timed out (with a timeout of $(rr_runtests_timeout_minutes) minutes). Signalling `rr` for force-cleanup!")
-                kill(proc, Base.SIGTERM)
-
-                # Give `rr` a chance to cleanup and upload.
-                # Note: this time period includes the time to upload the `rr` trace files
-                # as Buildkite artifacts, so make sure it is long enough to allow the
-                # uploads to finish.
-                sleep(cleanup_minutes * 60)
-
-                if isopen(proc)
-                    println(stderr, "\n\n`rr` failed to cleanup and upload within $(cleanup_minutes) minutes, killing and exiting immediately!")
-                    kill(proc, Base.SIGKILL)
-                    exit(1)
-                end
-            end
-        end
-
-        if Base.VERSION >= v"1.7-"
-            errormonitor(timer_task)
-        end
-
+        global proc = run(setenv(`$(Base.julia_cmd()) $(timeout_script_path) $(rr_path) record --num-cores=$(num_cores) $ARGS`, new_env))
         # Wait for `rr` to finish, either through naturally finishing its run, or `SIGTERM`.
-        wait(proc)
         process_failed = !success(proc)
 
         if process_failed || always_save_rr_trace || is_buildkite
@@ -271,4 +174,4 @@ mktempdir(temp_parent_dir) do dir
 end
 
 @info "Finished running the command under rr"
-my_exit(proc)
+mirror_exit_code(proc)
