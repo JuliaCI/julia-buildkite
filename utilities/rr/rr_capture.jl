@@ -79,7 +79,6 @@ mktempdir(temp_parent_dir) do dir
 
     rr() do rr_path
         capture_script_path = joinpath(dir, "capture_output.sh")
-        loader = Sys.WORD_SIZE == 64 ? "/lib64/ld-linux-x86-64.so.2" : "/lib/ld-linux.so.2"
         open(capture_script_path, "w") do io
             write(io, """
             #!/bin/bash
