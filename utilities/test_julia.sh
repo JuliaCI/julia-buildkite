@@ -10,8 +10,12 @@ set -euo pipefail
 # First, get things like `SHORT_COMMIT`, `JULIA_CPU_TARGET`, `UPLOAD_TARGETS`, etc...
 source .buildkite/utilities/build_envs.sh
 
+# Note that we pass `--step` to prevent ambiguities between downloading the artifacts
+# uploaded by the `build_*` steps vs. the `upload_*` steps.  Normally, testing must occur
+# first, however in the event of a soft-fail test, we can re-run a test after a successful
+# upload has occured.
 echo "--- Download build artifacts"
-buildkite-agent artifact download "${UPLOAD_FILENAME}.tar.gz" .
+buildkite-agent artifact download --step "build_${TRIPLET}" "${UPLOAD_FILENAME}.tar.gz" .
 
 echo "--- Extract build artifacts"
 tar xzf "${UPLOAD_FILENAME}.tar.gz" "${JULIA_INSTALL_DIR}/"
