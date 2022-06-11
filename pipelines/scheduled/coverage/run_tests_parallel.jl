@@ -1,9 +1,9 @@
 # Important note: even if one or more tests fail, we will still exit with status code 0.
 #
 # The reason for this is that we always want to upload code coverage, even if some of the
-# tests fail. Therefore, even if the `coverage_linux64` builder passes, you should not
+# tests fail. Therefore, even if the `coverage_linux64` job passes, you should not
 # assume that all of the tests passed. If you want to know if all of the tests are passing,
-# please look at the status of the `tester_*` builders (e.g. `tester_linux64`).
+# please look at the status of the `tester_*` jobs (e.g. `tester_linux64`).
 
 const ncores = Sys.CPU_THREADS
 @info "" Sys.CPU_THREADS
@@ -16,7 +16,7 @@ script_native_no = """
     Base.runtests(["all", "--skip", "cmdlineargs", "Pkg"]; ncores = $(ncores))
 """
 
-base_cmd       = `$(Base.julia_cmd()) --code-coverage=all`
+base_cmd       = `$(Base.julia_cmd()) --code-coverage=lcov-%p.info`
 cmd_native_yes = `$(base_cmd) --sysimage-native-code=yes -e $(script_native_yes)`
 cmd_native_no  = `$(base_cmd) --sysimage-native-code=no  -e $(script_native_no)`
 

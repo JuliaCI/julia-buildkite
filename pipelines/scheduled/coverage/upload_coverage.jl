@@ -10,24 +10,6 @@ Pkg.precompile()
 
 import Coverage
 
-function process_folders()
-    # `Coverage.process_folder` will have a LOT of `@info` statements that will make the log
-    # way too long. So before we run `Coverage.process_folder`, we disable logging for `@info`
-    # statements. After we run `Coverage.process_folder`, we re-enable logging for `@info`
-    # statements.
-    Logging.disable_logging(Logging.Info)
-    fcs_base   = Coverage.process_folder("base");
-    fcs_stdlib = Coverage.process_folder("stdlib");
-    Logging.disable_logging(Logging.Debug)
-
-    fcs = Coverage.merge_coverage_counts(
-        fcs_base,
-        fcs_stdlib,
-    );
-
-    return fcs
-end
-
 function get_external_stdlib_names(stdlib_dir::AbstractString)
     filename_list = filter(x -> isfile(joinpath(stdlib_dir, x)), readdir(stdlib_dir))
     # find all of the files like `Pkg.version`, `Statistics.version`, etc.
@@ -168,11 +150,34 @@ function coveralls_buildkite_query_git_info()
     return git_info
 end
 
-const fcs = process_folders()
+fcs = Coverage.LCOV.readfolder("./lcov_files")
+
+# This assumes we're run with a current working directory of a julia checkout
+base_jl_files = Set{String}()
+cd("base") do
+    for (root, dirs, files) in walkdir(".")
+        # Strip off the leading `./`
+        if startswith(root, ".")
+            root = root[2:end]
+        end
+        if startswith(root, "/")
+            root = root[2:end]
+        end
+        for f in files
+            if !endswith(f, ".jl")
+                continue
+            end
+            push!(base_jl_files, joinpath(root, f))
+        end
+    end
+end
 
 # Only include source code files. Exclude test files, benchmarking files, etc.
 filter!(fcs) do fc
-    occursin(r"^base\/", fc.filename) || occursin("/src/", fc.filename)
+    # Base files do not have a directory name, they are all implicitly paths
+    # relative to the `base/` folder, so the only way to detect them is to
+    # compare them against a list of files that exist within `base`:
+    fc.filename ∈ base_jl_files || occursin("/src/", fc.filename)
 end;
 
 # Exclude all external stdlibs (stdlibs that live in external repos).
@@ -186,6 +191,7 @@ filter!(fcs) do fc
     !occursin(r"^stdlib\/[A-Za-z0-9]*?_jll\/", fc.filename)
 end;
 
+fcs = Coverage.merge_coverage_counts(fcs)
 sort!(fcs; by = fc -> fc.filename);
 
 print_coverage_summary.(fcs);
@@ -209,9 +215,11 @@ let
     Coverage.Codecov.submit_generic(fcs, kwargs)
 end
 
-if total_cov_pct < 50
+const smoke_test_pct = 60
+
+if total_cov_pct < smoke_test_pct
     msg = string(
-        "The total coverage is less than 50%. This should never happen, ",
+        "The total coverage is less than $(smoke_test_pct)%. This should never happen, ",
         "so it means that something has probably gone wrong with the code coverage job.",
     )
     @error msg total_cov_pct
