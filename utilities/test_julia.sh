@@ -94,7 +94,7 @@ echo "USE_RR is:                 ${USE_RR-}"
 echo "JL_TERM_TIMEOUT is:        ${JL_TERM_TIMEOUT}"
 
 # Show our core dump file pattern and size limit if we're going to be recording them
-if [[ -z "${USE_RR-}" ]] && [[ "${OS}" == "linux" || "${OS}" == "musl" ]]; then
+if [[ -z "${USE_RR-}" ]] && [[ "${OS}" == linux* || "${OS}" == "musl" ]]; then
     ulimit -c unlimited
     echo "Core dump pattern:         $(cat /proc/sys/kernel/core_pattern)"
     echo "Core dump size limit:      $(ulimit -c)"
