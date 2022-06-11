@@ -5,18 +5,18 @@ steps:
         key:   "coverage"
         # Comment out the following `if:` statement for testing.
         # Please remember to uncomment it before merging the PR.
-        if: pipeline.slug == "julia-master-scheduled"
+        #if: pipeline.slug == "julia-master-scheduled"
         plugins:
           - JuliaCI/external-buildkite#v1:
-                  version: "./.buildkite-external-version"
-                  repo_url: "https://github.com/JuliaCI/julia-buildkite"
+              version: "./.buildkite-external-version"
+              repo_url: "https://github.com/JuliaCI/julia-buildkite"
           - JuliaCI/julia#v1:
               # Drop default "registries" directory, so it is not persisted from execution to execution
               persist_depot_dirs: packages,artifacts,compiled
               version: '1'
           - staticfloat/sandbox#v1:
-              rootfs_url: https://github.com/JuliaCI/rootfs-images/releases/download/v5.8/package_linux.x86_64.tar.gz
-              rootfs_treehash: "582b5d44bbc24d2a58ab609c5a520b3fd102e504"
+              rootfs_url: https://github.com/JuliaCI/rootfs-images/releases/download/v5.26/package_linux.x86_64.tar.gz
+              rootfs_treehash: "5b0b851aca3c941b900a1301c13922c6cfc7f211"
               uid: 1000
               gid: 1000
           - staticfloat/cryptic#v2:
@@ -39,6 +39,12 @@ steps:
           export JULIA_WORKER_TIMEOUT=1200 # 1200 seconds = 20 minutes
           ./julia -e 'import Distributed; @info "" Distributed.worker_timeout()'
           ./julia .buildkite/pipelines/scheduled/coverage/run_tests_parallel.jl
+
+          echo "--- Move the lcov files into the `./lcov_files` directory"
+          ls *.info
+          mkdir -p lcov_files
+          mv *.info lcov_files
+          ls lcov_files
 
           echo "--- Process and upload coverage information"
           ./julia .buildkite/pipelines/scheduled/coverage/upload_coverage.jl
