@@ -55,7 +55,7 @@ steps:
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/llvmpasses.yml
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/whitespace.yml
 
-          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/sanitizers/asan.yml
+          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/sanitizers/build_asan.yml
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/sanitizers/tsan.yml
         agents:
           queue: "julia"
