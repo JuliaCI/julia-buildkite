@@ -46,6 +46,7 @@ steps:
             workspaces:
               - "/cache/repos:/cache/repos"
       timeout_in_minutes: 60
+      soft_fail: true
       commands: |
         echo "--- Downloading artifact"
         buildkite-agent artifact download 'tmp/*' .
