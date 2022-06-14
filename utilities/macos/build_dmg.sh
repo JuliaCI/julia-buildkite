@@ -73,12 +73,32 @@ UUID="$(/usr/libexec/PlistBuddy -c "print notarization-upload:RequestUUID" notar
 echo "Waiting until UUID ${UUID} is done processing...."
 
 # Wait for apple's servers to give us a valid notarization
+ALTOOL_FAILURES=0
 while true; do
-    xcrun altool \
+    if ! xcrun altool \
         --notarization-info "${UUID}" \
         --username "${NOTARIZATION_APPLE_ID}" \
         --password "${NOTARIZATION_APPLE_KEY}" \
-        --output-format xml > notarization.xml
+        --output-format xml > notarization.xml; then
+
+        ALTOOL_FAILURES=$((${ALTOOL_FAILURES} + 1))
+        echo -n "altool has failed ${ALTOOL_FAILURES} times " >&2
+        if [[ "${ALTOOL_FAILURES}" < 10 ]]; then
+            echo "looping..."
+            sleep 2
+            continue
+        else
+            # If we've had more than 10 failures in a row, bail.
+            # Something might be wrong with the servers right now,
+            # and there's no sense in holding up the CI queue waiting.
+            echo "bailing out!" >&2
+            false
+        fi
+    else
+        # If we got a good return value, forget about any previous altool failures.
+        ALTOOL_FAILURES=0
+    fi
+
     STATUS=$(/usr/libexec/PlistBuddy -c "print notarization-info:Status" notarization.xml 2>/dev/null)
 
     # Process loop exit conditions
