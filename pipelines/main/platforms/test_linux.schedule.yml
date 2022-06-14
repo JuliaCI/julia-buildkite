@@ -7,6 +7,13 @@ steps:
         depends_on:
           - "build_${TRIPLET?}"
         plugins:
+          - JuliaCI/coreupload#v1:
+              core_pattern: "**/*.core"
+              compressor: "zstd"
+              disabled: "${USE_RR?}"
+              create_bundle: "true"
+              gdb_commands:
+                - "thread apply all bt"
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
