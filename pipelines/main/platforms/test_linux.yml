@@ -7,10 +7,11 @@ steps:
         depends_on:
           - "build_${TRIPLET?}"
         plugins:
-          - JuliaCI/coreupload#sf/debugging:
+          - JuliaCI/coreupload#v1:
               core_pattern: "**/*.core"
               compressor: "zstd"
               disabled: "${USE_RR?}"
+              create_bundle: "true"
               gdb_commands:
                 - "thread apply all bt"
           - JuliaCI/external-buildkite#v1:
