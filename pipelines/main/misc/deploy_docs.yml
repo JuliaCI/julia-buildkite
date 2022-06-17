@@ -1,0 +1,81 @@
+steps:
+  - group: "Upload"
+    steps:
+      - label: "upload docs"
+        depends_on:
+          - "doctest"
+        # We only upload if one of the following criteria are true:
+        # 1. The branch is `master`.
+        # 2. The branch is `release-*`.
+        # 3. The build is a tag build AND the tag is `v*`.
+        # 4. The pipeline is `julia-buildkite`.
+        if: ((build.branch == "master") || (build.branch =~ /^release-/) || (build.tag =~ /^v/)) || (pipeline.slug == "julia-buildkite")
+        plugins:
+          - JuliaCI/external-buildkite#v1:
+              version: "./.buildkite-external-version"
+              repo_url: "https://github.com/JuliaCI/julia-buildkite"
+          - JuliaCI/julia#v1:
+              # Drop default "registries" directory, so it is not persisted from execution to execution
+              persist_depot_dirs: packages,artifacts,compiled
+              # Use Julia v1.7 for upload, that's the version embedded in the documenter manifest
+              version: '1.7'
+          - staticfloat/sandbox#v1:
+              # Use `aws_uploader` image, since it has things like `git` and `ssh` and whatnot
+              rootfs_url: "https://github.com/JuliaCI/rootfs-images/releases/download/v5.27/aws_uploader.x86_64.tar.gz"
+              rootfs_treehash: "cd5a62e570bda70932217641ec715b2f9fc1cd82"
+              uid: 1000
+              gid: 1000
+              workspaces:
+                # Include `/cache/repos` so that our `git` version introspection works.
+                - "/cache/repos:/cache/repos"
+          - staticfloat/cryptic#v2:
+              files:
+                - .buildkite/secrets/ssh_docs_deploy
+          - staticfloat/ssh-agent#v1:
+              keyfiles:
+                - .buildkite/secrets/ssh_docs_deploy
+        commands: |
+          buildkite-agent artifact download --step "doctest" "julia-*-htmldocs.tar.gz" .
+
+          echo "--- clone docs.julialang.org"
+          mkdir -p /home/juliaci/.ssh
+          ssh-keyscan github.com >> /home/juliaci/.ssh/known_hosts 2>/dev/null
+          git clone git@github.com:JuliaLang/docs.julialang.org -b gh-pages repo
+          cd repo
+
+          echo "--- deploy new docs"
+          # Delete everything except for `.git`
+          shopt -s extglob
+          rm -rf !(".git")
+          shopt -u extglob
+
+          # Extract new docs build
+          tar -zxf ../julia-*-htmldocs.tar.gz
+
+          # Build commit message
+          echo "build based on $${BUILDKITE_COMMIT}\n" > ../commit_message
+          echo "build link: $${BUILDKITE_BUILD_URL}" >> ../commit_message
+
+          # Add all files to our new commit
+          git config --global user.name "Documenter.jl"
+          git config --global user.email "documenter@juliadocs.github.io"
+          git add .
+          git commit -a -F ../commit_message
+
+          if [[ "$${BUILDKITE_PIPELINE_SLUG}" == "julia-buildkite" ]]; then
+            # If we're testing new CI configurations, push to a temporary branch, then delete it
+            git push origin gh-pages:gh-pages-buildkite-$${BUILDKITE_COMMIT}
+            git push origin --delete gh-pages-buildkite-$${BUILDKITE_COMMIT}
+          else
+            git push origin gh-pages:gh-pages
+          fi
+        timeout_in_minutes: 45
+        agents:
+          queue: "julia"
+          sandbox_capable: "true"
+          os: "linux"
+          arch: "x86_64"
+        env:
+          # Receive cryptic token from parent job
+          BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET: ${BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET?}
+

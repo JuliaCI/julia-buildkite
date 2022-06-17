@@ -3,6 +3,8 @@ steps:
     steps:
       - label: "doctest"
         key: doctest
+        depends_on:
+          - "build_x86_64-linux-gnu"
         plugins:
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"
@@ -10,27 +12,39 @@ steps:
           - JuliaCI/julia#v1:
               # Drop default "registries" directory, so it is not persisted from execution to execution
               persist_depot_dirs: packages,artifacts,compiled
-              version: '1.6'
+              version: '1'
           - staticfloat/sandbox#v1:
-              rootfs_url: https://github.com/JuliaCI/rootfs-images/releases/download/v4.8/package_linux.x86_64.tar.gz
-              rootfs_treehash: "2a058481b567f0e91b9aa3ce4ad4f09e6419355a"
+              rootfs_url: https://github.com/JuliaCI/rootfs-images/releases/download/v5.11/package_linux.x86_64.tar.gz
+              rootfs_treehash: "3c62a3dd4116a1b698c103f1e090b824e4cc9ff5"
               uid: 1000
               gid: 1000
               workspaces:
                 # Include `/cache/repos` so that our `git` version introspection works.
                 - "/cache/repos:/cache/repos"
         commands: |
-          echo "--- Build Julia from source"
-          make --output-sync -j 6
+          # Download pre-built julia, extract into `usr/`
+          set -x
+          buildkite-agent artifact download --step "build_x86_64-linux-gnu" 'julia-*-linux-x86_64.tar.gz' .
+          mkdir -p ./usr
+          tar -C ./usr --strip-components=1 -zxf julia-*-linux-x86_64.tar.gz
+          ln -s ./usr/bin/julia ./julia
 
           echo "--- Print Julia version info"
+          export JULIA_NUM_THREADS=1
           ./julia -e 'using InteractiveUtils; InteractiveUtils.versioninfo()'
 
-          echo "--- Build Julia docs"
-          make docs
+          TARBALL_NAME="$$(echo julia-*-linux-x86_64.tar.gz)"
+          export DOCUMENTER_ARCHIVE="$${TARBALL_NAME%-linux-x86_64.tar.gz}-htmldocs.tar.gz"
 
-          echo "--- Run Julia doctests"
-          JULIA_NUM_THREADS=1 make -C doc doctest=true
+          echo "--- Run Julia doctests/build HTML docs"
+          cd doc
+          make deploy doctest=true
+
+          echo "--- Compress and upload HTML docs"
+          buildkite-agent artifact upload "$${DOCUMENTER_ARCHIVE}"
+        env:
+          # Give a fake documenter key to get Documenter to try and deploy for us
+          DOCUMENTER_KEY: ""
         timeout_in_minutes: 45
         agents:
           queue: "julia"
