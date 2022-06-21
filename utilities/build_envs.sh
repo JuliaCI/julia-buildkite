@@ -133,14 +133,24 @@ fi
 
 # We used to name our darwin builds as `julia-*-mac64.tar.gz`, instead of `julia-*-macos-x86_64.tar.gz`.
 # Let's copy things over to the `mac` OS name for backwards compatibility:
-if [[ "${OS?}" == "macos" ]] && [[ "${ARCH?}" == "x86_64" ]]; then
+if [[ "${OS?}" == "macos" ]]; then
+    if [[ "${ARCH}" == "x86_64" ]]; then
+        FOLDER_ARCH="x64"
+        SHORT_ARCH="64"
+    else
+        FOLDER_ARCH="${ARCH}"
+        SHORT_ARCH="${ARCH}"
+    fi
+    
     # First, we have the canonical fully-specified upload target
-    UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/mac/${ARCH?}/${MAJMIN?}/julia-${TAR_VERSION?}-mac64" )
+    UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/mac/${FOLDER_ARCH}/${MAJMIN?}/julia-${TAR_VERSION?}-mac${SHORT_ARCH}" )
 
     # Next, we have the "majmin/latest" upload target
-    UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/mac/${ARCH?}/${MAJMIN?}/julia-latest-mac64" )
+    UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/mac/${FOLDER_ARCH}/${MAJMIN?}/julia-latest-mac${SHORT_ARCH}" )
+    
+    # If we're on `master` and we're uploading, we consider ourselves "absolute latest"
     if [[ "${BUILDKITE_BRANCH}" == "master" ]]; then
-        UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/mac/x64/julia-latest-mac64" )
+        UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/mac/${FOLDER_ARCH}/julia-latest-mac${SHORT_ARCH}" )
     fi
 fi
 
