@@ -29,8 +29,8 @@ steps:
                 # Include `/cache/repos` so that our `git` version introspection works.
                 - "/cache/repos:/cache/repos"
           - test-collector#v1.0.0:
-            files: "test/results.json"
-            format: "json"
+              files: "test/results.json"
+              format: "json"
         timeout_in_minutes: ${TIMEOUT?}
         soft_fail: ${ALLOW_FAIL?}
         commands: "bash .buildkite/utilities/test_julia.sh"
