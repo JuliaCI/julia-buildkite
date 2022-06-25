@@ -161,7 +161,7 @@ mktempdir(temp_parent_dir) do dir
                     sort!(files_to_upload)
                 end
             end
-            if is_buildkite
+            if is_buildkite && process_failed
                 @info "Since this is a Buildkite run, we will upload the `rr` trace file."
                 for file_to_upload in files_to_upload
                     cmd = `buildkite-agent artifact upload $(file_to_upload)`
