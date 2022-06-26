@@ -10,6 +10,13 @@ set -euo pipefail
 source .buildkite/utilities/build_envs.sh
 source .buildkite/utilities/word.sh
 
+echo "--- Print kernel and compiler versions"
+uname -a
+echo
+cc -v
+echo
+ld -v
+
 echo "--- Collect make options"
 # These are the flags we'll provide to `make`
 MFLAGS=()
