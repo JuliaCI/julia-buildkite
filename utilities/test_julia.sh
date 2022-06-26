@@ -10,6 +10,9 @@ set -euo pipefail
 # First, get things like `SHORT_COMMIT`, `JULIA_CPU_TARGET`, `UPLOAD_TARGETS`, etc...
 source .buildkite/utilities/build_envs.sh
 
+echo "--- Print kernel version"
+uname -a
+
 # Note that we pass `--step` to prevent ambiguities between downloading the artifacts
 # uploaded by the `build_*` steps vs. the `upload_*` steps.  Normally, testing must occur
 # first, however in the event of a soft-fail test, we can re-run a test after a successful
