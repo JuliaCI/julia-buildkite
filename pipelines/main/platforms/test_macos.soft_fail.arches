@@ -7,4 +7,4 @@ macos      aarch64-apple-darwin     aarch64       .
 # Most tests should finish within ~45 minutes, barring exceptionally slow hardware
 # We double that to a default of 90 minutes, with an extra 45 minutes for cleanup,
 # including things like `rr` trace compression,
-#default TIMEOUT 135
+#default TIMEOUT 225
