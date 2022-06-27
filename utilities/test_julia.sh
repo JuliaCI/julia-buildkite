@@ -82,7 +82,9 @@ else
 fi
 
 # Auto-set timeout to buildkite timeout minus 45m for most users
-export JL_TERM_TIMEOUT="$((${BUILDKITE_TIMEOUT:-240}-45))m"
+echo BUILDKITE_TIMEOUT is ${BUILDKITE_TIMEOUT:?} # TODO: delete this line
+export JL_TERM_TIMEOUT="$((${BUILDKITE_TIMEOUT:?}-45))m"
+echo JL_TERM_TIMEOUT is ${JL_TERM_TIMEOUT:?} # TODO: delete this line
 
 echo "--- Print the list of test sets, and other useful environment variables"
 echo "JULIA_CMD_FOR_TESTS is:    ${JULIA_CMD_FOR_TESTS:?}"
