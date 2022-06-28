@@ -18,6 +18,10 @@ steps:
           - test-collector#v1.0.0:
               files: "test/results.json"
               format: "json"
+        - label: "Upload test results"
+          depends_on: "test_${TRIPLET?}"
+          allow_dependency_failure: true
+          commands: buildkite-agent artifact upload "test/results.json"
         timeout_in_minutes: ${TIMEOUT?}
         soft_fail: ${ALLOW_FAIL?}
         commands: "bash .buildkite/utilities/test_julia.sh"
