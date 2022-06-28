@@ -6,6 +6,9 @@ steps:
         depends_on:
           - "build_${TRIPLET?}"
         plugins:
+          - staticfloat/cryptic#v2:
+              variables:
+                - BUILDKITE_ANALYTICS_TOKEN="U2FsdGVkX1/rrYa25MCNZvciipyrHGU3PnvuU79XCJmWkDGDbUhx9cAwcv5SDbcP"
           - JuliaCI/coreupload#v2:
               core_pattern: "**/*.core"
               compressor: "zstd"
