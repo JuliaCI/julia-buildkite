@@ -100,8 +100,8 @@ echo "JL_TERM_TIMEOUT is:        ${JL_TERM_TIMEOUT}"
 
 # Show our core dump file pattern and size limit if we're going to be recording them
 if [[ -z "${USE_RR-}" ]]; then
-    # Tell Julia to send `SIGSEGV` if something times out internally, generating a coredump
-    export JULIA_TEST_TIMEOUT_SIGNUM=11
+    # Tell Julia to send `SIGQUIT` if something times out internally, generating a coredump
+    export JULIA_TEST_TIMEOUT_SIGNUM=3
 
     ulimit -c unlimited
     if [[ "${OS}" == linux* || "${OS}" == "musl" ]]; then
