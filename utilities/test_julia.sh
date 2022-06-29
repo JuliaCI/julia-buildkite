@@ -125,6 +125,9 @@ echo "JL_TERM_TIMEOUT is:        ${JL_TERM_TIMEOUT}"
 
 # Show our core dump file pattern and size limit if we're going to be recording them
 if [[ -z "${USE_RR-}" ]]; then
+    # Tell Julia to send `SIGQUIT` if something times out internally, generating a coredump
+    export JULIA_TEST_TIMEOUT_SIGNUM=3
+
     ulimit -c unlimited
     if [[ "${OS}" == linux* || "${OS}" == "musl" ]]; then
         echo "Core dump pattern:         $(cat /proc/sys/kernel/core_pattern)"
@@ -132,6 +135,7 @@ if [[ -z "${USE_RR-}" ]]; then
         echo "Core dump pattern:         $(sysctl -n kern.corefile)"
     fi
     echo "Core dump size limit:      $(ulimit -c)"
+    echo "Timeout signal set to:     ${JULIA_TEST_TIMEOUT_SIGNUM}"
 fi
 
 echo "--- Run the Julia test suite"
