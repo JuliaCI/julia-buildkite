@@ -3,7 +3,6 @@ steps:
     steps:
       - label: "llvmpasses"
         key: "llvmpasses"
-        if: (build.source != "schedule") || (pipeline.slug == "julia-buildkite")
         plugins:
           - JuliaCI/julia#v1:
               # Drop default "registries" directory, so it is not persisted from execution to execution

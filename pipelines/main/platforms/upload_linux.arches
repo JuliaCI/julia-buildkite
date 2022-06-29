@@ -1,9 +1,9 @@
-# OS       TRIPLET                  TIMEOUT
-linux      aarch64-linux-gnu        .
-linux      i686-linux-gnu           .
-linux      x86_64-linux-gnu         .
-linux      powerpc64le-linux-gnu    .
-musl       x86_64-linux-musl        .
+TRIPLET                  TIMEOUT
+aarch64-linux-gnu        .
+i686-linux-gnu           .
+x86_64-linux-gnu         .
+powerpc64le-linux-gnu    .
+x86_64-linux-musl        .
 
 # These special lines allow us to embed default values for the columns above.
 # Any column without a default mapping here will simply substitute a `.` to the empty string

@@ -1,0 +1,37 @@
+# This file launches all the build jobs that _don't_ require secrets access.
+# These jobs can pass their output off to jobs that do require secrets access,
+# but those privileged steps require signing before they can be run.
+#
+# Yes, this is creating another layer of indirection; the flow now looks like:
+#
+#   [webui] -> launch_unsigned_builders.yml -> misc/whitespace.yml
+#
+# when we could theoretically just have the `webui` launch `misc/whitespace.yml`,
+# however this raises the bar for contributors to add new (unsigned) steps to
+# our CI configuration, so I'd rather live with an extra layer of indirection
+# and only need to touch the webui configuration when we need to alter
+# something about the privileged steps.
+
+steps:
+  - group: "Source"
+    steps:
+      - label: "Launch from-source jobs"
+        plugins:
+          - JuliaCI/external-buildkite#v1:
+              version: "./.buildkite-external-version"
+              repo_url: "https://github.com/JuliaCI/julia-buildkite"
+        commands: |
+          # Launch Linux from-source build jobs
+          GROUP="Source" \
+              ALLOW_FAIL="false" \
+              bash .buildkite/utilities/arches_pipeline_upload.sh \
+              .buildkite/pipelines/scheduled/platforms/build_linux.schedule.arches \
+              .buildkite/pipelines/main/platforms/build_linux.yml
+          # Launch Linux from-source test jobs
+          GROUP="Source" \
+              ALLOW_FAIL="false" \
+              bash .buildkite/utilities/arches_pipeline_upload.sh \
+              .buildkite/pipelines/scheduled/platforms/test_linux.schedule.arches \
+              .buildkite/pipelines/main/platforms/test_linux.yml
+        agents:
+          queue: "julia"

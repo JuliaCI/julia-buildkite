@@ -3,8 +3,9 @@ steps:
     steps:
       - label: ":linux: coverage"
         key:   "coverage"
-        if: build.source == "schedule" # comment out this line for testing; please uncomment it before merging your PR
-        # if: (build.source == "schedule") || (pipeline.slug == "julia-buildkite") # uncomment this line for testing; please comment it out before merging your PR
+        # Comment out the following `if:` statement for testing.
+        # Please remember to uncomment it before merging the PR.
+        if: pipeline.slug == "julia-master-scheduled"
         plugins:
           - JuliaCI/external-buildkite#v1:
                   version: "./.buildkite-external-version"
@@ -37,10 +38,10 @@ steps:
           export JULIA_NUM_THREADS=1
           export JULIA_WORKER_TIMEOUT=1200 # 1200 seconds = 20 minutes
           ./julia -e 'import Distributed; @info "" Distributed.worker_timeout()'
-          ./julia .buildkite/pipelines/main/coverage/run_tests_parallel.jl
+          ./julia .buildkite/pipelines/scheduled/coverage/run_tests_parallel.jl
 
           echo "--- Process and upload coverage information"
-          ./julia .buildkite/pipelines/main/coverage/upload_coverage.jl
+          ./julia .buildkite/pipelines/scheduled/coverage/upload_coverage.jl
         agents:
           queue: "julia"
           # Only run on `sandbox.jl` machines (not `docker`-isolated ones) since we need nestable sandboxing

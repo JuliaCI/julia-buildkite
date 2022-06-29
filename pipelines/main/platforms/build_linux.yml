@@ -3,7 +3,6 @@ steps:
     steps:
       - label: ":linux: build ${TRIPLET?}"
         key: "build_${TRIPLET?}"
-        if: (build.source != "schedule") || (pipeline.slug == "julia-buildkite")
         plugins:
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"
@@ -13,7 +12,7 @@ steps:
               persist_depot_dirs: packages,artifacts,compiled
               version: '1.6'
           - staticfloat/sandbox#v1:
-              rootfs_url: https://github.com/JuliaCI/rootfs-images/releases/download/${ROOTFS_TAG?}/package_${OS?}.${ARCH_ROOTFS?}.tar.gz
+              rootfs_url: https://github.com/JuliaCI/rootfs-images/releases/download/${ROOTFS_TAG?}/${ROOTFS_IMAGE_NAME?}.${ARCH_ROOTFS?}.tar.gz
               rootfs_treehash: "${ROOTFS_HASH?}"
               uid: 1000
               gid: 1000

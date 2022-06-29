@@ -12,7 +12,6 @@ steps:
                 # Launch the upload jobs
                 - pipeline: .buildkite/pipelines/main/launch_upload_jobs.yml
                   signature_file: .buildkite/pipelines/main/launch_upload_jobs.yml.signature
-                  allow_hash_override: true
                   inputs:
                     - .buildkite/pipelines/main/launch_upload_jobs.yml
                     - .buildkite/utilities/arches_pipeline_upload.sh
@@ -27,14 +26,6 @@ steps:
                     - .buildkite/pipelines/main/platforms/upload_linux.yml
                     - .buildkite/pipelines/main/platforms/upload_macos.arches
                     - .buildkite/pipelines/main/platforms/upload_macos.yml
-                # Launch the code coverage job
-                - pipeline: .buildkite/pipelines/main/coverage/coverage.yml
-                  signature_file: .buildkite/pipelines/main/coverage/coverage.yml.signature
-                  allow_hash_override: true
-                  inputs:
-                    - .buildkite/pipelines/main/coverage/coverage.yml
-                    - .buildkite/pipelines/main/coverage/run_tests_parallel.jl
-                    - .buildkite/pipelines/main/coverage/upload_coverage.jl
         agents:
           queue: "julia"
           cryptic_capable: "true"
