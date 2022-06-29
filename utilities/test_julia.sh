@@ -111,3 +111,11 @@ fi
 
 echo "--- Run the Julia test suite"
 "${JULIA_BINARY}" ".buildkite/utilities/timeout.jl" ${JULIA_CMD_FOR_TESTS:?} -e "Base.runtests(\"${TESTS:?}\"; ncores = ${NCORES_FOR_TESTS:?})"
+exitVal=$?
+
+echo "--- Upload the test/results.json"
+if [[ -f "test/results.json" ]]; then
+    buildkite-agent artifact upload "test/results.json"
+fi
+
+exit $exitVal

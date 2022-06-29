@@ -6,9 +6,6 @@ steps:
         depends_on:
           - "build_${TRIPLET?}"
         plugins:
-          - staticfloat/cryptic#v2:
-              variables:
-                - BUILDKITE_ANALYTICS_TOKEN="U2FsdGVkX1/rrYa25MCNZvciipyrHGU3PnvuU79XCJmWkDGDbUhx9cAwcv5SDbcP"
           - JuliaCI/coreupload#v2:
               core_pattern: "**/*.core"
               compressor: "zstd"
@@ -31,10 +28,6 @@ steps:
               workspaces:
                 # Include `/cache/repos` so that our `git` version introspection works.
                 - "/cache/repos:/cache/repos"
-        - label: "Upload test results"
-          depends_on: "test_${TRIPLET?}"
-          allow_dependency_failure: true
-          commands: buildkite-agent artifact upload "test/results.json"
         timeout_in_minutes: ${TIMEOUT?}
         soft_fail: ${ALLOW_FAIL?}
         commands: "bash .buildkite/utilities/test_julia.sh"
