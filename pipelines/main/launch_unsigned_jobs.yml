@@ -84,6 +84,22 @@ steps:
               .buildkite/pipelines/main/platforms/test_macos.yml
         agents:
           queue: "julia"
+  - group: "Test i686-linux-gnu"
+    steps:
+      - label: "Launch the i686-linux-gnu test job"
+        plugins:
+          - JuliaCI/external-buildkite#v1:
+              version: "./.buildkite-external-version"
+              repo_url: "https://github.com/JuliaCI/julia-buildkite"
+        commands: |
+          # Launch the i686-linux-gnu test job
+          GROUP="Test i686-linux-gnu" \
+              ALLOW_FAIL="true" \
+              bash .buildkite/utilities/arches_pipeline_upload.sh \
+              .buildkite/pipelines/main/platforms/test_linux.32.arches \
+              .buildkite/pipelines/main/platforms/test_linux.32.yml
+        agents:
+          queue: "julia"
   - group: "Allow Fail"
     steps:
       - label: "Launch allowed-to-fail build jobs"
