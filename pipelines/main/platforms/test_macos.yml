@@ -18,6 +18,10 @@ steps:
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
         timeout_in_minutes: ${TIMEOUT?}
         soft_fail: ${ALLOW_FAIL?}
+        retry:
+          automatic:
+            - exit_status: 143 # this is the exit code we get from a timeout
+              limit: ${AUTOMATIC_RETRY_LIMIT?}
         commands: "bash .buildkite/utilities/test_julia.sh"
         agents:
           queue: "julia"

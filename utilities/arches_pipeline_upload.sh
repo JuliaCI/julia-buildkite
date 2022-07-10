@@ -22,7 +22,16 @@ fi
 
 SCRIPT_DIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 "${BASH}" "${SCRIPT_DIR}/arches_env.sh" "${ARCHES_FILE}" | while read env_map; do
-    # Export the environment mappings, then launch the yaml file
+    # 1. Export the environment mappings,
     eval "export ${env_map}"
+
+    # 2. Enable automatic retries if and only if this is not a pull request build.
+    if [[ "${BUILDKITE_PULL_REQUEST:?}" == "false" ]] ; then
+        export AUTOMATIC_RETRY_LIMIT=1
+    else
+        export AUTOMATIC_RETRY_LIMIT=0
+    fi
+
+    # 3. Launch the yaml file
     buildkite-agent pipeline upload "${YAML_FILE}"
 done
