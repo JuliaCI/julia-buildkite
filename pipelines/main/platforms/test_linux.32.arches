@@ -1,5 +1,5 @@
-# OS       TRIPLET                    ARCH           ARCH_ROOTFS    TIMEOUT    USE_RR   ROOTFS_TAG    ROOTFS_HASH
-linux      i686-linux-gnu             x86_64         i686           .          .        v5.26         6d4fd1e558e46f09f4103c26707550f66160476d
+# ROOTFS_IMAGE_NAME    TRIPLET                    ARCH           ARCH_ROOTFS    TIMEOUT    USE_RR   ROOTFS_TAG    ROOTFS_HASH
+tester_linux           i686-linux-gnu             x86_64         i686           .          .        v5.26         6d4fd1e558e46f09f4103c26707550f66160476d
 
 # These special lines allow us to embed default values for the columns above.
 # Any column without a default mapping here will simply substitute a `.` to the empty string

@@ -3,7 +3,6 @@ steps:
     steps:
     - label: "asan"
       key: "asan"
-      if: (build.source != "schedule") || (pipeline.slug == "julia-buildkite")
       plugins:
         - JuliaCI/external-buildkite#v1:
             version: "./.buildkite-external-version"

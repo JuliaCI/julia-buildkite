@@ -2,7 +2,7 @@
 # It is purely for keeping track of the changes we make to the webUI configuration; modifying this file has no effect.
 # We use the `cryptic` buildkite plugin to provide secrets management, which requires some integration into the WebUI's steps.
 steps:
-  - group: "Upload"
+  - group: "Launch scheduled jobs"
     steps:
       - label: "Unlock secrets, launch pipelines"
         agents:
@@ -19,11 +19,11 @@ steps:
               # but some of our signed pipelines can wait upon the completion of these unsigned
               # pipelines.
               unsigned_pipelines:
-                - .buildkite/pipelines/main/launch_unsigned_builders.yml
+                - .buildkite/pipelines/scheduled/launch_unsigned_builders.yml
 
               # Our signed pipelines must have a `signature` or `signature_file` parameter that
               # verifies the treehash of the pipeline itself and the inputs listed in `inputs`
               signed_pipelines:
-                - pipeline: .buildkite/pipelines/main/launch_signed_jobs.yml
-                  signature_file: .buildkite/pipelines/main/launch_signed_jobs.yml.signature
+                - pipeline: .buildkite/pipelines/scheduled/launch_signed_jobs.yml
+                  signature_file: .buildkite/pipelines/scheduled/launch_signed_jobs.yml.signature
         command: "true"

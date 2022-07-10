@@ -3,7 +3,6 @@ steps:
     steps:
       - label: "analyzegc"
         key: "analyzegc"
-        if: (build.source != "schedule") || (pipeline.slug == "julia-buildkite")
         plugins:
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"
