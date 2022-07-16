@@ -1,6 +1,6 @@
 using HTTP, JSON3, Scratch
 import HTTP: download
-using Base: UUID
+using Base: UUID, SHA1
 
 const buildkite_token_path = joinpath(@__DIR__, "buildkite_token")
 if !isfile(buildkite_token_path)
@@ -12,8 +12,8 @@ const buildkite_api = "https://api.buildkite.com/v2"
 function buildkite_headers()
     return ["Authorization" => "Bearer $(buildkite_token)"]
 end
-function buildkite_get(path::String)
-    return HTTP.get("$(path)", headers=buildkite_headers())
+function buildkite_get(path::String; kwargs...)
+    return HTTP.get("$(path)"; headers=buildkite_headers(), kwargs...)
 end
 
 struct BuildkiteJob
@@ -122,3 +122,45 @@ function find_sibling_buildkite_job(job::BuildkiteJob, sibling_key::String)
     end
     return nothing
 end
+
+function get_buildkite_pipeline_builds(organization_slug::String, pipeline_slug::String, branch::String; state::String = "finished", min_builds::Int = 50)
+    page_idx = 1
+    builds = []
+    while length(builds) < min_builds
+        @info("Requesting page $(page_idx)")
+        # Fetch first list of builds
+        builds_url = joinpath(
+            buildkite_api,
+            "organizations",
+            organization_slug,
+            "pipelines",
+            pipeline_slug,
+            "builds",
+        )
+        builds_params = [
+            "branch" => branch,
+            "state" => state,
+            "page" => page_idx
+        ]
+        r = buildkite_get(builds_url; query=builds_params)
+        append!(builds, JSON3.read(String(r.body)))
+        page_idx += 1
+    end
+    return builds
+end
+
+#=
+function find_next(resp)
+    link_headers = filter(((k, v),) -> k == "Link", r.headers)
+    if isempty(link_headers)
+        return nothing
+    end
+    link_header = last(only(link_headers))
+    next_lines = filter(l -> occursin("rel=\"next\"", l), split(link_header, ","))
+    if isempty(next_lines)
+        return nothing
+    end
+    next_link = first(split(only(next_lines), ";"))
+    return next_link[2:end-1]
+end
+=#
