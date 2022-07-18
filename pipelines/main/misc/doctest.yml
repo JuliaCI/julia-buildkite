@@ -23,7 +23,6 @@ steps:
                 - "/cache/repos:/cache/repos"
         commands: |
           # Download pre-built julia, extract into `usr/`
-          set -x
           buildkite-agent artifact download --step "build_x86_64-linux-gnu" 'julia-*-linux-x86_64.tar.gz' .
           mkdir -p ./usr
           tar -C ./usr --strip-components=1 -zxf julia-*-linux-x86_64.tar.gz

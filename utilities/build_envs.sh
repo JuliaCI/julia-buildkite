@@ -82,11 +82,6 @@ else
 fi
 export TAR_VERSION
 
-echo "--- tag debugging"
-echo "git tag:"
-git --no-pager tag
-
-
 
 # Build the filename that we'll upload as, and get the filename that will be built
 # These are not the same in situations such as `musl`, where the build system doesn't
