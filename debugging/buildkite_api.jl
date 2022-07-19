@@ -1,4 +1,4 @@
-using HTTP, JSON3, Scratch
+using HTTP, JSON3, Scratch, Dates
 import HTTP: download
 using Base: UUID, SHA1
 
@@ -123,7 +123,11 @@ function find_sibling_buildkite_job(job::BuildkiteJob, sibling_key::String)
     return nothing
 end
 
-function get_buildkite_pipeline_builds(organization_slug::String, pipeline_slug::String, branch::String; state::String = "finished", min_builds::Int = 50)
+function get_buildkite_pipeline_builds(organization_slug::String,
+                                       pipeline_slug::String,
+                                       branch::String;
+                                       state::String = "finished",
+                                       min_builds::Int = 50)
     page_idx = 1
     builds = []
     while length(builds) < min_builds
@@ -149,18 +153,39 @@ function get_buildkite_pipeline_builds(organization_slug::String, pipeline_slug:
     return builds
 end
 
-#=
-function find_next(resp)
-    link_headers = filter(((k, v),) -> k == "Link", r.headers)
-    if isempty(link_headers)
-        return nothing
+# Given a bunch of builds (from `get_buildkite_pipeline_builds()`), parse out each
+# individual job into a flat list of usable `Dict` objects.
+function parse_buildkite_build_jobs(builds::Vector)
+    jobs = Dict{String,Any}[]
+    dt_format = dateformat"y-m-dTH:M:S.sZ"
+    @info("Parsing $(length(builds)) builds...")
+    for build in builds
+        for job in build.jobs
+            # Skip jobs without a step key
+            if get(job, :step_key, nothing) === nothing
+                continue
+            end
+
+            # Skip jobs that never ran or finished
+            if get(job, :started_at, nothing) === nothing || get(job, :finished_at, nothing) === nothing
+                continue
+            end
+
+            push!(jobs, Dict(
+                "uuid" => UUID(job.id),
+                "key" => job.step_key,
+                "date" => DateTime(build.created_at, dt_format),
+                "elapsed" => (DateTime(job.finished_at, dt_format) - DateTime(job.started_at, dt_format)).value/1000,
+                "agent" => job.agent.name,
+                "state" => job.state,
+                "commit" => build.commit,
+                "log_url" => job.raw_log_url,
+                "web_url" => job.web_url,
+            ))
+        end
     end
-    link_header = last(only(link_headers))
-    next_lines = filter(l -> occursin("rel=\"next\"", l), split(link_header, ","))
-    if isempty(next_lines)
-        return nothing
-    end
-    next_link = first(split(only(next_lines), ";"))
-    return next_link[2:end-1]
+    return jobs
 end
-=#
+
+using DataFrames: DataFrame
+DataFrame(v::Vector{<:Dict}) = DataFrame(Dict(k => [j[k] for j in v] for k in keys(v[1])))
