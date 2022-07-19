@@ -3,6 +3,12 @@
 # First, extract information from our triplet
 source .buildkite/utilities/extract_triplet.sh
 
+# Apply fixups to our environment for when we're running on julia-buildkite pipeline
+if buildkite-agent meta-data exists BUILDKITE_JULIA_BRANCH; then
+    # `BUILDKITE_BRANCH` should refer to `julia.git`, not `julia-buildkite.git`
+    export BUILDKITE_BRANCH=$(buildkite-agent meta-data get BUILDKITE_JULIA_BRANCH)
+fi
+
 # Determine JULIA_CPU_TARGETS for different architectures
 JUlIA_CPU_TARGETS=()
 case "${ARCH?}" in
