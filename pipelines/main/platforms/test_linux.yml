@@ -36,6 +36,7 @@ steps:
           sandbox_capable: "true"
           os: "linux"
           arch: "${ARCH?}"
+          cpuset_limited: "true"
         env:
           JULIA_SHELL: "/bin/bash"
           TRIPLET: "${TRIPLET?}"
