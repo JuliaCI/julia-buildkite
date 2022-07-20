@@ -42,6 +42,7 @@ fi
 # Save the julia version we downloaded so that future jobs get the same version
 if ! buildkite-agent meta-data exists BUILDKITE_JULIA_VERSION; then
     buildkite-agent meta-data set BUILDKITE_JULIA_VERSION "$(git rev-parse HEAD)"
+    buildkite-agent meta-data set BUILDKITE_JULIA_BRANCH "${UPSTREAM_BRANCH}"
 fi
 
 # Export S3_BUCKET and S3_BUCKET_PREFIX, to force our CI to upload to a different S3 target than the actual CI pipeline would.

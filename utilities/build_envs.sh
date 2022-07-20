@@ -3,6 +3,12 @@
 # First, extract information from our triplet
 source .buildkite/utilities/extract_triplet.sh
 
+# Apply fixups to our environment for when we're running on julia-buildkite pipeline
+if buildkite-agent meta-data exists BUILDKITE_JULIA_BRANCH; then
+    # `BUILDKITE_BRANCH` should refer to `julia.git`, not `julia-buildkite.git`
+    export BUILDKITE_BRANCH=$(buildkite-agent meta-data get BUILDKITE_JULIA_BRANCH)
+fi
+
 # Determine JULIA_CPU_TARGETS for different architectures
 JUlIA_CPU_TARGETS=()
 case "${ARCH?}" in
@@ -81,11 +87,6 @@ else
     TAR_VERSION="${SHORT_COMMIT}"
 fi
 export TAR_VERSION
-
-echo "--- tag debugging"
-echo "git tag:"
-git --no-pager tag
-
 
 
 # Build the filename that we'll upload as, and get the filename that will be built
