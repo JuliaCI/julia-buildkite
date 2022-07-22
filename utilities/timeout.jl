@@ -44,8 +44,13 @@ end
 term_timeout = parse_time_period(get(ENV, "JL_TERM_TIMEOUT", "2h"))
 kill_timeout = parse_time_period(get(ENV, "JL_KILL_TIMEOUT", "30m"))
 
+verbose_logs_dir = mktempdir()
+env2 = copy(ENV)
+env2["JULIA_TEST_VERBOSE_LOGS_DIR"] = verbose_logs_dir
+cmd = setenv(`$(ARGS)`, env2)
+
 # Start our child process
-proc = run(`$(ARGS)`, (stdin, stdout, stderr); wait=false)
+proc = run(cmd, (stdin, stdout, stderr); wait=false)
 
 # Start a watchdog task
 timer_task = @async begin
@@ -72,6 +77,16 @@ end
 
 # Wait for the process to finish
 wait(proc)
+
+# Upload all log files in the `JULIA_TEST_VERBOSE_LOGS_DIR` directory
+cd(verbose_logs_dir) do
+    for (root, dirs, files) in walkdir(".")
+        for file in files
+            full_file_path = joinpath(root, file)
+            run(`buildkite-agent artifact upload $(full_file_path)`)
+        end
+    end
+end
 
 # Pass the exit code back up, including signals
 if proc.termsignal != 0

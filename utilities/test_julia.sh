@@ -40,9 +40,6 @@ export OPENBLAS_NUM_THREADS="${JULIA_CPU_THREADS}"
 unset JULIA_DEPOT_PATH
 unset JULIA_PKG_SERVER
 
-# Show the output from the Pkg tests
-export JULIA_PKG_TEST_QUIET="false"
-
 # Make sure that temp files and temp directories are created in a location that is
 # backed by real storage, and not by a tmpfs, as some tests don't like that on Linux
 if [[ "${OS}" == "linux" ]]; then
