@@ -10,6 +10,9 @@ steps:
         # 3. The build is a tag build AND the tag is `v*`.
         # 4. The pipeline is `julia-buildkite`.
         if: ((build.branch == "master") || (build.branch =~ /^release-/) || (build.tag =~ /^v/)) || (pipeline.slug == "julia-buildkite")
+        # Prevent multiple pipelines from pushing to the `git@github.com:JuliaLang/docs.julialang.org` repo simultaneously
+        concurrency: 1
+        concurrency_group: 'upload/julialang/upload_docs/docs_julialang_org'
         plugins:
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"
@@ -78,4 +81,3 @@ steps:
         env:
           # Receive cryptic token from parent job
           BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET: ${BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET?}
-
