@@ -15,6 +15,7 @@
 # Example:
 #   - JL_TERM_TIMEOUT=2h30m JL_KILL_TIMEOUT=600s julia timeout.jl cmd...
 
+include(joinpath(dirname(@__DIR__), "proc_utils.jl"))
 
 # Parse a time period such as "2h30m"
 function parse_time_period(period::AbstractString)
