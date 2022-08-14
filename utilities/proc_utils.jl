@@ -22,3 +22,11 @@ function mirror_exit_code(process::Base.Process)
     # If the process didn't signal, just mirror its exit code.
     exit(process.exitcode)
 end
+
+function get_bool_from_env(name::AbstractString, default_value::Bool)
+    value = get(ENV, name, "$(default_value)") |> strip |> lowercase
+    result = parse(Bool, value)::Bool
+    return result
+end
+
+const is_buildkite = get_bool_from_env("BUILDKITE", false)

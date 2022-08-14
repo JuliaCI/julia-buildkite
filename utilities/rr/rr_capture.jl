@@ -1,13 +1,6 @@
 import Dates, Pkg, Tar
 include(joinpath(dirname(@__DIR__), "proc_utils.jl"))
 
-function get_bool_from_env(name::AbstractString, default_value::Bool)
-    value = get(ENV, name, "$(default_value)") |> strip |> lowercase
-    result = parse(Bool, value)::Bool
-    return result
-end
-
-const is_buildkite         = get_bool_from_env("BUILDKITE",                  false)
 const always_save_rr_trace = get_bool_from_env("JULIA_ALWAYS_SAVE_RR_TRACE", false)
 
 function get_from_env(name::AbstractString)

@@ -15,6 +15,7 @@
 # Example:
 #   - JL_TERM_TIMEOUT=2h30m JL_KILL_TIMEOUT=600s julia timeout.jl cmd...
 
+include(joinpath(@__DIR__, "proc_utils.jl"))
 
 # Parse a time period such as "2h30m"
 function parse_time_period(period::AbstractString)
@@ -79,11 +80,13 @@ end
 wait(proc)
 
 # Upload all log files in the `JULIA_TEST_VERBOSE_LOGS_DIR` directory
-cd(verbose_logs_dir) do
-    for (root, dirs, files) in walkdir(".")
-        for file in files
-            full_file_path = joinpath(root, file)
-            run(`buildkite-agent artifact upload $(full_file_path)`)
+if is_buildkite
+    cd(verbose_logs_dir) do
+        for (root, dirs, files) in walkdir(".")
+            for file in files
+                full_file_path = joinpath(root, file)
+                run(`buildkite-agent artifact upload $(full_file_path)`)
+            end
         end
     end
 end
