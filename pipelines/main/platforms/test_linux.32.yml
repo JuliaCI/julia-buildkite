@@ -1,8 +1,8 @@
 steps:
   - group: "${GROUP?}"
     steps:
-      - label: ":linux: test ${TRIPLET?}${USE_RR-}"
-        key: "test_${TRIPLET?}${USE_RR-}"
+      - label: ":linux: test ${TRIPLET?}${USE_RR-}${i686_LABEL-}"
+        key: "test_${TRIPLET?}${USE_RR-}${i686_LABEL-}"
         notify:
           - github_commit_status:
               context: "${GROUP?}"
@@ -44,3 +44,4 @@ steps:
           JULIA_SHELL: "/bin/bash"
           TRIPLET: "${TRIPLET?}"
           USE_RR: "${USE_RR?}"
+          i686_GROUP: "${i686_GROUP?}"
