@@ -61,7 +61,7 @@ if [[ "${USE_RR-}" == "rr" ]] || [[ "${USE_RR-}" == "rr-net" ]]; then
     else
         export TESTS="${NETWORK_RELATED_TESTS:?} --ci"
     fi
-else
+elif [[ "${USE_RR-}" == "" ]]; then
     export JULIA_CMD_FOR_TESTS="${JULIA_BINARY}"
     export NCORES_FOR_TESTS="${JULIA_CPU_THREADS}"
     # export JULIA_NUM_THREADS="${JULIA_CPU_THREADS}" # TODO: uncomment this line once we support running CI with threads
@@ -73,14 +73,28 @@ else
     if [[ "${ARCH}" == "i686" ]] || [[ "${ARCH}" == "armv7l" ]]; then
         # We only run Pkg tests on non-32-bit operating systems, as we exhaust the
         # address space when running the Pkg tests pretty often.
-        TESTS="${TESTS} --skip Pkg"
+        export TESTS="${TESTS:?} --skip Pkg"
     fi
+
+    if [[ "${i686_GROUP-}" == "no-net" ]]; then
+        # We only run Pkg tests on non-32-bit operating systems, as we exhaust the
+        # address space when running the Pkg tests pretty often.
+        export TESTS="all --ci --skip Pkg Downloads"
+    elif [[ "${i686_GROUP-}" == "net" ]]; then
+        export TESTS="Downloads --ci"
+    elif [[ "${i686_GROUP-}" == "" ]]; then
+        :
+    else
+        echo "ERROR: invalid value for i686_GROUP: ${i686_GROUP-}"
+        exit 1
+    fi
+else
+    echo "ERROR: invalid value for USE_RR: ${USE_RR-}"
+    exit 1
 fi
 
 # Auto-set timeout to buildkite timeout minus 45m for most users
-echo BUILDKITE_TIMEOUT is ${BUILDKITE_TIMEOUT:?} # TODO: delete this line
 export JL_TERM_TIMEOUT="$((${BUILDKITE_TIMEOUT:?}-45))m"
-echo JL_TERM_TIMEOUT is ${JL_TERM_TIMEOUT:?} # TODO: delete this line
 
 echo "--- Print the list of test sets, and other useful environment variables"
 echo "JULIA_CMD_FOR_TESTS is:    ${JULIA_CMD_FOR_TESTS:?}"
