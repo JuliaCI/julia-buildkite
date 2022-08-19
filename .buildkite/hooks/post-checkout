@@ -4,8 +4,8 @@ set -euo pipefail
 
 # Buildkite users can trigger new builds with these values overridden to
 # test specific julia gitshas
-UPSTREAM_URL="${UPSTREAM_URL:-https://github.com/JuliaLang/julia.git}"
-UPSTREAM_BRANCH="${UPSTREAM_BRANCH:-master}"
+UPSTREAM_URL="${UPSTREAM_URL:-https://github.com/IanButterworth/julia.git}"
+UPSTREAM_BRANCH="${UPSTREAM_BRANCH:-ib/base_coverage_filenames}"
 
 # All of our workers are required to provide a default for the julia cache dir
 # We're going to cache repositories in here, just like buildkite itself would:
