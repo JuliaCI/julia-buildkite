@@ -5,7 +5,8 @@ steps:
         key:   "coverage"
         # Comment out the following `if:` statement for testing.
         # Please remember to uncomment it before merging the PR.
-        if: pipeline.slug == "julia-master-scheduled"
+        # TODO: uncomment before merge
+        # if: pipeline.slug == "julia-master-scheduled"
         plugins:
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"
