@@ -75,6 +75,11 @@ elif [[ "${USE_RR-}" == "" ]]; then
         # address space when running the Pkg tests pretty often.
         export TESTS="${TESTS:?} --skip Pkg"
     fi
+    
+    if [[ "${OS}" == "macos" ]]; then
+        # macos does some weird things with event handling which means the tests are unreliable
+        export TESTS="${TESTS:?} --skip FileWatching"
+    fi
 
     if [[ "${i686_GROUP-}" == "no-net" ]]; then
         # We only run Pkg tests on non-32-bit operating systems, as we exhaust the
