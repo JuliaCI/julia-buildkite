@@ -37,6 +37,7 @@ ${JULIA_BINARY} -e 'using InteractiveUtils; InteractiveUtils.versioninfo()'
 echo "--- Set some environment variables"
 # Prevent OpenBLAS from spinning up a large number of threads on our big machines
 export OPENBLAS_NUM_THREADS="${JULIA_CPU_THREADS}"
+export JULIA_TEST_IS_BASE_CI="true"
 unset JULIA_DEPOT_PATH
 unset JULIA_PKG_SERVER
 
