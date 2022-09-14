@@ -1,0 +1,63 @@
+steps:
+  - group: "Upload"
+    steps:
+      - label: ":windows: upload ${TRIPLET?}"
+        key:   "upload_${TRIPLET?}"
+        # We only upload to S3 if one of the following criteria are true:
+        # 1. The branch is `master`.
+        # 2. The branch is `release-*`.
+        # 3. The build is a tag build AND the tag is `v*`.
+        # 4. The pipeline is `julia-buildkite`.
+        if: (build.branch == "master") || (build.branch =~ /^release-/) || (build.tag =~ /^v/) || (pipeline.slug == "julia-buildkite")
+        depends_on:
+          # Wait for the builder to finish
+          - "build_${TRIPLET?}"
+          # Wait for the tester to finish
+          - "test_${TRIPLET?}"
+        # Prevent multiple pipelines from uploading to S3 simultaneously
+        # It is okay for two different triplets to upload simultaneously
+        concurrency: 1
+        concurrency_group: 'upload/julialangnightlies/${TRIPLET?}'
+        plugins:
+          - JuliaCI/external-buildkite#v1:
+              version: "./.buildkite-external-version"
+              repo_url: "https://github.com/JuliaCI/julia-buildkite"
+          - staticfloat/cryptic#v2:
+              variables:
+                - AWS_ACCESS_KEY_ID="U2FsdGVkX184v87+NPs3j9r/JoIuOrYt4/Z4wnRdklnY17NP8C8AMZvWYLJfT9t1"
+                - AWS_SECRET_ACCESS_KEY="U2FsdGVkX1+qptnxR/Mo5jZdH8OQfflRPiQBEhjgZIiTpn8KNCJYh/Cb8xxaUWazlcM9ceOlo0InDubL+J8zdg=="
+                - WINDOWS_CODESIGN_PASSWORD="U2FsdGVkX1+wiqniliFf7YWn1f/Y2rppITsOMvLGgK8n+GYWXWJH+POojLhEwU75"
+              files:
+                - .buildkite/secrets/tarball_signing.gpg
+                - .buildkite/secrets/windows_codesigning.pfx
+          - docker#v3.13.0:
+              # We always use `x86_64` here, as it doesn't matter what the compiler is for uploading
+              image: "juliapackaging/package-windows-x86_64:${DOCKER_TAG?}"
+              always-pull: true
+              command: ["bash", ".buildkite/utilities/upload_julia.sh"]
+              propagate-environment: true
+              volumes:
+                # Mount buildkite-agent as well
+                - "C:\\buildkite-agent\\bin:C:\\buildkite-agent\\bin"
+              environment:
+                # We have to list these here, because buildkite doesn't automatically
+                # include environment-hook-set variables in a way that the docker
+                # plugin finds.  It's annoying, but at least we have a workaround.
+                - "JULIA_CPU_THREADS"
+                # Have to include this for `buildkite-agent` to work:
+                - "BUILDKITE_AGENT_ACCESS_TOKEN"
+                # Have to include these for codesigning and uploading
+                - "WINDOWS_CODESIGN_PASSWORD"
+                - "AWS_ACCESS_KEY_ID"
+                - "AWS_SECRET_ACCESS_KEY"
+                # These control where we upload, important when running on julia-buildkite
+                - "S3_BUCKET"
+                - "S3_BUCKET_PREFIX"
+        timeout_in_minutes: ${TIMEOUT?}
+        agents:
+          queue: "julia"
+          os: "windows"
+        env:
+          # Receive cryptic token from parent job
+          BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET: ${BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET?}
+          TRIPLET: "${TRIPLET?}"

@@ -1,0 +1,21 @@
+steps:
+  - group: "${GROUP?}"
+    steps:
+      - label: ":windows: test ${TRIPLET?}"
+        key: "test_${TRIPLET?}"
+        depends_on:
+          - "build_${TRIPLET?}"
+        plugins:
+          - JuliaCI/external-buildkite#v1:
+              version: "./.buildkite-external-version"
+              repo_url: "https://github.com/JuliaCI/julia-buildkite"
+        timeout_in_minutes: ${TIMEOUT?}
+        soft_fail: ${ALLOW_FAIL?}
+        commands: "bash .buildkite/utilities/test_julia.sh"
+        agents:
+          queue: "julia"
+          os: "windows"
+          arch: "${ARCH}"
+        env:
+          JULIA_SHELL: "/bin/bash"
+          TRIPLET: "${TRIPLET?}"

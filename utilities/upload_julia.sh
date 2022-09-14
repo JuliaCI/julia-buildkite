@@ -48,6 +48,38 @@ if [[ "${OS}" == "macos" ]]; then
 
     # Add the `.dmg` to our upload targets
     UPLOAD_EXTENSIONS+=( "dmg" )
+elif [[ "${OS}" == "windows" ]]; then
+    echo "--- [windows] Extract pre-built Julia"
+    mkdir -p "${JULIA_INSTALL_DIR}"
+    tar zxf "${UPLOAD_FILENAME}.tar.gz" -C "${JULIA_INSTALL_DIR}" --strip-components 1
+
+    echo "--- [windows] install innosetup"
+    mkdir -p dist-extras
+    curl -L -o 'dist-extras/is.exe' 'https://cache.julialang.org/https://www.jrsoftware.org/download.php/is.exe'
+    chmod a+x dist-extras/is.exe
+    MSYS2_ARG_CONV_EXCL='*' ./dist-extras/is.exe \
+        /DIR="$(cygpath -w "$(pwd)/dist-extras/inno")" \
+        /PORTABLE=1 \
+        /CURRENTUSER \
+        /VERYSILENT
+    rm -f dist-extras/is.exe
+
+    echo "--- [windows] make exe"
+    codesign_script="$(pwd)/.buildkite/utilities/windows/codesign.sh"
+    certificate="$(pwd)/.buildkite/secrets/windows_codesigning.pfx"
+    iss_file="$(pwd)/.buildkite/utilities/windows/build-installer.iss"
+    MSYS2_ARG_CONV_EXCL='*' ./dist-extras/inno/iscc.exe \
+        /DAppVersion=${JULIA_VERSION} \
+        /DSourceDir="$(cygpath -w "$(pwd)/${JULIA_INSTALL_DIR}")" \
+        /DRepoDir="$(cygpath -w "$(pwd)")" \
+        /F"${UPLOAD_FILENAME}" \
+        /O"$(cygpath -w "$(pwd)")" \
+        /Dsign=true \
+        /Smysigntool="bash.exe '${codesign_script}' --certificate='${certificate}' \$f" \
+        "$(cygpath -w "${iss_file}")"
+
+    # Add the `.exe` to our upload targets
+    UPLOAD_EXTENSIONS+=( "exe" )
 fi
 
 echo "--- GPG-sign the tarball"

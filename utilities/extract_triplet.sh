@@ -27,7 +27,7 @@ case "${TRIPLET}" in
         OS="musl"
         ;;
     # Windows
-    *-mingw)
+    *-mingw*)
         OS="windows"
         ;;
     # macOS
