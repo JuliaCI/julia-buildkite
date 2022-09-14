@@ -10,12 +10,14 @@ set -euo pipefail
 source .buildkite/utilities/build_envs.sh
 source .buildkite/utilities/word.sh
 
-echo "--- Print kernel and compiler versions"
+echo "--- Print software versions"
 uname -a
 echo
 cc -v
 echo
 ld -v
+echo
+buildkite-agent --version
 
 echo "--- Collect make options"
 # These are the flags we'll provide to `make`
@@ -55,11 +57,14 @@ if [ -n "$(git status --short)" ]; then
 fi
 
 echo "--- Print Julia version info"
-./julia -e 'using InteractiveUtils; InteractiveUtils.versioninfo()'
+# use `JULIA_BINARY` since it has the `.exe` extension already determined,
+# but strip off the first directory and replace it with `usr` since we haven't installed yet.
+JULIA_EXE="./usr/${JULIA_BINARY#*/}"
+${JULIA_EXE} -e 'using InteractiveUtils; InteractiveUtils.versioninfo()'
 
 echo "--- Quick consistency checks"
-./julia -e "import Test; Test.@test Sys.ARCH == :${ARCH:?}"
-./julia -e "import Test; Test.@test Sys.WORD_SIZE == ${EXPECTED_WORD_SIZE:?}"
+${JULIA_EXE} -e "import Test; Test.@test Sys.ARCH == :${ARCH:?}"
+${JULIA_EXE} -e "import Test; Test.@test Sys.WORD_SIZE == ${EXPECTED_WORD_SIZE:?}"
 
 echo "--- Create build artifacts"
 make "${MFLAGS[@]}" binary-dist

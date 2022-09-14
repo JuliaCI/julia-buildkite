@@ -1,0 +1,34 @@
+steps:
+  - group: "${GROUP?}"
+    steps:
+      - label: ":windows: build ${TRIPLET?}"
+        key: "build_${TRIPLET?}"
+        plugins:
+          - JuliaCI/external-buildkite#v1:
+              version: "./.buildkite-external-version"
+              repo_url: "https://github.com/JuliaCI/julia-buildkite"
+          - docker#v3.13.0:
+              image: "juliapackaging/package-windows-${DOCKER_ARCH?}:${DOCKER_TAG?}"
+              always-pull: true
+              command: ["bash", ".buildkite/utilities/build_julia.sh"]
+              propagate-environment: true
+              volumes:
+                # Mount buildkite-agent as well
+                - "C:\\buildkite-agent\\bin:C:\\buildkite-agent\\bin"
+              environment:
+                # We have to list this here, because buildkite doesn't automatically
+                # include environment-hook-set variables in a way that the docker
+                # plugin finds.  It's annoying, but at least we have a workaround.
+                - "JULIA_CPU_THREADS"
+                # Have to include this for `buildkite-agent` to work:
+                - "BUILDKITE_AGENT_ACCESS_TOKEN"
+        timeout_in_minutes: ${TIMEOUT?}
+        soft_fail: ${ALLOW_FAIL?}
+        agents:
+          queue: "julia"
+          os: "windows"
+          arch: "${ARCH?}"
+        env:
+          # Receive some environment mappings from our templating engine
+          TRIPLET: "${TRIPLET?}"
+          MAKE_FLAGS: "${MAKE_FLAGS?}"

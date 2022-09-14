@@ -64,6 +64,12 @@ case "${ARCH?}" in
         ;;
 esac
 
+# Determine if we need to add `.exe` onto the end of our executables
+EXE=""
+if [[ "${OS}" == "windows" ]]; then
+    EXE=".exe"
+fi
+
 # Join and output
 JULIA_CPU_TARGET="$(printf ";%s" "${JULIA_CPU_TARGETS[@]}")"
 export JULIA_CPU_TARGET="${JULIA_CPU_TARGET:1}"
@@ -95,7 +101,7 @@ export TAR_VERSION
 export JULIA_BINARYDIST_FILENAME="$(make print-JULIA_BINARYDIST_FILENAME | cut -c27- | tr -s ' ')"
 
 export JULIA_INSTALL_DIR="julia-${TAR_VERSION}"
-JULIA_BINARY="${JULIA_INSTALL_DIR}/bin/julia"
+JULIA_BINARY="${JULIA_INSTALL_DIR}/bin/julia${EXE}"
 
 # By default, we upload to `julialangnightlies/bin`, but we allow this to be overridden
 S3_BUCKET="${S3_BUCKET:-julialangnightlies}"
@@ -138,24 +144,38 @@ fi
 
 # We used to name our darwin builds as `julia-*-mac64.tar.gz`, instead of `julia-*-macos-x86_64.tar.gz`.
 # Let's copy things over to the `mac` OS name for backwards compatibility:
-if [[ "${OS?}" == "macos" ]]; then
+if [[ "${OS?}" == "macos" ]] || [[ "${OS?}" == "windows" ]]; then
+    if [[ "${OS?}" == "macos" ]]; then
+        FOLDER_OS="mac"
+        SHORT_OS="mac"
+    elif [[ "${OS?}" == "windows" ]]; then
+        FOLDER_OS="winnt"
+        SHORT_OS="win"
+    else
+        FOLDER_OS="${OS}"
+        SHORT_OS="${OS}"
+    fi
+
     if [[ "${ARCH}" == "x86_64" ]]; then
         FOLDER_ARCH="x64"
         SHORT_ARCH="64"
+    elif [[ "${ARCH}" == "i686" ]]; then
+        FOLDER_ARCH="x86"
+        SHORT_ARCH="32"
     else
         FOLDER_ARCH="${ARCH}"
         SHORT_ARCH="${ARCH}"
     fi
     
     # First, we have the canonical fully-specified upload target
-    UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/mac/${FOLDER_ARCH}/${MAJMIN?}/julia-${TAR_VERSION?}-mac${SHORT_ARCH}" )
+    UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${FOLDER_OS}/${FOLDER_ARCH}/${MAJMIN?}/julia-${TAR_VERSION?}-${SHORT_OS}${SHORT_ARCH}" )
 
     # Next, we have the "majmin/latest" upload target
-    UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/mac/${FOLDER_ARCH}/${MAJMIN?}/julia-latest-mac${SHORT_ARCH}" )
+    UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${FOLDER_OS}/${FOLDER_ARCH}/${MAJMIN?}/julia-latest-${SHORT_OS}${SHORT_ARCH}" )
     
     # If we're on `master` and we're uploading, we consider ourselves "absolute latest"
     if [[ "${BUILDKITE_BRANCH}" == "master" ]]; then
-        UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/mac/${FOLDER_ARCH}/julia-latest-mac${SHORT_ARCH}" )
+        UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${FOLDER_OS}/${FOLDER_ARCH}/julia-latest-${SHORT_OS}${SHORT_ARCH}" )
     fi
 fi
 
