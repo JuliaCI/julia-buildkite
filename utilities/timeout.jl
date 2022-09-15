@@ -52,6 +52,7 @@ cmd = setenv(`$(ARGS)`, env2)
 
 # Start our child process
 proc = run(cmd, (stdin, stdout, stderr); wait=false)
+proc_pid = try getpid(proc) catch; "<unknown>" end
 
 # Start a watchdog task
 timer_task = @async begin
@@ -59,13 +60,13 @@ timer_task = @async begin
 
     # If the process is still running, ask it nicely to terminate
     if isopen(proc)
-        println(stderr, "\n\nProcess failed to exit within $(term_timeout)s, requesting termination.")
+        println(stderr, "\n\nProcess failed to exit within $(term_timeout)s, requesting termination of PID $(proc_pid).")
         kill(proc, Base.SIGTERM)
 
         # If the process doesn't stop after a further `kill_timeout`, force-kill it
         sleep(kill_timeout)
         if isopen(proc)
-            println(stderr, "\n\nProcess failed to cleanup within $(kill_timeout)s, force-killing!")
+            println(stderr, "\n\nProcess failed to cleanup within $(kill_timeout)s, force-killing PID $(proc_pid)!")
             kill(proc, Base.SIGKILL)
             exit(1)
         end
