@@ -3,8 +3,8 @@ steps:
     steps:
       - label: "pdf_docs_build"
         key: pdf_docs_build
-        # depends_on:
-        #   - "build_x86_64-linux-gnu"
+        depends_on:
+          - "build_x86_64-linux-gnu"
         plugins:
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"
