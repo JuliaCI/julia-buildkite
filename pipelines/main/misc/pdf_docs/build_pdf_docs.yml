@@ -42,7 +42,7 @@ steps:
 
           echo "--- Upload the PDF files as Buildkite artifacts"
           find . -type f -name "*.pdf"
-          find . -type f -name "*.pdf" -exec buildkite-agent artifact upload {} \;
+          cd doc/_build/pdf/en && buildkite-agent artifact upload TheJuliaLanguage.pdf
         timeout_in_minutes: 120
         agents:
           queue: "julia"
