@@ -1,0 +1,51 @@
+steps:
+  - group: "Check"
+    steps:
+      - label: "pdf_docs_build"
+        key: pdf_docs_build
+        depends_on:
+          - "build_x86_64-linux-gnu"
+        plugins:
+          - JuliaCI/external-buildkite#v1:
+              version: "./.buildkite-external-version"
+              repo_url: "https://github.com/JuliaCI/julia-buildkite"
+          - JuliaCI/julia#v1:
+              # Drop default "registries" directory, so it is not persisted from execution to execution
+              persist_depot_dirs: packages,artifacts,compiled
+              version: '1'
+          - staticfloat/sandbox#v1:
+              rootfs_url: https://github.com/JuliaCI/rootfs-images/releases/download/v5.38/latex.x86_64.tar.gz
+              rootfs_treehash: "be2d12d899ee334c470a79f6d3f3faa4e63c7c3c"
+              uid: 1000
+              gid: 1000
+              workspaces:
+                # Include `/cache/repos` so that our `git` version introspection works.
+                - "/cache/repos:/cache/repos"
+        commands: |
+          echo "--- Download pre-built julia, extract into usr/"
+          buildkite-agent artifact download --step "build_x86_64-linux-gnu" 'julia-*-linux-x86_64.tar.gz' .
+          mkdir -p ./usr
+          tar -C ./usr --strip-components=1 -zxf julia-*-linux-x86_64.tar.gz
+          ln -s ./usr/bin/julia ./julia
+
+          echo "--- Print Julia version info"
+          export JULIA_NUM_THREADS=1
+          ./julia -e 'using InteractiveUtils; InteractiveUtils.versioninfo()'
+
+          echo "--- Set some environment variables and create some directories"
+          export DOCUMENTER_LATEX_DEBUG="$$(pwd)/latex-debug-logs"
+          mkdir -p $${DOCUMENTER_LATEX_DEBUG:?}
+          echo "DOCUMENTER_LATEX_DEBUG is $${DOCUMENTER_LATEX_DEBUG:?}"
+
+          echo "--- Build the PDF"
+          ./julia .buildkite/pipelines/main/misc/pdf_docs/make.jl
+
+          echo "--- Upload the PDF files as Buildkite artifacts"
+          find . -type f -name "*.pdf"
+          cd doc/_build/pdf/en && buildkite-agent artifact upload TheJuliaLanguage.pdf
+        timeout_in_minutes: 120
+        agents:
+          queue: "julia"
+          sandbox_capable: "true"
+          os: "linux"
+          arch: "x86_64"
