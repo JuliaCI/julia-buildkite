@@ -60,14 +60,16 @@ timer_task = @async begin
 
     # If the process is still running, ask it nicely to terminate
     if isopen(proc)
-        println(stderr, "\n\nProcess failed to exit within $(term_timeout)s, requesting termination of PID $(proc_pid).")
+        println(stderr, "\n\nProcess failed to exit within $(term_timeout)s, requesting termination (SIGTERM) of PID $(proc_pid).")
         kill(proc, Base.SIGTERM)
+        println(stderr, "\n\nSent SIGTERM to PID $(proc_pid).")
 
         # If the process doesn't stop after a further `kill_timeout`, force-kill it
         sleep(kill_timeout)
         if isopen(proc)
-            println(stderr, "\n\nProcess failed to cleanup within $(kill_timeout)s, force-killing PID $(proc_pid)!")
+            println(stderr, "\n\nProcess failed to cleanup within $(kill_timeout)s, force-killing (SIGKILL) PID $(proc_pid)!")
             kill(proc, Base.SIGKILL)
+            println(stderr, "\n\nSent SIGKILL to PID $(proc_pid).")
             exit(1)
         end
     end
