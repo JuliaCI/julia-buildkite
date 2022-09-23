@@ -63,7 +63,8 @@ if [[ "${USE_RR-}" == "rr" ]] || [[ "${USE_RR-}" == "rr-net" ]]; then
         export TESTS="${NETWORK_RELATED_TESTS:?} --ci"
     fi
 elif [[ "${USE_RR-}" == "" ]]; then
-    export JULIA_CMD_FOR_TESTS="${JULIA_BINARY}"
+    # Run inside of a timeout
+    export JULIA_CMD_FOR_TESTS="${JULIA_BINARY} .buildkite/utilities/timeout.jl ${JULIA_BINARY}"
     export NCORES_FOR_TESTS="${JULIA_CPU_THREADS}"
     # export JULIA_NUM_THREADS="${JULIA_CPU_THREADS}" # TODO: uncomment this line once we support running CI with threads
     export JULIA_NUM_THREADS=1 # TODO: delete this line once we support running CI with threads
@@ -118,4 +119,4 @@ if [[ -z "${USE_RR-}" ]]; then
 fi
 
 echo "--- Run the Julia test suite"
-"${JULIA_BINARY}" ".buildkite/utilities/timeout.jl" ${JULIA_CMD_FOR_TESTS:?} -e "Base.runtests(\"${TESTS:?}\"; ncores = ${NCORES_FOR_TESTS:?})"
+${JULIA_CMD_FOR_TESTS:?} -e "Base.runtests(\"${TESTS:?}\"; ncores = ${NCORES_FOR_TESTS:?})"
