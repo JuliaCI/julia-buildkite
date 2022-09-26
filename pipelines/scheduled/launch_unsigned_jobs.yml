@@ -35,3 +35,4 @@ steps:
               .buildkite/pipelines/main/platforms/test_linux.yml
         agents:
           queue: "julia"
+          os: "linux"

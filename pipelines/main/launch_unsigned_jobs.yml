@@ -38,6 +38,7 @@ steps:
               .buildkite/pipelines/main/platforms/build_macos.yml
         agents:
           queue: "julia"
+          os: "linux"
   - group: "Check"
     notify:
       - github_commit_status:
@@ -60,6 +61,7 @@ steps:
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/sanitizers/tsan.yml
         agents:
           queue: "julia"
+          os: "linux"
   - group: "Test"
     notify:
       - github_commit_status:
@@ -85,6 +87,7 @@ steps:
               .buildkite/pipelines/main/platforms/test_macos.yml
         agents:
           queue: "julia"
+          os: "linux"
   - group: "Test i686-linux-gnu"
     steps:
       - label: "Launch the i686-linux-gnu test job"
@@ -101,6 +104,7 @@ steps:
               .buildkite/pipelines/main/platforms/test_linux.32.yml
         agents:
           queue: "julia"
+          os: "linux"
   - group: "Allow Fail"
     steps:
       - label: "Launch allowed-to-fail build jobs"
@@ -123,6 +127,7 @@ steps:
               .buildkite/pipelines/main/platforms/build_macos.yml
         agents:
           queue: "julia"
+          os: "linux"
       - label: "Launch allowed-to-fail test jobs"
         plugins:
           - JuliaCI/external-buildkite#v1:
@@ -143,3 +148,4 @@ steps:
               .buildkite/pipelines/main/platforms/test_macos.yml
         agents:
           queue: "julia"
+          os: "linux"
