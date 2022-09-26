@@ -20,6 +20,9 @@ case "${TRIPLET}" in
     *-gnusrcassert) # both "from source" and assert
         OS="linuxsrcassert"
         ;;
+    *-gnunogpl) # builds that use `USE_GPL_LIBS=0`
+        OS="linuxnogpl"
+        ;;
     *-musl)
         OS="musl"
         ;;
@@ -30,6 +33,9 @@ case "${TRIPLET}" in
     # macOS
     *-apple-darwin)
         OS="macos"
+        ;;
+    *-apple-darwinnogpl) # builds that use `USE_GPL_LIBS=0`
+        OS="macosnogpl"
         ;;
     # FreeBSD
     *-freebsd)
