@@ -8,6 +8,7 @@ steps:
         agents:
           queue: "julia"
           cryptic_capable: "true"
+          os: "linux"
         plugins:
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"
