@@ -4,7 +4,10 @@ using Base: UUID, SHA1
 
 const buildkite_token_path = joinpath(@__DIR__, "buildkite_token")
 if !isfile(buildkite_token_path)
-    error("You must decrypt the current repository to gain access to the buildkite token!")
+    error(string(
+        "You must decrypt the current repository to gain access to the buildkite token, ",
+        "or go to https://buildkite.com/user/api-access-tokens and create a new token ",
+        "with all read permissions and save it to $(buildkite_token_path)"))
 end
 const buildkite_token = strip(String(read(buildkite_token_path)))
 const buildkite_api = "https://api.buildkite.com/v2"
