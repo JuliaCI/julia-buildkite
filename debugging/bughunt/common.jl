@@ -16,6 +16,9 @@ struct BughuntBuildInfo
     # Which version of Julia was being built/tested
     julia_commit::SHA1
 
+    # Which repository this commit is contained within (for 3rd party PRs)
+    julia_repo::String
+
     # Any relevant artifacts that should be downloaded
     artifacts::Vector{BuildkiteArtifact}
 end
@@ -66,6 +69,12 @@ function BughuntBuildInfo(job::BuildkiteJob)
         throw(ArgumentError("Cannot bughunt step without sandbox plugin!"))
     end
 
+    # If this is a PR, we'll have a pull request repo field, to track 3rd party PR repo urls
+    # If it's not a PR, this will be empty, so we should just use the typical repo url
+    repo_url = env["BUILDKITE_PULL_REQUEST_REPO"]
+    if isempty(repo_url)
+        repo_url = env["BUILDKITE_REPO"]
+    end
 
     return BughuntBuildInfo(
         platform,
@@ -74,6 +83,7 @@ function BughuntBuildInfo(job::BuildkiteJob)
         rootfs_uid,
         rootfs_gid,
         SHA1(env["BUILDKITE_COMMIT"]),
+        repo_url,
         artifacts,
     )
 end
@@ -229,7 +239,7 @@ function collect_resources(build_info::BughuntBuildInfo, prefix::String;
             # Collect julia checkout
             Base.errormonitor(@async begin
                 julia_checkout_dir = joinpath(prefix, "julia.git")
-                get_julia_checkout(build_info.julia_commit, julia_checkout_dir)
+                get_julia_checkout(build_info.julia_commit, julia_checkout_dir; julia_url=build_info.julia_repo)
                 generate_gdb_sourcedir_init(prefix, julia_checkout_dir)
                 put!(readme_channel, "source_checkout")
             end)
