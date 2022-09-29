@@ -6,6 +6,12 @@
 
 If you are a maintainer, and you want to re-sign all of the signatures, here are the steps:
 
+### If you only have access to the _repository_ private key
+
+TODO: write these instructions.
+
+### If you have access to the _agent_ private key
+
 ```
 git clone git@github.com:JuliaCI/julia-buildkite.git
 cd julia-buildkite
