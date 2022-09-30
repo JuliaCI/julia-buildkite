@@ -52,7 +52,11 @@ if [[ "${OS}" == "linux" ]]; then
     mkdir -p ${TMPDIR}
 fi
 
-# If we're running inside of `rr`, limit the number of threads
+# By default, we'll run all tests and skip nothing
+TESTS_TO_RUN=( "all" )
+TESTS_TO_SKIP=()
+
+# If we're running inside of `rr`, limit the number of threads and split our tests
 if [[ "${USE_RR-}" == "rr" ]] || [[ "${USE_RR-}" == "rr-net" ]]; then
     export JULIA_CMD_FOR_TESTS="${JULIA_BINARY} .buildkite/utilities/rr/rr_capture.jl ${JULIA_BINARY}"
     export NCORES_FOR_TESTS="parse(Int, ENV[\"JULIA_RRCAPTURE_NUM_CORES\"])"
@@ -60,43 +64,51 @@ if [[ "${USE_RR-}" == "rr" ]] || [[ "${USE_RR-}" == "rr-net" ]]; then
 
     # rr: all tests EXCEPT the network-related tests
     # rr-net: ONLY the network-related tests
-    export NETWORK_RELATED_TESTS="Artifacts Downloads download LazyArtifacts LibGit2/online Pkg"
+    NETWORK_RELATED_TESTS=( Artifacts Downloads download LazyArtifacts LibGit2/online Pkg )
     if [[ "${USE_RR-}" == "rr" ]]; then
-        export TESTS="all --ci --skip ${NETWORK_RELATED_TESTS:?}"
-    else
-        export TESTS="${NETWORK_RELATED_TESTS:?} --ci"
+        TESTS_TO_SKIP+=( ${NETWORK_RELATED_TESTS[@]} )
+    elif [[ "${USE_RR-}" == "rr-net" ]]; then
+        # Overwrite TESTS_TO_RUN, to get rid of default `"all"`
+        TESTS_TO_RUN=( ${NETWORK_RELATED_TESTS[@]} )
     fi
 elif [[ "${USE_RR-}" == "" ]]; then
     # Run inside of a timeout
     export JULIA_CMD_FOR_TESTS="${JULIA_BINARY} .buildkite/utilities/timeout.jl ${JULIA_BINARY}"
     export NCORES_FOR_TESTS="${JULIA_CPU_THREADS}"
-    # export JULIA_NUM_THREADS="${JULIA_CPU_THREADS}" # TODO: uncomment this line once we support running CI with threads
+    export JULIA_NUM_THREADS="${JULIA_CPU_THREADS}"
     export JULIA_NUM_THREADS=1 # TODO: delete this line once we support running CI with threads
 
-    # Run all tests; `--ci` asserts that networking is available
-    export TESTS="all --ci"
-
-    if [[ "${ARCH}" == "i686" ]] || [[ "${ARCH}" == "armv7l" ]]; then
-        # We only run Pkg tests on non-32-bit operating systems, as we exhaust the
-        # address space when running the Pkg tests pretty often.
-        export TESTS="${TESTS:?} --skip Pkg"
+    # We don't run `Pkg` on any 32-bit platforms, since it uses too much memory
+    if [[ "${ARCH}" == i686 ]] || [[ "${ARCH}" == "armv7l" ]]; then
+        TESTS_TO_SKIP+=( Pkg )
     fi
 
     if [[ "${i686_GROUP-}" == "no-net" ]]; then
-        # We only run Pkg tests on non-32-bit operating systems, as we exhaust the
-        # address space when running the Pkg tests pretty often.
-        export TESTS="all --ci --skip Pkg Downloads"
+        # We skip running Downloads on the `no-net` runner`
+        TESTS_TO_SKIP+=( Downloads )
     elif [[ "${i686_GROUP-}" == "net" ]]; then
-        export TESTS="Downloads --ci"
+        # We run only Downloads on the `net` runner
+        TESTS_TO_RUN=( "Downloads" )
+        TESTS_TO_SKIP=()
     elif [[ "${i686_GROUP-}" == "" ]]; then
         :
-    else
-        echo "ERROR: invalid value for i686_GROUP: ${i686_GROUP-}"
-        exit 1
+    fi
+
+    # Disable `Profile` on win32, as our backtraces are extremely slow.
+    if [[ "${OS} ${ARCH}" == "windows i686" ]]; then
+        TESTS_TO_SKIP+=( "Profile" )
     fi
 else
     echo "ERROR: invalid value for USE_RR: ${USE_RR-}"
     exit 1
+fi
+
+# Build our `TESTS` string
+# `--ci` asserts that networking is available
+if [[ "${#TESTS_TO_SKIP[@]}" -gt 0 ]]; then
+    export TESTS="${TESTS_TO_RUN[@]} --ci --skip ${TESTS_TO_SKIP[@]}"
+else
+    export TESTS="${TESTS_TO_RUN[@]} --ci"
 fi
 
 # Auto-set timeout to buildkite timeout minus 45m for most users
