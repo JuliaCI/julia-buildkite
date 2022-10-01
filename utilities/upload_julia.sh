@@ -14,9 +14,8 @@ buildkite-agent artifact download "${UPLOAD_FILENAME}.tar.gz" .
 
 # These are the extensions that we will always upload
 UPLOAD_EXTENSIONS=("tar.gz" "tar.gz.asc")
-
 # If we're on macOS, we need to re-sign the tarball
-if [[ "${OS}" == "macos" ]]; then
+if [[ "${OS}" == "macos" || "${OS}" == "macosnogpl" ]]; then
     echo "--- [mac] Unlock keychain"
 
     # This _must_ be an absolute path

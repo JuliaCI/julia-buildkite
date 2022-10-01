@@ -16,6 +16,23 @@ steps:
                     - .buildkite/pipelines/scheduled/coverage/coverage.yml
                     - .buildkite/pipelines/scheduled/coverage/run_tests_parallel.jl
                     - .buildkite/pipelines/scheduled/coverage/upload_coverage.jl
+                # Launch the upload jobs
+                - pipeline: .buildkite/pipelines/scheduled/launch_upload_jobs.yml
+                  signature_file: .buildkite/pipelines/scheduled/launch_upload_jobs.yml.signature
+                  inputs:
+                    - .buildkite/pipelines/main/launch_upload_jobs.yml
+                    - .buildkite/utilities/arches_pipeline_upload.sh
+                    - .buildkite/utilities/arches_env.sh
+                    - .buildkite/utilities/build_envs.sh
+                    - .buildkite/utilities/extract_triplet.sh
+                    - .buildkite/utilities/upload_julia.sh
+                    - .buildkite/utilities/sign_tarball.sh
+                    - .buildkite/utilities/macos/build_dmg.sh
+                    - .buildkite/utilities/macos/codesign.sh
+                    - .buildkite/pipelines/scheduled/platforms/upload_linux.no_gpl.yml
+                    - .buildkite/pipelines/scheduled/platforms/upload_macos.no_gpl.yml
+                    - .buildkite/pipelines/scheduled/platforms/upload_linux.no_gpl.arches
+                    - .buildkite/pipelines/scheduled/platforms/upload_macos.no_gpl.arches
         agents:
           queue: "julia"
           cryptic_capable: "true"
