@@ -27,8 +27,11 @@ case "${TRIPLET}" in
         OS="musl"
         ;;
     # Windows
-    *-mingw*)
+    *-mingw32)
         OS="windows"
+        ;;
+    *-mingw32nogpl) # builds that use `USE_GPL_LIBS=0`
+        OS="windowsnogpl"
         ;;
     # macOS
     *-apple-darwin)
