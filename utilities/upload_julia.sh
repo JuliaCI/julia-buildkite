@@ -54,7 +54,7 @@ elif [[ "${OS}" == "windows" ]]; then
 
     echo "--- [windows] install innosetup"
     mkdir -p dist-extras
-    curl -L -o 'dist-extras/is.exe' 'https://cache.julialang.org/https://www.jrsoftware.org/download.php/is.exe'
+    curl --fail -L -o 'dist-extras/is.exe' 'https://cache.julialang.org/https://www.jrsoftware.org/download.php/is.exe' || curl --fail -L -o 'dist-extras/is.exe' 'https://www.jrsoftware.org/download.php/is.exe'
     chmod a+x dist-extras/is.exe
     MSYS2_ARG_CONV_EXCL='*' ./dist-extras/is.exe \
         /DIR="$(cygpath -w "$(pwd)/dist-extras/inno")" \
