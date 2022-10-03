@@ -44,18 +44,20 @@ steps:
               version: "./.buildkite-external-version"
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
         commands: |
-          # Launch Linux no_GPL build jobs"
           GROUP="no_GPL" \
               ALLOW_FAIL="false" \
               bash .buildkite/utilities/arches_pipeline_upload.sh \
               .buildkite/pipelines/scheduled/platforms/build_linux.no_gpl.arches \
               .buildkite/pipelines/main/platforms/build_linux.yml
-
-          # Launch macOS no_GPL build jobs"
           GROUP="no_GPL" \
               ALLOW_FAIL="false" \
               bash .buildkite/utilities/arches_pipeline_upload.sh \
               .buildkite/pipelines/scheduled/platforms/build_macos.no_gpl.arches \
               .buildkite/pipelines/main/platforms/build_macos.yml
+          GROUP="no_GPL" \
+              ALLOW_FAIL="false" \
+              bash .buildkite/utilities/arches_pipeline_upload.sh \
+              .buildkite/pipelines/scheduled/platforms/build_windows.no_gpl.arches \
+              .buildkite/pipelines/main/platforms/build_windows.yml
         agents:
           queue: "julia"
