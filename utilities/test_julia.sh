@@ -13,15 +13,19 @@ source .buildkite/utilities/build_envs.sh
 echo "--- Print kernel version"
 uname -a
 
-# Note that we pass `--step` to prevent ambiguities between downloading the artifacts
-# uploaded by the `build_*` steps vs. the `upload_*` steps.  Normally, testing must occur
-# first, however in the event of a soft-fail test, we can re-run a test after a successful
-# upload has occured.
-echo "--- Download build artifacts"
-buildkite-agent artifact download --step "build_${TRIPLET}" "${UPLOAD_FILENAME}.tar.gz" .
+# Usually, we download the build artifacts.  However, if we're running inside of the
+# `bughunt` tool, for instance, we may already have a Julia unpacked for us.
+if [[ ! -d "${JULIA_INSTALL_DIR}/bin" ]]; then
+    # Note that we pass `--step` to prevent ambiguities between downloading the artifacts
+    # uploaded by the `build_*` steps vs. the `upload_*` steps.  Normally, testing must occur
+    # first, however in the event of a soft-fail test, we can re-run a test after a successful
+    # upload has occured.
+    echo "--- Download build artifacts"
+    buildkite-agent artifact download --step "build_${TRIPLET}" "${UPLOAD_FILENAME}.tar.gz" .
 
-echo "--- Extract build artifacts"
-tar xzf "${UPLOAD_FILENAME}.tar.gz" "${JULIA_INSTALL_DIR}/"
+    echo "--- Extract build artifacts"
+    tar xzf "${UPLOAD_FILENAME}.tar.gz" "${JULIA_INSTALL_DIR}/"
+fi
 
 # If we're on macOS, we need to re-sign the downloaded tarball so it will
 # execute on this machine
