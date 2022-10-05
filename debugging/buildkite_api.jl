@@ -80,7 +80,20 @@ function get_buildkite_job_env(job::BuildkiteJob)
         string(job.id),
         "env",
     ))
-    return JSON3.read(String(r.body)).env
+    return Dict(string(k) => string(v) for (k, v) in JSON3.read(String(r.body)).env)
+end
+
+function get_buildkite_job_metadata(job::BuildkiteJob)
+    r = buildkite_get(joinpath(
+        buildkite_api,
+        "organizations",
+        job.organization_slug,
+        "pipelines",
+        job.pipeline_slug,
+        "builds",
+        string(job.build_number),
+    ))
+    return JSON3.read(String(r.body)).meta_data
 end
 
 function get_buildkite_job_artifacts(job::BuildkiteJob)

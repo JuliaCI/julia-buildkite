@@ -1,0 +1,22 @@
+#!/bin/bash
+
+set -euo pipefail
+
+case "$1" in
+    --version)
+        # We need `--version` to give us a reasonable result for `build_julia.sh` to succeed
+        echo "buildkite-agent (faked) version 1.0.0, build 1337"
+        ;;
+    metadata)
+        # We need all metadata queries to fail, just pretend no metadata exists anywhere.
+        false
+        ;;
+    artifact)
+        # We would like the `buildkite-agent artifact upload` steps to all look like they passed.
+        true
+        ;;
+    *)
+        # For everything else, just nod your head and smile
+        true
+        ;;
+esac

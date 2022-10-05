@@ -7,6 +7,7 @@ include("../julia_checkout.jl")
 
 struct BughuntBuildInfo
     platform::Platform
+    env::Dict{String,String}
 
     rootfs_url::String
     rootfs_treehash::SHA1
@@ -14,42 +15,16 @@ struct BughuntBuildInfo
     rootfs_gid::Int
 
     # Which version of Julia was being built/tested
-    julia_commit::SHA1
+    julia_checkout::GitCheckout
 
-    # Which repository this commit is contained within (for 3rd party PRs)
-    julia_repo::String
+    # Which version of julia-buildkite was used during the build
+    julia_buildkite_checkout::GitCheckout
 
     # Any relevant artifacts that should be downloaded
     artifacts::Vector{BuildkiteArtifact}
 end
 
-# Ensure that the given step is something we can load up in Sandbox.jl,
-# and extract the necessary information
-function BughuntBuildInfo(job::BuildkiteJob)
-    # Collect the environment variables from this job
-    env = get_buildkite_job_env(job)
-
-    triplet = env["TRIPLET"]
-    platform = parse(Platform, replace(triplet, "gnuassert" => "gnu"))
-    if !Sandbox.natively_runnable(platform)
-        throw(ArgumentError("Cannot natively run triplet '$(triplet)'!"))
-    end
-
-    step_key = env["BUILDKITE_STEP_KEY"]
-    if !startswith(step_key, "test_") && !startswith(step_key, "build_")
-        throw(ArgumentError("Cannot bughunt step with key '$(step_key)'; non build/test step!"))
-    end
-
-    # Collect the artifacts we should download (such as prebuilt versions of Julia)
-    artifacts = BuildkiteArtifact[]
-    if startswith(step_key, "test_")
-        # If we're a `test_*` step, search for the corresponding `build_` step,
-        # and download its artifacts:
-        build_job = find_sibling_buildkite_job(job, string("build_", triplet))
-        append!(artifacts, get_buildkite_job_artifacts(build_job))
-    end
-    append!(artifacts, get_buildkite_job_artifacts(job))
-
+function get_rootfs_data(env)
     plugins = JSON3.read(env["BUILDKITE_PLUGINS"])
     rootfs_url = nothing
     rootfs_treehash = nothing
@@ -68,22 +43,75 @@ function BughuntBuildInfo(job::BuildkiteJob)
     if rootfs_url === nothing || rootfs_treehash === nothing
         throw(ArgumentError("Cannot bughunt step without sandbox plugin!"))
     end
+    return rootfs_url, rootfs_treehash, rootfs_uid, rootfs_gid
+end
+
+
+
+# Ensure that the given step is something we can load up in Sandbox.jl,
+# and extract the necessary information
+function BughuntBuildInfo(job::BuildkiteJob; prefer_build_rootfs::Bool = true)
+    # Collect the environment variables from this job
+    env = get_buildkite_job_env(job)
+
+    # We need to special-case the following variables, so that `build_julia.sh` and `test_julia.sh`
+    # always have the environment variables that they expect from our `.arches` files:
+    env["USE_RR"] = get(env, "USE_RR", "")
+    env["MAKE_FLAGS"] = get(env, "MAKE_FLAGS", "")
+
+    triplet = env["TRIPLET"]
+    platform = parse(Platform, replace(triplet, "gnuassert" => "gnu"))
+    if !Sandbox.natively_runnable(platform)
+        throw(ArgumentError("Cannot natively run triplet '$(triplet)'!"))
+    end
+
+    step_key = env["BUILDKITE_STEP_KEY"]
+    if !startswith(step_key, "test_") && !startswith(step_key, "build_")
+        throw(ArgumentError("Cannot bughunt step with key '$(step_key)'; non build/test step!"))
+    end
+
+    # Collect the artifacts we should download (such as prebuilt versions of Julia)
+    artifacts = BuildkiteArtifact[]
+    rootfs_data = get_rootfs_data(env)
+    if startswith(step_key, "test_")
+        # If we're a `test_*` step, search for the corresponding `build_` step,
+        # and download its artifacts:
+        build_job = find_sibling_buildkite_job(job, string("build_", triplet))
+        append!(artifacts, get_buildkite_job_artifacts(build_job))
+
+        # Also use the build's rootfs, since we want the ability to build Julia,
+        # even if we're bughunting inside of a `test` job.  But allow this to be disabled.
+        if prefer_build_rootfs
+            rootfs_data = get_rootfs_data(get_buildkite_job_env(build_job))
+        end
+    end
+    append!(artifacts, get_buildkite_job_artifacts(job))
+
+    # Extract rootfs_data from the returned tuple
+    rootfs_url, rootfs_treehash, rootfs_uid, rootfs_gid = rootfs_data
 
     # If this is a PR, we'll have a pull request repo field, to track 3rd party PR repo urls
     # If it's not a PR, this will be empty, so we should just use the typical repo url
-    repo_url = env["BUILDKITE_PULL_REQUEST_REPO"]
-    if isempty(repo_url)
-        repo_url = env["BUILDKITE_REPO"]
+    julia_repo_url = env["BUILDKITE_PULL_REQUEST_REPO"]
+    if isempty(julia_repo_url)
+        julia_repo_url = env["BUILDKITE_REPO"]
     end
+
+    # Collect the julia-buildkite repo information
+    metadata = get_buildkite_job_metadata(job)
+    julia_buildkite_repo_url = metadata["BUILDKITE_PLUGIN_EXTERNAL_BUILDKITE_REPO_URL"]
+    julia_buildkite_commit = metadata["BUILDKITE_PLUGIN_EXTERNAL_BUILDKITE_VERSION"]
+    julia_buildkite_checkout_dir = metadata["BUILDKITE_PLUGIN_EXTERNAL_BUILDKITE_FOLDER"]
 
     return BughuntBuildInfo(
         platform,
+        Dict(string(k) => string(v) for (k, v) in env),
         rootfs_url,
         SHA1(rootfs_treehash),
         rootfs_uid,
         rootfs_gid,
-        SHA1(env["BUILDKITE_COMMIT"]),
-        repo_url,
+        GitCheckout(julia_repo_url, env["BUILDKITE_COMMIT"], "."),
+        GitCheckout(julia_buildkite_repo_url, julia_buildkite_commit, julia_buildkite_checkout_dir),
         artifacts,
     )
 end
@@ -150,12 +178,18 @@ function generate_readme(prefix::String, sections::Set{String})
         if "source_checkout" in sections
             println(io, """
             In `/build/julia.git` is a Julia source checkout of the appropriate commit.
+
+            To build it, use the `build_julia` command.
+
+            To run tests, use the `test_julia` command.  By default, the `test_julia` command will
+            test a downloaded binary version of Julia if available, however if invoked from within
+            the source checkout directory, it will use that build of Julia instead.
             """)
         end
 
         if "binary_tarball" in sections
             println(io, """
-            In `/build/artifacts/` are all relevent buildkite artifacts, such as the Julia binaries used
+            In `/build/artifacts/` are all relevant buildkite artifacts, such as the Julia binaries used
             when running Julia tests, core dumps, rr traces, etc...
             """)
         end
@@ -238,9 +272,14 @@ function collect_resources(build_info::BughuntBuildInfo, prefix::String;
 
             # Collect julia checkout
             Base.errormonitor(@async begin
-                julia_checkout_dir = joinpath(prefix, "julia.git")
-                get_julia_checkout(build_info.julia_commit, julia_checkout_dir; julia_url=build_info.julia_repo)
-                generate_gdb_sourcedir_init(prefix, julia_checkout_dir)
+                checkout_prefix = joinpath(prefix, "julia.git")
+                get_checkout(build_info.julia_checkout, checkout_prefix)
+                generate_gdb_sourcedir_init(prefix, joinpath(checkout_prefix, build_info.julia_checkout.checkout_path))
+
+                # Clone the julia-buildkite repository at the appropriate configuration SHA
+                get_checkout(build_info.julia_buildkite_checkout, checkout_prefix)
+
+                # Tell the README generator that we have a source checkout
                 put!(readme_channel, "source_checkout")
             end)
         end
@@ -251,17 +290,26 @@ function collect_resources(build_info::BughuntBuildInfo, prefix::String;
     generate_readme(prefix, readme_sections)
 end
 
-
 function SandboxConfig(build_info::BughuntBuildInfo, prefix::String)
-    ro_maps = Dict("/" => Pkg.Artifacts.artifact_path(build_info.rootfs_treehash))
-
+    # Add the bughunt commands to our PATH
     return SandboxConfig(
-        ro_maps,
-        Dict("/build" => prefix),
         Dict(
-            "TERM" => "xterm",
+             "/" => Pkg.Artifacts.artifact_path(build_info.rootfs_treehash),
+             # We have some debugging commands that we want on the PATH
+             "/usr/local/libexec/bughunt_commands" => joinpath(@__DIR__, "commands"),
+             # mount the `.bashrc` into our home directory as well
+             "/home/juliaci/.bash_profile" => joinpath(@__DIR__, "bashrc.sh"),
+        ),
+        Dict(
+             "/build" => prefix,
+        ),
+        Dict(
+            "TERM" => "xterm-256color",
+            # Provide all the environment variables that the build itself had
             "HOME" => "/home/juliaci",
             "USER" => "juliaci",
+            "JULIA_CPU_THREADS" => string(Sys.CPU_THREADS),
+            build_info.env...,
         );
         pwd="/build",
         uid=build_info.rootfs_uid,

@@ -1,0 +1,45 @@
+#!/bin/bash
+
+set -euo pipefail
+
+function check_location() {
+    [[ -f ".buildkite/utilities/test_julia.sh" ]]
+}
+
+# If we're not already within a julia source checkout, then go to the default location
+if ! check_location; then
+    echo "Julia source checkout not found in current directory; walking over to /build/julia.git"
+    cd "/build/julia.git"
+
+    # Assert that this satisfies `check_location`
+    if ! check_location; then
+        echo "ERROR: Julia source checkout corrupted!  Bailing!" >&2
+        exit 1
+    fi
+fi
+
+# We're going to need some environment variables:
+source .buildkite/utilities/build_envs.sh
+
+# First, check to see if the result of "make install" exists:
+if [[ -d "${JULIA_INSTALL_DIR}" ]]; then
+    # if `julia` is not runnable, complain:
+    if [[ "$(./${JULIA_INSTALL_DIR}/bin/julia --version)" != "julia version ${JULIA_VERSION}" ]]; then
+        echo "ERROR: Incomplete Julia build, clean the source directory and 'build_julia' again!" >&2
+        exit 1
+    fi
+    echo "Using pre-existing julia binary in $(pwd)/${JULIA_INSTALL_DIR}/bin/julia"
+else
+    # If "usr" doesn't exist, let's see if there's an artifact we can copy over:
+    JULIA_ARTIFACT_DIR="/build/artifacts/${JULIA_INSTALL_DIR}-${OS}-${ARCH}"
+    if [[ -d "${JULIA_ARTIFACT_DIR}" ]]; then
+        echo "Auto-copying prebuilt binary from '${JULIA_ARTIFACT_DIR}'"
+        cp -R "${JULIA_ARTIFACT_DIR}/${JULIA_INSTALL_DIR}" "./"
+    else
+        echo "ERROR: No prebuilt binary to test, and julia is not built from source.  Try 'build_julia'!" >&2
+        exit 1
+    fi
+fi
+
+# Run `test_julia` from the `.buildkite` folder
+source .buildkite/utilities/test_julia.sh

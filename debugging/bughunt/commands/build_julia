@@ -1,0 +1,30 @@
+#!/bin/bash
+
+set -euo pipefail
+
+function check_location() {
+    [[ -f ".buildkite/utilities/build_julia.sh" ]]
+}
+
+# If we're not already within a julia source checkout, then go to the default location
+if ! check_location; then
+    echo "Julia source checkout not found in current directory; moving to /build/julia.git"
+    cd "/build/julia.git"
+
+    # Assert that this satisfies `check_location
+    if ! check_location; then
+        echo "ERROR: Julia source checkout corrupted!  Bailing!" >&2
+        exit 1
+    fi
+fi
+
+# We're going to need some envs
+source .buildkite/utilities/build_envs.sh
+
+# Start with a `make cleanall` (and clean out any previous `make install` results):
+echo "Cleaning build tree..."
+make cleanall
+rm -rf "${JULIA_INSTALL_DIR}"
+
+# Run `build_julia` from the `.buildkite` folder
+source .buildkite/utilities/build_julia.sh
