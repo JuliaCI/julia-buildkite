@@ -19,8 +19,10 @@ job = BuildkiteJob(ARGS[1])
 build_info = BughuntBuildInfo(job)
 @info("Collected build info",
     platform=triplet(build_info.platform),
-    julia_commit=bytes2hex(build_info.julia_commit.bytes),
+    julia_commit=bytes2hex(build_info.julia_checkout.commit.bytes),
+    buildkite_commit=bytes2hex(build_info.julia_buildkite_checkout.commit.bytes),
     num_artifacts=length(build_info.artifacts),
+    rootfs_image=joinpath(basename(dirname(build_info.rootfs_url)), basename(build_info.rootfs_url)),
 )
 
 # Download all the resources we need
@@ -31,5 +33,7 @@ collect_resources(build_info, prefix)
 # Construct SandboxConfig off of our build info
 config = SandboxConfig(build_info, prefix)
 with_executor() do exe
-    run(exe, config, `/bin/bash -l`)
+    # Use `ignorestatus()` so that when we CTRL-D out of `bash`, Julia doesn't
+    # slap us in the face with an error because `bash` exited with a nonzero exit code.
+    run(exe, config, ignorestatus(`/bin/bash -l`))
 end
