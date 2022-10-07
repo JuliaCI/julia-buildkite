@@ -30,9 +30,11 @@ steps:
                     - .buildkite/utilities/macos/build_dmg.sh
                     - .buildkite/utilities/macos/codesign.sh
                     - .buildkite/pipelines/scheduled/platforms/upload_linux.no_gpl.yml
-                    - .buildkite/pipelines/scheduled/platforms/upload_macos.no_gpl.yml
                     - .buildkite/pipelines/scheduled/platforms/upload_linux.no_gpl.arches
+                    - .buildkite/pipelines/scheduled/platforms/upload_macos.no_gpl.yml
                     - .buildkite/pipelines/scheduled/platforms/upload_macos.no_gpl.arches
+                    - .buildkite/pipelines/scheduled/platforms/upload_windows.no_gpl.yml
+                    - .buildkite/pipelines/scheduled/platforms/upload_windows.no_gpl.arches
         agents:
           queue: "julia"
           cryptic_capable: "true"

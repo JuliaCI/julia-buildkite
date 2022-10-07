@@ -47,7 +47,7 @@ if [[ "${OS}" == "macos" || "${OS}" == "macosnogpl" ]]; then
 
     # Add the `.dmg` to our upload targets
     UPLOAD_EXTENSIONS+=( "dmg" )
-elif [[ "${OS}" == "windows" ]]; then
+elif [[ "${OS}" == "windows" || "${OS}" == "windowsnogpl" ]]; then
     echo "--- [windows] Extract pre-built Julia"
     mkdir -p "${JULIA_INSTALL_DIR}"
     tar zxf "${UPLOAD_FILENAME}.tar.gz" -C "${JULIA_INSTALL_DIR}" --strip-components 1

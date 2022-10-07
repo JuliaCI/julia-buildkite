@@ -166,13 +166,13 @@ if [[ "${OS?}" == "macos" ]] || [[ "${OS?}" == "windows" ]]; then
         FOLDER_ARCH="${ARCH}"
         SHORT_ARCH="${ARCH}"
     fi
-    
+
     # First, we have the canonical fully-specified upload target
     UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${FOLDER_OS}/${FOLDER_ARCH}/${MAJMIN?}/julia-${TAR_VERSION?}-${SHORT_OS}${SHORT_ARCH}" )
 
     # Next, we have the "majmin/latest" upload target
     UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${FOLDER_OS}/${FOLDER_ARCH}/${MAJMIN?}/julia-latest-${SHORT_OS}${SHORT_ARCH}" )
-    
+
     # If we're on `master` and we're uploading, we consider ourselves "absolute latest"
     if [[ "${BUILDKITE_BRANCH}" == "master" ]]; then
         UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${FOLDER_OS}/${FOLDER_ARCH}/julia-latest-${SHORT_OS}${SHORT_ARCH}" )
