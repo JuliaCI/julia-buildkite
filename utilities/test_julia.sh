@@ -70,8 +70,7 @@ elif [[ "${USE_RR-}" == "" ]]; then
     # Run inside of a timeout
     export JULIA_CMD_FOR_TESTS="${JULIA_BINARY} .buildkite/utilities/timeout.jl ${JULIA_BINARY}"
     export NCORES_FOR_TESTS="${JULIA_CPU_THREADS}"
-    # export JULIA_NUM_THREADS="${JULIA_CPU_THREADS}" # TODO: uncomment this line once we support running CI with threads
-    export JULIA_NUM_THREADS=1 # TODO: delete this line once we support running CI with threads
+    export JULIA_NUM_THREADS="${JULIA_CPU_THREADS}"
 
     # Run all tests; `--ci` asserts that networking is available
     export TESTS="all --ci"
