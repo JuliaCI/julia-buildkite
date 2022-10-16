@@ -56,8 +56,10 @@ steps:
           tar -zxf ../julia-*-htmldocs.tar.gz
 
           # Build commit message
-          echo "build based on $${BUILDKITE_COMMIT}\n" > ../commit_message
+          echo "build based on $${BUILDKITE_COMMIT}" > ../commit_message
+          echo >> ../commit_message
           echo "build link: $${BUILDKITE_BUILD_URL}" >> ../commit_message
+          echo "commit link: https://github.com/JuliaLang/julia/commit/$${BUILDKITE_COMMIT}" >> ../commit_message
 
           # Add all files to our new commit
           git config --global user.name "Documenter.jl"
