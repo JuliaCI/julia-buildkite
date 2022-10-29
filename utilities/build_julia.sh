@@ -66,6 +66,9 @@ echo "--- Quick consistency checks"
 ${JULIA_EXE} -e "import Test; Test.@test Sys.ARCH == :${ARCH:?}"
 ${JULIA_EXE} -e "import Test; Test.@test Sys.WORD_SIZE == ${EXPECTED_WORD_SIZE:?}"
 
+echo "--- Show build stats"
+make build-stats
+
 echo "--- Create build artifacts"
 make "${MFLAGS[@]}" binary-dist
 
