@@ -44,6 +44,9 @@ for FLAG in "${MFLAGS[@]}"; do
     echo " -> ${FLAG}"
 done
 
+echo "--- Debugging"
+make -C deps -j5 install-libgit2 USE_BINARYBUILDER_LIBGIT2=0 USE_BINARYBUILDER_LIBSSH2=0 USE_BINARYBUILDER_MBEDTLS=0 USE_CCACHE=1 VERBOSE=1
+
 echo "--- Build Julia"
 make "${MFLAGS[@]}"
 
