@@ -32,10 +32,6 @@ steps:
                 - .buildkite/secrets/tarball_signing.gpg
                 - .buildkite/secrets/macos_codesigning.keychain
         timeout_in_minutes: ${TIMEOUT?}
-        retry:
-          automatic:
-            - exit_status: "*"
-              limit: 3
         commands: "bash .buildkite/utilities/upload_julia.sh"
         agents:
           queue: "julia"
