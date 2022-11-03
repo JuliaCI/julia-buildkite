@@ -24,4 +24,5 @@ export AGENT_PRIVATE_KEY_PATH=/path/to/my/agent.key
 make sign_treehashes
 unset AGENT_PRIVATE_KEY_PATH
 rm -f /path/to/my/agent.key
+git push origin YOURINITIALS/YOUR-BRANCH-NAME
 ```
