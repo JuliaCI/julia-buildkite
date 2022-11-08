@@ -87,8 +87,8 @@ steps:
           # Launch i686-linux-gnu test jobs
           GROUP="Test" \
               bash .buildkite/utilities/arches_pipeline_upload.sh \
-              .buildkite/pipelines/main/platforms/test_linux.32.arches \
-              .buildkite/pipelines/main/platforms/test_linux.32.yml
+              .buildkite/pipelines/main/platforms/test_linux.i686.arches \
+              .buildkite/pipelines/main/platforms/test_linux.i686.yml
           # Launch macOS test jobs
           GROUP="Test" \
               bash .buildkite/utilities/arches_pipeline_upload.sh \
