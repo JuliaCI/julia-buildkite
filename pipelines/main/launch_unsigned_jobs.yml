@@ -84,11 +84,6 @@ steps:
               bash .buildkite/utilities/arches_pipeline_upload.sh \
               .buildkite/pipelines/main/platforms/test_linux.arches \
               .buildkite/pipelines/main/platforms/test_linux.yml
-          # Launch i686-linux-gnu test jobs
-          GROUP="Test" \
-              bash .buildkite/utilities/arches_pipeline_upload.sh \
-              .buildkite/pipelines/main/platforms/test_linux.32.arches \
-              .buildkite/pipelines/main/platforms/test_linux.32.yml
           # Launch macOS test jobs
           GROUP="Test" \
               bash .buildkite/utilities/arches_pipeline_upload.sh \
@@ -102,6 +97,33 @@ steps:
         agents:
           queue: "julia"
           os: "linux"
+  - group: "i686"
+    notify:
+      - github_commit_status:
+          context: "i686"
+    steps:
+      - label: "Launch i686 test jobs"
+        plugins:
+          - JuliaCI/external-buildkite#v1:
+              version: "./.buildkite-external-version"
+              repo_url: "https://github.com/JuliaCI/julia-buildkite"
+        commands: |
+          export ALLOW_FAIL="true"
+          # SPECIFIC TO THE RELEASE-JULIA-1.8 BRANCH:
+          # Launch the i686 test jobs, but mark them as "allowed to fail"
+          # 1. i686-linux-gnu
+          # 2. i686-w64-mingw32
+          GROUP="i686" \
+              bash .buildkite/utilities/arches_pipeline_upload.sh \
+              .buildkite/pipelines/main/platforms/test_linux.i686.arches \
+              .buildkite/pipelines/main/platforms/test_linux.i686.yml
+          GROUP="i686" \
+              bash .buildkite/utilities/arches_pipeline_upload.sh \
+              .buildkite/pipelines/main/platforms/test_windows.i686.arches \
+              .buildkite/pipelines/main/platforms/test_windows.yml
+        agents:
+           queue: "julia"
+           os: "linux"
   - group: "Allow Fail"
     steps:
       - label: "Launch allowed-to-fail build jobs"
