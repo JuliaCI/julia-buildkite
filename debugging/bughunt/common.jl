@@ -259,7 +259,7 @@ function collect_resources(build_info::BughuntBuildInfo, prefix::String;
                     if match(r"\.tar\.\w+$", basename(apath)) !== nothing
                         unpack_dir = joinpath(prefix, "artifacts", first(split(basename(apath), ".tar")))
                         mkpath(unpack_dir)
-                        p = run(ignorestatus(`tar -I unzstd -C $(unpack_dir) -xf $(apath)`))
+                        p = run(ignorestatus(`tar -C $(unpack_dir) -xf $(apath)`))
                         if success(p)
                             # If the artifact is a coredump, generate a core launch script:
                             if match(r"\.core\.tar\.\w+$", basename(apath)) !== nothing
