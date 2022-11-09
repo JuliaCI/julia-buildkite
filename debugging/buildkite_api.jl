@@ -68,59 +68,59 @@ end
 
 
 function get_buildkite_job_env(job::BuildkiteJob)
-    r = buildkite_get(joinpath(
+    r = buildkite_get(string(
         buildkite_api,
-        "organizations",
+        "/organizations/",
         job.organization_slug,
-        "pipelines",
+        "/pipelines/",
         job.pipeline_slug,
-        "builds",
+        "/builds/",
         string(job.build_number),
-        "jobs",
+        "/jobs/",
         string(job.id),
-        "env",
+        "/env",
     ))
     return Dict(string(k) => string(v) for (k, v) in JSON3.read(String(r.body)).env)
 end
 
 function get_buildkite_job_metadata(job::BuildkiteJob)
-    r = buildkite_get(joinpath(
+    r = buildkite_get(string(
         buildkite_api,
-        "organizations",
+        "/organizations/",
         job.organization_slug,
-        "pipelines",
+        "/pipelines/",
         job.pipeline_slug,
-        "builds",
+        "/builds/",
         string(job.build_number),
     ))
     return JSON3.read(String(r.body)).meta_data
 end
 
 function get_buildkite_job_artifacts(job::BuildkiteJob)
-    r = buildkite_get(joinpath(
+    r = buildkite_get(string(
         buildkite_api,
-        "organizations",
+        "/organizations/",
         job.organization_slug,
-        "pipelines",
+        "/pipelines/",
         job.pipeline_slug,
-        "builds",
+        "/builds/",
         string(job.build_number),
-        "jobs",
+        "/jobs/",
         string(job.id),
-        "artifacts",
+        "/artifacts",
     ))
     return BuildkiteArtifact.(JSON3.read(String(r.body)))
 end
 
 function find_sibling_buildkite_job(job::BuildkiteJob, sibling_key::String)
     # First, get all jobs for the job's build:
-    r = buildkite_get(joinpath(
+    r = buildkite_get(string(
         buildkite_api,
-        "organizations",
+        "/organizations/",
         job.organization_slug,
-        "pipelines",
+        "/pipelines/",
         job.pipeline_slug,
-        "builds",
+        "/builds/",
         string(job.build_number),
     ))
     jobs = JSON3.read(String(r.body)).jobs
@@ -149,13 +149,13 @@ function get_buildkite_pipeline_builds(organization_slug::String,
     while length(builds) < min_builds
         @info("Requesting page $(page_idx)")
         # Fetch first list of builds
-        builds_url = joinpath(
+        builds_url = string(
             buildkite_api,
-            "organizations",
+            "/organizations/",
             organization_slug,
-            "pipelines",
+            "/pipelines/",
             pipeline_slug,
-            "builds",
+            "/builds/",
         )
         builds_params = [
             "branch" => branch,
