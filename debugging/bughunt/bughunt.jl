@@ -17,12 +17,21 @@ job = BuildkiteJob(ARGS[1])
 
 # Construct the build_info from this job
 build_info = BughuntBuildInfo(job)
+rootfs_type = get(build_info.rootfs_data, "type", "")
+if rootfs_type == "sandbox"
+    url = build_info.rootfs_data["url"]
+    rootfs_summary = joinpath(basename(dirname(url)), basename(url))
+elseif rootfs_type == "docker"
+    rootfs_summary = build_info.rootfs_data["image"]
+else
+    rootfs_summary = "<none>"
+end
 @info("Collected build info",
     platform=triplet(build_info.platform),
     julia_commit=bytes2hex(build_info.julia_checkout.commit.bytes),
     buildkite_commit=bytes2hex(build_info.julia_buildkite_checkout.commit.bytes),
     num_artifacts=length(build_info.artifacts),
-    rootfs_image=joinpath(basename(dirname(build_info.rootfs_url)), basename(build_info.rootfs_url)),
+    rootfs=rootfs_summary,
 )
 
 # Download all the resources we need
@@ -30,10 +39,17 @@ prefix = mktempdir()
 collect_resources(build_info, prefix)
 @info("Collected build resources", prefix)
 
-# Construct SandboxConfig off of our build info
-config = SandboxConfig(build_info, prefix)
-with_executor() do exe
-    # Use `ignorestatus()` so that when we CTRL-D out of `bash`, Julia doesn't
-    # slap us in the face with an error because `bash` exited with a nonzero exit code.
-    run(exe, config, ignorestatus(`/bin/bash -l`))
+if Sys.islinux(build_info.platform)
+    # Construct SandboxConfig off of our build info
+    config = SandboxConfig(build_info, prefix)
+    with_executor() do exe
+        # Use `ignorestatus()` so that when we CTRL-D out of `bash`, Julia doesn't
+        # slap us in the face with an error because `bash` exited with a nonzero exit code.
+        # Use `-l` because otherwise bash starts up with a weird `PATH` that contains `.`
+        run(exe, config, ignorestatus(`/bin/bash -l`))
+    end
+elseif Sys.iswindows(build_info.platform)
+    # Launch job within windows docker container
+    config = DockerConfig(build_info, prefix)
+    run(config, ignorestatus(`bash`))
 end
