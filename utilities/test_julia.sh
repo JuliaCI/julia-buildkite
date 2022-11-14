@@ -77,6 +77,10 @@ elif [[ "${USE_RR-}" == "" ]]; then
     export NCORES_FOR_TESTS="${JULIA_CPU_THREADS}"
     export JULIA_NUM_THREADS="${JULIA_CPU_THREADS}"
     export JULIA_NUM_THREADS=1 # TODO: delete this line once we support running CI with threads
+    
+    if [[ "${OS}" == "windows" ]]; then
+        export OPENBLAS_NUM_THREADS=1
+    fi
 
     # We don't run `Pkg` on any 32-bit platforms, since it uses too much memory
     if [[ "${ARCH}" == i686 ]] || [[ "${ARCH}" == "armv7l" ]]; then
