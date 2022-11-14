@@ -16,6 +16,7 @@ steps:
         # It is okay for two different triplets to upload simultaneously
         concurrency: 1
         concurrency_group: 'upload/julialangnightlies/${TRIPLET?}'
+        concurrency_method: eager
         plugins:
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"
