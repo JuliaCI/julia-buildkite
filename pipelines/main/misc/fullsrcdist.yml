@@ -1,8 +1,10 @@
 steps:
-  - group: "Check"
+  - group: "Full Source Dist" # TODO: delete this line
+  # - group: "Check" # TODO: uncomment this line
     steps:
       - label: "fullsrcdist"
         key: "fullsrcdist"
+        soft_fail: true # TODO: delete this line
         plugins:
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"
