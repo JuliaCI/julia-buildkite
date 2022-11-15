@@ -29,7 +29,7 @@ steps:
 
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/analyzegc.yml
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/doctest.yml
-          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/fullsrcdist.yml
+          # buildkite-agent pipeline upload .buildkite/pipelines/main/misc/fullsrcdist.yml # TODO: uncomment this line
 
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/embedding.yml
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/llvmpasses.yml
@@ -37,6 +37,7 @@ steps:
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/pdf_docs/build_pdf_docs.yml
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/sanitizers/asan.yml
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/sanitizers/tsan.yml
+          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/fullsrcdist.yml # TODO: delete this line
         agents:
           queue: "julia"
           os: "linux"
