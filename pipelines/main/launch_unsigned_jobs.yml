@@ -37,10 +37,18 @@ steps:
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/pdf_docs/build_pdf_docs.yml
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/sanitizers/asan.yml
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/sanitizers/tsan.yml
-          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/fullsrcdist.yml # TODO: delete this line
         agents:
           queue: "julia"
           os: "linux"
+  - group: "Full Source Dist"                                                            # TODO: delete this line
+    steps:                                                                               # TODO: delete this line
+      - label: "Launch fullsrcdist jobs"                                                 # TODO: delete this line
+        plugins:                                                                         # TODO: delete this line
+          - JuliaCI/external-buildkite#v1:                                               # TODO: delete this line
+              version: "./.buildkite-external-version"                                   # TODO: delete this line
+              repo_url: "https://github.com/JuliaCI/julia-buildkite"                     # TODO: delete this line
+        commands: |                                                                      # TODO: delete this line
+          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/fullsrcdist.yml # TODO: delete this line
   - group: "Build"
     notify:
       - github_commit_status:
