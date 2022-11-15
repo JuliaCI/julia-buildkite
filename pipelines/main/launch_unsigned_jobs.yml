@@ -49,6 +49,9 @@ steps:
               repo_url: "https://github.com/JuliaCI/julia-buildkite"                     # TODO: delete this line
         commands: |                                                                      # TODO: delete this line
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/fullsrcdist.yml # TODO: delete this line
+        agents:                                                                          # TODO: delete this line
+          queue: "julia"                                                                 # TODO: delete this line
+          os: "linux"                                                                    # TODO: delete this line
   - group: "Build"
     notify:
       - github_commit_status:
