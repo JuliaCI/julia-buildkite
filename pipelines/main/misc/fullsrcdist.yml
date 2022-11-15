@@ -25,6 +25,7 @@ steps:
         timeout_in_minutes: 10
         commands: |
           make full-source-dist USE_BINARYBUILDER=0
+          make light-source-dist USE_BINARYBUILDER=0
         agents:
           queue: "julia"
           # Only run on `sandbox.jl`-capable machines (not `docker`-isolated ones) since we need nestable sandboxing
