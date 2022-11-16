@@ -108,30 +108,63 @@ for EXT in "${UPLOAD_EXTENSIONS[@]}"; do
 done
 wait_pids "${PIDS[@]}"
 
-# Next, upload primary files to S3
-echo "--- Upload primary products to S3"
-PIDS=()
-for EXT in "${UPLOAD_EXTENSIONS[@]}"; do
-    aws s3 cp --acl public-read "${UPLOAD_FILENAME}.${EXT}" "s3://${UPLOAD_TARGETS[0]}.${EXT}" &
-    PIDS+=( "$!" )
-done
-wait_pids "${PIDS[@]}"
+unset THIS_IS_TAG_AND_WE_ALREADY_UPLOADED_THIS_TAG
+if [[ "${TAR_VERSION:?}" =~ ^\d*?\. ]]; do
+    echo "INFO: this DOES look like a tag: ${TAR_VERSION:?}"
+    URL="https://${S3_BUCKET:?}.s3.amazonaws.com/${UPLOAD_TARGETS[0]}.${UPLOAD_EXTENSIONS[0]}"
+    STATUS_CODE=$(curl --location --head ${URL:?} | head -n 1 | cut -d' ' -f2)
+    echo "INFO: received status ${STATUS_CODE:?} from HEAD to URL ${URL:?}"
+    if [[ "${STATUS_CODE:?}" == "200" ]]; do
+        THIS_IS_TAG_AND_WE_ALREADY_UPLOADED_THIS_TAG="true"
+        # TODO: Rename `THIS_IS_TAG_AND_WE_ALREADY_UPLOADED_THIS_TAG` to a better variable name
+    elif [[ "${STATUS_CODE:?}" == "404" ]]; do
+        THIS_IS_TAG_AND_WE_ALREADY_UPLOADED_THIS_TAG="false"
+    else
+        echo "FATAL ERROR: received status ${STATUS_CODE:?} from HEAD to URL ${URL:?}"
+        # Print some verbose output to the log, for debugging purposes
+        curl --location --head --verbose ${URL:?}
+        exit 1
+    fi
+else
+    echo "INFO: this does NOT look like a tag: ${TAR_VERSION:?}"
+    THIS_IS_TAG_AND_WE_ALREADY_UPLOADED_THIS_TAG="false"
+fi
 
-echo "--- Copy to secondary upload targets"
-PIDS=()
-# We'll do these in parallel, then wait on the background jobs
-for SECONDARY_TARGET in ${UPLOAD_TARGETS[@]:1}; do
+if [[ "${THIS_IS_TAG_AND_WE_ALREADY_UPLOADED_THIS_TAG:?}" == "true"]]; do
+    echo "INFO: We will skip all uploads, because they already exist on S3"
+    echo "+++ S3 targets that already existed"
+else
+    echo "--- Upload primary products to S3"
+    PIDS=()
     for EXT in "${UPLOAD_EXTENSIONS[@]}"; do
         aws s3 cp --acl public-read "s3://${UPLOAD_TARGETS[0]}.${EXT}" "s3://${SECONDARY_TARGET}.${EXT}" &
         PIDS+=( "$!" )
     done
-done
-wait_pids "${PIDS[@]}"
+    wait_pids "${PIDS[@]}"
 
-# Report to the user some URLs that they can use to download this from
-echo "+++ Uploaded to targets"
+    echo "--- Copy to secondary upload targets"
+    # The primary file has now been uploaded to S3.
+    # Now, we will copy the primary file to each of the secondary upload targets.
+    :
+    PIDS=()
+    # We'll do these in parallel, then wait on the background jobs
+    for SECONDARY_TARGET in ${UPLOAD_TARGETS[@]:1}; do
+        for EXT in "${UPLOAD_EXTENSIONS[@]}"; do
+            aws s3 cp --acl public-read "s3://${S3_BUCKET:?}/${UPLOAD_TARGETS[0]}.${EXT}" "s3://${S3_BUCKET:?}/${SECONDARY_TARGET}.${EXT}" &
+            PIDS+=( "$!" )
+        done
+    done
+    wait_pids "${PIDS[@]}"
+    echo "+++ S3 targets that we uploaded to"
+fi
+
+# Report to the user some URLs that they can use to download this from.
+# We need to use the new "virtual hosted-style URLs" instead of the old "path-style URLs",
+# because AWS has deprecated the latter in favor of the former.
+# The old "path-style" format is: https://s3.amazonaws.com/mybucket/myfile.txt
+# The new "virtual hosted-style" format is: https://mybucket.s3.amazonaws.com/myfile.txt
 for UPLOAD_TARGET in ${UPLOAD_TARGETS[@]}; do
     for EXT in "${UPLOAD_EXTENSIONS[@]}"; do
-        echo " -> s3://${UPLOAD_TARGET}.${EXT}"
+        echo " -> https://${S3_BUCKET:?}.s3.amazonaws.com/${UPLOAD_TARGET}.${EXT}"
     done
 done
