@@ -4,6 +4,8 @@ steps:
     steps:
       - label: "fullsrcdist"
         key: "fullsrcdist"
+        depends_on:
+          - "build_x86_64-linux-gnu"
         soft_fail: true # TODO: delete this line
         plugins:
           - JuliaCI/external-buildkite#v1:
@@ -24,9 +26,20 @@ steps:
               # Drop default "registries" directory, so it is not persisted from execution to execution
               persist_depot_dirs: packages,artifacts,compiled
               version: '1.6'
-        timeout_in_minutes: 10
+        # timeout_in_minutes: 10 # TODO: uncomment this line
+        timeout_in_minutes: 90   # TODO: delete this line
         commands: |
+          # Download pre-built julia, extract into `usr/`
+          buildkite-agent artifact download --step "build_x86_64-linux-gnu" 'julia-*-linux-x86_64.tar.gz' .
+          mkdir -p ./usr
+          tar -C ./usr --strip-components=1 -zxf julia-*-linux-x86_64.tar.gz
+          ln -s ./usr/bin/julia ./julia
+          echo "--- Print Julia version info"
+          export JULIA_NUM_THREADS=1
+          ./julia -e 'using InteractiveUtils; InteractiveUtils.versioninfo()'
+          echo "--- Full-source-dist"
           make full-source-dist USE_BINARYBUILDER=0
+          echo "--- Light-source-dist"
           make light-source-dist USE_BINARYBUILDER=0
         agents:
           queue: "julia"
