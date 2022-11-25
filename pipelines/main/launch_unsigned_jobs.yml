@@ -59,7 +59,6 @@ steps:
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/doctest.yml
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/pdf_docs/build_pdf_docs.yml
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/embedding.yml
-          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/gcext.yml
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/llvmpasses.yml
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/whitespace.yml
 
@@ -132,6 +131,7 @@ steps:
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
         commands: |
           export ALLOW_FAIL="true"
+          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/gcext.yml
 
           # Launch Linux allowed-to-fail test jobs
           GROUP="Allow Fail" \
