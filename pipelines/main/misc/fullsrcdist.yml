@@ -38,9 +38,9 @@ steps:
           export JULIA_NUM_THREADS=1
           ./julia -e 'using InteractiveUtils; InteractiveUtils.versioninfo()'
           echo "--- Full-source-dist"
-          make full-source-dist USE_BINARYBUILDER=0
+          make full-source-dist
           echo "--- Light-source-dist"
-          make light-source-dist USE_BINARYBUILDER=0
+          make light-source-dist
         agents:
           queue: "julia"
           # Only run on `sandbox.jl`-capable machines (not `docker`-isolated ones) since we need nestable sandboxing
