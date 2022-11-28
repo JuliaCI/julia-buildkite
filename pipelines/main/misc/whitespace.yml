@@ -3,6 +3,9 @@ steps:
     steps:
       - label: "whitespace"
         key: "whitespace"
+        notify:
+        - github_commit_status:
+            context: "Whitespace"
         plugins:
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"

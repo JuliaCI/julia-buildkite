@@ -79,6 +79,11 @@ elif [[ "${OS}" == "windows" || "${OS}" == "windowsnogpl" ]]; then
 
     # Add the `.exe` to our upload targets
     UPLOAD_EXTENSIONS+=( "exe" )
+
+    # Use powershell to create a `.zip` file to upload as well
+    echo "--- [windows] make zip"
+    powershell Compress-Archive "$(cygpath -w "$(pwd)/${JULIA_INSTALL_DIR}")" "${UPLOAD_FILENAME}.zip"
+    UPLOAD_EXTENSIONS+=( "zip" )
 fi
 
 echo "--- GPG-sign the tarball"
