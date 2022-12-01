@@ -1,10 +1,10 @@
 # ROOTFS_IMAGE_NAME    TRIPLET                    ARCH           ARCH_ROOTFS    TIMEOUT       ROOTFS_TAG    ROOTFS_HASH
-llvm_passes            i686-linux-gnu             x86_64         i686           .             v5.50         0000000000000000000000000000000000000000
-llvm_passes            x86_64-linux-gnu           x86_64         x86_64         .             v5.50         0000000000000000000000000000000000000000
-llvm_passes            x86_64-linux-gnuassert     x86_64         x86_64         .             v5.50         0000000000000000000000000000000000000000
-llvm_passes            aarch64-linux-gnu          aarch64        aarch64        .             v5.50         0000000000000000000000000000000000000000
-llvm_passes            powerpc64le-linux-gnu      powerpc64le    powerpc64le    .             v5.50         0000000000000000000000000000000000000000
-package_musl           x86_64-linux-musl          x86_64         x86_64         .             v5.50         0000000000000000000000000000000000000000
+llvm_passes            i686-linux-gnu             x86_64         i686           .             v5.51         0000000000000000000000000000000000000000
+llvm_passes            x86_64-linux-gnu           x86_64         x86_64         .             v5.51         0000000000000000000000000000000000000000
+llvm_passes            x86_64-linux-gnuassert     x86_64         x86_64         .             v5.51         0000000000000000000000000000000000000000
+llvm_passes            aarch64-linux-gnu          aarch64        aarch64        .             v5.51         0000000000000000000000000000000000000000
+llvm_passes            powerpc64le-linux-gnu      powerpc64le    powerpc64le    .             v5.51         0000000000000000000000000000000000000000
+package_musl           x86_64-linux-musl          x86_64         x86_64         .             v5.51         0000000000000000000000000000000000000000
 # llvm_passes          armv7l-linux-gnueabihf     armv7l         armv7l         .             ----          0000000000000000000000000000000000000000
 
 # These special lines allow us to embed default values for the columns above.
