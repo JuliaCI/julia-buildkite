@@ -13,6 +13,7 @@ steps:
         # Prevent multiple pipelines from pushing to the `git@github.com:JuliaLang/docs.julialang.org` repo simultaneously
         concurrency: 1
         concurrency_group: 'upload/julialang/upload_docs/docs_julialang_org'
+        concurrency_method: eager
         plugins:
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"
