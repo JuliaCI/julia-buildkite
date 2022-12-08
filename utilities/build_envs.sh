@@ -1,7 +1,15 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # First, extract information from our triplet
 source .buildkite/utilities/extract_triplet.sh
+
+# Figure out what GNU Make is on this system
+if [[ "${OS}" == "freebsd" ]]; then
+    MAKE="gmake"
+else
+    MAKE="make"
+fi
+export MAKE
 
 # Apply fixups to our environment for when we're running on julia-buildkite pipeline
 if buildkite-agent meta-data exists BUILDKITE_JULIA_BRANCH; then
@@ -98,7 +106,7 @@ export TAR_VERSION
 # Build the filename that we'll upload as, and get the filename that will be built
 # These are not the same in situations such as `musl`, where the build system doesn't
 # differentiate but we need to give it a different name.
-export JULIA_BINARYDIST_FILENAME="$(make print-JULIA_BINARYDIST_FILENAME | cut -c27- | tr -s ' ')"
+export JULIA_BINARYDIST_FILENAME="$(${MAKE} print-JULIA_BINARYDIST_FILENAME | cut -c27- | tr -s ' ')"
 
 export JULIA_INSTALL_DIR="julia-${TAR_VERSION}"
 JULIA_BINARY="${JULIA_INSTALL_DIR}/bin/julia${EXE}"

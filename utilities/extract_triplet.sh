@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Extract information from our triplet
 # Here is an example of a triplet: `x86_64-linux-gnu`

@@ -1,0 +1,27 @@
+steps:
+  - group: "${GROUP?}"
+    steps:
+      - label: ":freebsd: test ${TRIPLET?}"
+        key: "test_${TRIPLET?}"
+        depends_on:
+          - "build_${TRIPLET?}"
+        plugins:
+          - JuliaCI/coreupload#v2:
+              core_pattern: "**/*.core"
+              compressor: "zstd"
+              create_bundle: "true"
+              lldb_commands:
+                - "bt all"
+          - JuliaCI/external-buildkite#v1:
+              version: "./.buildkite-external-version"
+              repo_url: "https://github.com/JuliaCI/julia-buildkite"
+        timeout_in_minutes: ${TIMEOUT?}
+        soft_fail: ${ALLOW_FAIL?}
+        commands: "bash .buildkite/utilities/test_julia.sh"
+        agents:
+          queue: "julia"
+          os: "freebsd"
+          arch: "${ARCH}"
+        env:
+          JULIA_SHELL: "/usr/local/bin/bash"
+          TRIPLET: "${TRIPLET?}"

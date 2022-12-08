@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # This script performs the basic steps needed to build Julia from source
 # It requires the following environment variables to be defined:
@@ -24,7 +24,7 @@ echo "--- Collect make options"
 MFLAGS=()
 
 # If we have the option, let's use `--output-sync`
-if make --help | grep output-sync >/dev/null 2>/dev/null; then
+if ${MAKE} --help | grep output-sync >/dev/null 2>/dev/null; then
     MFLAGS+=( "--output-sync" )
 fi
 
@@ -45,7 +45,7 @@ for FLAG in "${MFLAGS[@]}"; do
 done
 
 echo "--- Build Julia"
-make "${MFLAGS[@]}"
+${MAKE} "${MFLAGS[@]}"
 
 
 echo "--- Check that the working directory is clean"
@@ -67,7 +67,7 @@ ${JULIA_EXE} -e "import Test; Test.@test Sys.ARCH == :${ARCH:?}"
 ${JULIA_EXE} -e "import Test; Test.@test Sys.WORD_SIZE == ${EXPECTED_WORD_SIZE:?}"
 
 echo "--- Create build artifacts"
-make "${MFLAGS[@]}" binary-dist
+${MAKE} "${MFLAGS[@]}" binary-dist
 
 # Rename the build artifact in case we want to name it differently, as is the case on `musl`.
 if [[ "${JULIA_BINARYDIST_FILENAME}.tar.gz" != "${UPLOAD_FILENAME}.tar.gz" ]]; then

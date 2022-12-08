@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 set -eou pipefail
 
 # This script reads in an `.arches` file, processes the columns and default value mappings
