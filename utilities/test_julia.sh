@@ -104,11 +104,10 @@ else
 fi
 
 # Build our `TESTS` string
-# `--ci` asserts that networking is available
 if [[ "${#TESTS_TO_SKIP[@]}" -gt 0 ]]; then
-    export TESTS="${TESTS_TO_RUN[@]} --ci --skip ${TESTS_TO_SKIP[@]}"
+    export TESTS="${TESTS_TO_RUN[@]} --skip ${TESTS_TO_SKIP[@]}"
 else
-    export TESTS="${TESTS_TO_RUN[@]} --ci"
+    export TESTS="${TESTS_TO_RUN[@]}"
 fi
 
 # Auto-set timeout to buildkite timeout minus 45m for most users
