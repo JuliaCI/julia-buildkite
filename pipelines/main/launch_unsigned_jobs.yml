@@ -55,15 +55,17 @@ steps:
               version: "./.buildkite-external-version"
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
         commands: |
-          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/analyzegc.yml
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/doctest.yml
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/pdf_docs/build_pdf_docs.yml
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/embedding.yml
-          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/llvmpasses.yml
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/whitespace.yml
 
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/sanitizers/asan.yml
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/sanitizers/tsan.yml
+
+          # Disable these two jobs, as they're broken on 1.6
+          #buildkite-agent pipeline upload .buildkite/pipelines/main/misc/analyzegc.yml
+          #buildkite-agent pipeline upload .buildkite/pipelines/main/misc/llvmpasses.yml
         agents:
           queue: "julia"
           os: "linux"
