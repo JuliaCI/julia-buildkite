@@ -137,7 +137,6 @@ function download_rr(platform::Platform, prefix::String)
             Pkg.PackageSpec(;name = "Zlib_jll", version = v"1.2.11"),
         ]
         paths = collect_artifact_paths(jlls; platform)
-        @show paths
         copy_artifact_paths(prefix, paths)
     end
 end
