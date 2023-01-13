@@ -4,8 +4,8 @@ set -euo pipefail
 
 # Buildkite users can trigger new builds with these values overridden to
 # test specific julia gitshas
-UPSTREAM_URL="${UPSTREAM_URL:-https://github.com/kshyatt/julia.git}"
-UPSTREAM_BRANCH="${UPSTREAM_BRANCH:-ib/base_coverage_filenames}"
+UPSTREAM_URL="${UPSTREAM_URL:-https://github.com/JuliaLang/julia.git}"
+UPSTREAM_BRANCH="${UPSTREAM_BRANCH:-master}"
 
 # All of our workers are required to provide a default for the julia cache dir
 # We're going to cache repositories in here, just like buildkite itself would:
@@ -25,9 +25,9 @@ fi
 rm -rf ..?* .[!.]* *
 
 # git clone, then force checkout the given gitref
-UPSTREAM_GITREF="$(buildkite-agent meta-data get --default "${UPSTREAM_BRANCH}" BUILDKITE_JULIA_VERSION)"
+UPSTREAM_GITREF="$(buildkite-agent meta-data get --default "origin/${UPSTREAM_BRANCH}" BUILDKITE_JULIA_VERSION)"
 git clone --dissociate --reference "${UPSTREAM_CACHE}" "${UPSTREAM_URL}" "./"
-#git reset --hard "${UPSTREAM_GITREF}"
+git reset --hard "${UPSTREAM_GITREF}"
 echo
 git --no-pager log -1
 echo
