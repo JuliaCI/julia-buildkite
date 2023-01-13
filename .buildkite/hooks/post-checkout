@@ -24,8 +24,11 @@ fi
 # The deliciously complicated `rm` invocation is thanks to https://unix.stackexchange.com/a/77313/29688
 rm -rf ..?* .[!.]* *
 
+# REMOVE later
+BUILDKITE_JULIA_VERSION=
+
 # git clone, then force checkout the given gitref
-UPSTREAM_GITREF="$(buildkite-agent meta-data get --default "origin/${UPSTREAM_BRANCH}" BUILDKITE_JULIA_VERSION)"
+UPSTREAM_GITREF="$(buildkite-agent meta-data get --default "${UPSTREAM_URL}/${UPSTREAM_BRANCH}" BUILDKITE_JULIA_VERSION)"
 git clone --dissociate --reference "${UPSTREAM_CACHE}" "${UPSTREAM_URL}" "./"
 git reset --hard "${UPSTREAM_GITREF}"
 echo
