@@ -152,6 +152,34 @@ end
 
 fcs = Coverage.LCOV.readfolder("./lcov_files")
 
+# This assumes we're run with a current working directory of a julia checkout
+base_jl_files = Set{String}()
+cd("base") do
+    for (root, dirs, files) in walkdir(".")
+        # Strip off the leading `./`
+        if startswith(root, ".")
+            root = root[2:end]
+        end
+        if startswith(root, "/")
+            root = root[2:end]
+        end
+        for f in files
+            if !endswith(f, ".jl")
+                continue
+            end
+            push!(base_jl_files, joinpath(root, f))
+        end
+    end
+end
+
+# Only include source code files. Exclude test files, benchmarking files, etc.
+filter!(fcs) do fc
+    # Base files do not have a directory name, they are all implicitly paths
+    # relative to the `base/` folder, so the only way to detect them is to
+    # compare them against a list of files that exist within `base`:
+    fc.filename ∈ base_jl_files || occursin("/src/", fc.filename)
+end;
+
 # Exclude all external stdlibs (stdlibs that live in external repos).
 const external_stdlib_prefixes = get_external_stdlib_prefixes("stdlib")
 filter!(fcs) do fc
