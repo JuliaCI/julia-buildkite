@@ -9,6 +9,13 @@ steps:
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
           - staticfloat/cryptic#v2:
               signed_pipelines:
+                # Launch the code coverage job - REMOVE once PR is ready to merge
+                - pipeline: .buildkite/pipelines/scheduled/coverage/coverage.yml
+                  signature_file: .buildkite/pipelines/scheduled/coverage/coverage.yml.signature
+                  inputs:
+                    - .buildkite/pipelines/scheduled/coverage/coverage.yml
+                    - .buildkite/pipelines/scheduled/coverage/run_tests_parallel.jl
+                    - .buildkite/pipelines/scheduled/coverage/upload_coverage.jl
                 # Launch the upload jobs
                 - pipeline: .buildkite/pipelines/main/launch_upload_jobs.yml
                   signature_file: .buildkite/pipelines/main/launch_upload_jobs.yml.signature
