@@ -108,19 +108,19 @@ while true; do
     STATUS=$(/usr/libexec/PlistBuddy -c "print notarization-info:Status" notarization.xml 2>/dev/null)
 
     # Process loop exit conditions
-    if [[ ${STATUS:?} == "success" ]]; then
+    if [[ ${STATUS} == "success" ]]; then
         echo "Notarization finished"
         break
-    elif [[ ${STATUS:?} == "in progress" ]]; then
+    elif [[ ${STATUS} == "in progress" ]]; then
         echo -n "."
         sleep 10
         continue
-    elif [[ ${STATUS:?} == "invalid" ]]; then
+    elif [[ ${STATUS} == "invalid" ]]; then
         echo "invalid!  Looks like something got borked:"
         /usr/libexec/PlistBuddy -c "print notarization-info:LogFileURL" notarization.xml 2>/dev/null
         exit 1
     else
-        echo "Notarization failed with status ${STATUS:?}"
+        echo "Notarization failed with status ${STATUS}"
         exit 1
     fi
 done
@@ -150,4 +150,4 @@ spctl -a -vvv -t install ${DMG_NAME}
 set -e
 
 # Cleanup things we created here
-rm -rf "${DMG_PATH:?}" notarization.xml
+rm -rf "${DMG_PATH}" notarization.xml
