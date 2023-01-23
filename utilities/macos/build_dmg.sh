@@ -16,8 +16,8 @@ plutil -insert  CFBundleDisplayName        -string "Julia" "${APP_PATH}/Contents
 plutil -replace CFBundleIconFile           -string "julia.icns" "${APP_PATH}/Contents/Info.plist"
 plutil -insert  CFBundleIdentifier         -string "org.julialang.launcherapp" "${APP_PATH}/Contents/Info.plist"
 plutil -replace CFBundleName               -string "Julia" "${APP_PATH}/Contents/Info.plist"
-plutil -insert  CFBundleShortVersionString -string "${MAJMINPAT}" "${APP_PATH}/Contents/Info.plist"
-plutil -insert  CFBundleVersion            -string "${JULIA_VERSION}-${SHORT_COMMIT}" "${APP_PATH}/Contents/Info.plist"
+plutil -insert  CFBundleShortVersionString -string "${MAJMINPAT?}" "${APP_PATH}/Contents/Info.plist"
+plutil -insert  CFBundleVersion            -string "${JULIA_VERSION?}-${SHORT_COMMIT?}" "${APP_PATH}/Contents/Info.plist"
 plutil -insert  NSHumanReadableCopyright   -string "$(date '+%Y') The Julia Project" "${APP_PATH}/Contents/Info.plist"
 
 # Add icon file for the application and the .dmg
