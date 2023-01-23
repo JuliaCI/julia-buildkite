@@ -46,7 +46,7 @@ function create_dmg() {
         "${DMG_NAME}" \
         -size 1t \
         -fs HFS+ \
-        -volname "Julia-${TAR_VERSION}" \
+        -volname "Julia-${TAR_VERSION?}" \
         -imagekey zlib-level=9 \
         -srcfolder "${DMG_PATH}"
 
