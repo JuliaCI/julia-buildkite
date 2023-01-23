@@ -129,7 +129,7 @@ echo "--- Debugging #2: print the notarization status of the .app and .dmg"
 set +e
 spctl -a -vvv -t install ${APP_PATH}
 spctl -a -vvv -t install ${DMG_NAME}
-se
+set -e
 
 # Staple the notarization to the app
 xcrun stapler staple "${APP_PATH}"
