@@ -5,10 +5,10 @@ set -euo pipefail
 DMG_PATH="dmg"
 mkdir -p "${DMG_PATH}"
 APP_PATH="${DMG_PATH}/Julia-${MAJMIN?}.app"
-DMG_NAME="${UPLOAD_FILENAME}.dmg"
+DMG_NAME="${UPLOAD_FILENAME?}.dmg"
 
 # Start by compiling an applescript into a `.app`, which creates the skeleton, which we will fill out
-osacompile -o "${APP_PATH:?}" "contrib/mac/app/startup.applescript"
+osacompile -o "${APP_PATH}" "contrib/mac/app/startup.applescript"
 
 # Use `plutil` to fill out the `Info.plist` appropriately
 plutil -replace CFBundleDevelopmentRegion  -string "en" "${APP_PATH:?}/Contents/Info.plist"
