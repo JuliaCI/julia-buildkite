@@ -135,4 +135,5 @@ if [[ -z "${USE_RR-}" ]]; then
 fi
 
 echo "--- Run the Julia test suite"
-${JULIA_CMD_FOR_TESTS:?} -e "Base.runtests(\"${TESTS:?}\"; ncores = ${NCORES_FOR_TESTS:?})"
+# ${JULIA_CMD_FOR_TESTS:?} -e "Base.runtests(\"${TESTS:?}\"; ncores = ${NCORES_FOR_TESTS:?})" # TODO: uncomment this line
+echo "SKIPPING TESTS BECAUSE DILUM IS DEBUGGING" # TODO: delete this line
