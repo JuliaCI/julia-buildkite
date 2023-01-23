@@ -58,6 +58,12 @@ function create_dmg() {
 }
 create_dmg
 
+echo "--- Debugging #1: print the notarization status of the .app and .dmg"
+set +e
+spctl -a -vvv -t install ${APP_PATH}
+spctl -a -vvv -t install ${DMG_NAME}
+set -e
+
 # Upload the `.dmg` for notarization
 xcrun altool \
     --notarize-app \
@@ -119,11 +125,29 @@ while true; do
     fi
 done
 
+echo "--- Debugging #2: print the notarization status of the .app and .dmg"
+set +e
+spctl -a -vvv -t install ${APP_PATH}
+spctl -a -vvv -t install ${DMG_NAME}
+set -e
+
 # Staple the notarization to the app
 xcrun stapler staple "${APP_PATH}"
 
+echo "--- Debugging #3: print the notarization status of the .app and .dmg"
+set +e
+spctl -a -vvv -t install ${APP_PATH}
+spctl -a -vvv -t install ${DMG_NAME}
+set -e
+
 # Re-build the .dmg from the app now that it's notarized
 create_dmg
+
+echo "--- Debugging #4: print the notarization status of the .app and .dmg"
+set +e
+spctl -a -vvv -t install ${APP_PATH}
+spctl -a -vvv -t install ${DMG_NAME}
+set -e
 
 # Cleanup things we created here
 rm -rf "${DMG_PATH}" notarization.xml
