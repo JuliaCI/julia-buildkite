@@ -28,7 +28,7 @@ cp "contrib/mac/app/julia.icns" "${DMG_PATH}/.VolumeIcon.icns"
 ln -s /Applications "${DMG_PATH}/Applications"
 
 # Copy our signed tarball into the `.dmg`
-cp -aR "${JULIA_INSTALL_DIR}" "${APP_PATH}/Contents/Resources/julia"
+cp -aR "${JULIA_INSTALL_DIR?}" "${APP_PATH}/Contents/Resources/julia"
 
 # Sign the `.app` launcher
 .buildkite/utilities/macos/codesign.sh \
