@@ -193,7 +193,15 @@ end;
 
 fcs = Coverage.merge_coverage_counts(fcs)
 sort!(fcs; by = fc -> fc.filename);
-fcs = map(fc->fc.filename ∈ base_jl_files ? Coverage.FileCoverage(joinpath("base", fc.filename), fc.source, fc.coverage) : Coverage.FileCoverage(joinpath("stdlib", fc.filename), fc.source, fc.coverage), fcs)
+fcs = map(fcs) do fc
+    fc.filename ∈ base_jl_files && return Coverage.FileCoverage(joinpath("base", fc.filename), fc.source, fc.coverage)
+    if occursin("stdlib", fc.filename)
+        new_name = "stdlib" * String(split(fc.filename, joinpath("stdlib", "v" * string(VERSION.major) * "." * string(VERSION.minor)))[end])
+        return Coverage.FileCoverage(new_name, fc.source, fc.coverage)
+    else
+        return fc
+    end
+end
 
 print_coverage_summary.(fcs);
 const total_cov_pct = print_coverage_summary(fcs, "Total").cov_pct
