@@ -204,7 +204,7 @@ filter!(fcs) do fc
     all(x -> !startswith(fc.filename, x), external_stdlib_prefixes)
 end;
 
-filter!(fc -> !startswith(fc.filename, "cache"), fcs)
+filter!(fc -> (startswith(fc.filename, "base") || startswith(fc.filename, "stdlib")), fcs)
 
 print_coverage_summary.(fcs);
 const total_cov_pct = print_coverage_summary(fcs, "Total").cov_pct
