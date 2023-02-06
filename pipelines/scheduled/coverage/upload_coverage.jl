@@ -193,7 +193,8 @@ fcs = map(fcs) do fc
         new_name = "stdlib" * String(split(fc.filename, joinpath("stdlib", "v" * string(VERSION.major) * "." * string(VERSION.minor)))[end])
         Coverage.FileCoverage(new_name, fc.source, fc.coverage)
     end
-    return Coverage.amend_coverage_from_src!(fc)
+    Coverage.amend_coverage_from_src!(fc)
+    return fc
 end
 
 # Must occur after truncation performed above
