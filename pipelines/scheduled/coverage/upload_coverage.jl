@@ -189,12 +189,11 @@ fcs = Coverage.merge_coverage_counts(fcs)
 sort!(fcs; by = fc -> fc.filename);
 fcs = map(fcs) do fc
     fc.filename ∈ base_jl_files && return Coverage.FileCoverage(joinpath("base", fc.filename), fc.source, fc.coverage)
-    if occursin("stdlib", fc.filename)
+    fc = if occursin("stdlib", fc.filename)
         new_name = "stdlib" * String(split(fc.filename, joinpath("stdlib", "v" * string(VERSION.major) * "." * string(VERSION.minor)))[end])
-        return Coverage.FileCoverage(new_name, fc.source, fc.coverage)
-    else
-        return fc
+        Coverage.FileCoverage(new_name, fc.source, fc.coverage)
     end
+    return Coverage.amend_coverage_from_src!(fc)
 end
 
 # Must occur after truncation performed above
