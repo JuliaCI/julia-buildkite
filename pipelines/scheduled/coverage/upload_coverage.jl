@@ -188,14 +188,13 @@ end;
 fcs = Coverage.merge_coverage_counts(fcs)
 sort!(fcs; by = fc -> fc.filename);
 fcs = map(fcs) do fc
-    fc = if fc.filename ∈ base_jl_files
-        Coverage.FileCoverage(joinpath("base", fc.filename), fc.source, fc.coverage)
-    elseif occursin("stdlib", fc.filename)
+    fc.filename ∈ base_jl_files && return Coverage.FileCoverage(joinpath("base", fc.filename), fc.source, fc.coverage)
+    if occursin("stdlib", fc.filename)
         new_name = "stdlib" * String(split(fc.filename, joinpath("stdlib", "v" * string(VERSION.major) * "." * string(VERSION.minor)))[end])
-        Coverage.FileCoverage(new_name, fc.source, fc.coverage)
+        return Coverage.FileCoverage(new_name, fc.source, fc.coverage)
+    else
+        return fc
     end
-    Coverage.amend_coverage_from_src!(fc)
-    return fc
 end
 
 # Must occur after truncation performed above
@@ -206,6 +205,12 @@ filter!(fcs) do fc
 end;
 
 filter!(fc -> (startswith(fc.filename, "base") || startswith(fc.filename, "stdlib")), fcs)
+
+# This must be run to make sure all lines of code are hit.
+# See docstring for `Coverage.amend_coverage_from_src!``
+for fc in fcs
+    Coverage.amend_coverage_from_src!(fc.coverage, fc.filename)
+end
 
 print_coverage_summary.(fcs);
 const total_cov_pct = print_coverage_summary(fcs, "Total").cov_pct
