@@ -206,6 +206,12 @@ end;
 
 filter!(fc -> (startswith(fc.filename, "base") || startswith(fc.filename, "stdlib")), fcs)
 
+# This must be run to make sure all lines of code are hit.
+# See docstring for `Coverage.amend_coverage_from_src!``
+for fc in fcs
+    Coverage.amend_coverage_from_src!(fc.coverage, fc.filename)
+end
+
 print_coverage_summary.(fcs);
 const total_cov_pct = print_coverage_summary(fcs, "Total").cov_pct
 
