@@ -3,14 +3,17 @@ steps:
     steps:
       - label: "llvmpasses"
         key: "llvmpasses"
+        # Wait until `build-x86_64-linux-gnu` is finished, so that we only see build errors once
+        depends_on:
+          - "build_x86_64-linux-gnu"
         plugins:
           - JuliaCI/julia#v1:
               # Drop default "registries" directory, so it is not persisted from execution to execution
               persist_depot_dirs: packages,artifacts,compiled
               version: '1.6'
-          - staticfloat/sandbox#v1.2:
-              rootfs_url: https://github.com/JuliaCI/rootfs-images/releases/download/v4.8/package_linux.x86_64.tar.gz
-              rootfs_treehash: "2a058481b567f0e91b9aa3ce4ad4f09e6419355a"
+          - staticfloat/sandbox#v1:
+              rootfs_url: https://github.com/JuliaCI/rootfs-images/releases/download/v5.26/package_linux.x86_64.tar.gz
+              rootfs_treehash: "5b0b851aca3c941b900a1301c13922c6cfc7f211"
               uid: 1000
               gid: 1000
               workspaces:

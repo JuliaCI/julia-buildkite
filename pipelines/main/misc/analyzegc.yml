@@ -11,7 +11,7 @@ steps:
               # Drop default "registries" directory, so it is not persisted from execution to execution
               persist_depot_dirs: packages,artifacts,compiled
               version: '1.6'
-          - staticfloat/sandbox#v1.2:
+          - staticfloat/sandbox#v1:
               rootfs_url: https://github.com/JuliaCI/rootfs-images/releases/download/v4.8/llvm_passes.x86_64.tar.gz
               rootfs_treehash: "c7a289a8cc544b234b1e2d7cbcce3e6815359ecd"
               workspaces:
@@ -19,10 +19,10 @@ steps:
                 - "/cache/repos:/cache/repos"
         commands: |
           echo "--- Install in-tree LLVM dependencies"
-          make --output-sync -j$${JULIA_CPU_THREADS:?} -C deps install-llvm install-clang install-llvm-tools install-libuv install-utf8proc install-unwind
+          make --output-sync -j$${JULIA_CPU_THREADS:?} -C src install-analysis-deps
           echo "+++ run clangsa/analyzegc"
           make --output-sync -j$${JULIA_CPU_THREADS:?} -C test/clangsa
-          make --output-sync -j$${JULIA_CPU_THREADS:?} -C src analyzegc
+          make --output-sync -j$${JULIA_CPU_THREADS:?} -C src analyze
         timeout_in_minutes: 60
         agents:
           queue: "julia"
