@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # This script performs the basic steps needed to test Julia previously
 # built and uploaded as a `.tar.gz`.

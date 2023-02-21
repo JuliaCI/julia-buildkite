@@ -20,6 +20,9 @@ steps:
               .buildkite/pipelines/main/platforms/upload_macos.arches \
               .buildkite/pipelines/main/platforms/upload_macos.yml
           bash .buildkite/utilities/arches_pipeline_upload.sh \
+              .buildkite/pipelines/main/platforms/upload_freebsd.arches \
+              .buildkite/pipelines/main/platforms/upload_freebsd.yml
+          bash .buildkite/utilities/arches_pipeline_upload.sh \
               .buildkite/pipelines/main/platforms/upload_windows.arches \
               .buildkite/pipelines/main/platforms/upload_windows.yml
 
