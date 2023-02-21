@@ -9,7 +9,6 @@ steps:
           - JuliaCI/coreupload#v2:
               core_pattern: "**/*.core"
               compressor: "zstd"
-              create_bundle: "true"
               lldb_commands:
                 - "bt all"
           - JuliaCI/external-buildkite#v1:
