@@ -13,6 +13,7 @@ steps:
         agents:
           queue: "julia"
           os: "macos"
+          macos_version: "13.2"
           arch: "${ARCH?}"
         env:
           # Receive some environment mappings from our templating engine
