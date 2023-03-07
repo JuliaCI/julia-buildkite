@@ -83,7 +83,6 @@ JULIA_CPU_TARGET="$(printf ";%s" "${JULIA_CPU_TARGETS[@]}")"
 export JULIA_CPU_TARGET="${JULIA_CPU_TARGET:1}"
 
 export JULIA_IMAGE_THREADS="$JULIA_CPU_THREADS"
-export JULIA_IMAGE_TIMINGS=1
 
 
 # Extract git information
