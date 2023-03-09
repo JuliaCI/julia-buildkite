@@ -82,7 +82,8 @@ elif [[ "${OS}" == "windows" || "${OS}" == "windowsnogpl" ]]; then
 
     # Use 7z to create a `.zip` file to upload as well
     echo "--- [windows] make zip"
-    "${JULIA_INSTALL_DIR}/libexec/7z.exe" a "${UPLOAD_FILENAME}.zip" "$(cygpath -w "$(pwd)/${JULIA_INSTALL_DIR}")"
+    PATH="${JULIA_INSTALL_DIR}/libexec:${JULIA_INSTALL_DIR}/libexec/julia:${PATH}" \
+    7z.exe a "${UPLOAD_FILENAME}.zip" "$(cygpath -w "$(pwd)/${JULIA_INSTALL_DIR}")"
     UPLOAD_EXTENSIONS+=( "zip" )
 fi
 
