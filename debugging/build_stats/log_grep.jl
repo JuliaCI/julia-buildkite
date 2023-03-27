@@ -77,5 +77,9 @@ end
 
 if !isempty(ARGS)
     matching_jobs = grep_logs(jobs, ARGS[1])
-    df = DataFrame(matching_jobs)
+    if isempty(matching_jobs)
+        @warn("No matching jobs!")
+    else
+        df = DataFrame(matching_jobs)
+    end
 end
