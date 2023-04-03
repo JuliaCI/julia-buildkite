@@ -30,7 +30,10 @@ fi
 # If we're on macOS, we need to re-sign the downloaded tarball so it will
 # execute on this machine
 if [[ "${OS}" == "macos" ]]; then
+    echo "--- [mac] Codesigning"
     .buildkite/utilities/macos/codesign.sh "${JULIA_INSTALL_DIR}"
+    echo "--- [mac] Update checksums for stdlib cachefiles after codesigning"
+    ${JULIA_INSTALL_DIR}/bin/julia .buildkite/utilities/macos/update_stdlib_pkgimage_checksums.jl
 fi
 
 
