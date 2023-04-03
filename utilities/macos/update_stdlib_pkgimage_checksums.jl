@@ -42,12 +42,13 @@ for dir in readdir(stdlib_cache_dir, join = true)
     isdir(dir) || continue
     files = readdir(dir, join=true)
     sort!(files, by=mtime) # respect mtime order of caches
-    for basename in unique(first.(splitext.(files)))
-        endswith(basename, ".dylib") && continue # happens because of .dSYM files
-        ji_file = basename * ".ji"
-        pkgimg_file = basename * ".dylib"
+    slugs = unique(first.(splitext.(files)))
+    for slug in slugs
+        endswith(slug, ".dylib") && continue # happens because of .dSYM files
+        ji_file = slug * ".ji"
+        pkgimg_file = slug * ".dylib"
         update_cache_pkgimg_checksum!(ji_file, pkgimg_file)
         touch(ji_file) # for case where file was already correct
-        sleep(1) # ensure cache files have different mtime second values to preserve order through tar compression
+        slug == slugs[end] || sleep(1) # ensure cache files have different mtime second values to preserve order through tar compression
     end
 end
