@@ -131,7 +131,12 @@ end
 # Download `rr` for the given platform, into the given prefix
 function download_rr(platform::Platform, prefix::String)
     if !isfile(joinpath(prefix, "bin", "rr"))
-        paths = collect_artifact_paths(["rr_jll"]; platform)
+        jlls = [
+            Pkg.PackageSpec(;name = "rr_jll", version = v"5.5.0"),
+            # Manually work around bad artifact selection with MSAN tags
+            Pkg.PackageSpec(;name = "Zlib_jll", version = v"1.2.11"),
+        ]
+        paths = collect_artifact_paths(jlls; platform)
         copy_artifact_paths(prefix, paths)
     end
 end
