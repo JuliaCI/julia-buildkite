@@ -1,41 +1,53 @@
 
-Sys.isapple() || error("This tool only exists to update after MacOS codesigning")
+Sys.isapple() || error("This tool only exists to update caches after MacOS codesigning")
 
 # Updates cache file checksum for pkgimg i.e. after codesigning pkgimages
 function update_cache_pkgimg_checksum!(ji_file::String, pkgimg_file::String)
+    isfile(ji_file) || error("ji file does not exist at $(repr(ji_file))")
+    isfile(pkgimg_file) || error("pkgimg file does not exist at $(repr(pkgimg_file))")
     crc_so = open(Base._crc32c, pkgimg_file, "r")
     open(ji_file, "r+") do f
-        if Base.isvalid_pkgimage_crc(f, pkgimg_file)
-            @info "pkgimage checksum already correct in $(repr(ji_file))"
-            return
-        end
         if iszero(Base.isvalid_cache_header(f))
             error("Invalid header in cache file $(repr(ji_file)).")
         end
-        seekend(f)
-        seek(f, filesize(f) - 8)
-        write(f, crc_so)
-        seekstart(f)
-        write(f, Base._crc32c(f))
-
         if Base.isvalid_pkgimage_crc(f, pkgimg_file)
-            @info "pkgimage checksum updated in $(repr(ji_file)) for $(repr(pkgimg_file))"
+            @error "pkgimage checksum already correct in $(repr(ji_file))"
         else
-            error("Failed to set checksum correctly")
+            seekend(f)
+            seek(f, filesize(f) - 8)
+            write(f, crc_so) # overwrites 4 bytes
+
+            seekstart(f)
+            crc = Base._crc32c(read(f, filesize(f) - 4))
+            write(f, crc) # overwrites last 4 bytes
+
+            seekstart(f)
+            if iszero(Base.isvalid_cache_header(f))
+                error("After update: Invalid header in cache file $(repr(ji_file)).")
+            end
+            if !Base.isvalid_pkgimage_crc(f, pkgimg_file)
+                error("After update: Incorrect pkgimage checksum in cache file $(repr(ji_file))")
+            end
+            @info "pkgimage checksum updated in $(repr(ji_file)) for $(repr(pkgimg_file))"
         end
     end
     return nothing
 end
 
-julia_root = abspath(joinpath(dirname(Base.julia_cmd()[1]), "..", ".."))
+julia_root = abspath(joinpath(dirname(Base.julia_cmd()[1]), ".."))
 
-stdlib_cache_dir = abspath(joinpath(julia_root, "usr", "share", "julia", "compiled", "v$(VERSION.major).$(VERSION.minor)"))
+stdlib_cache_dir = abspath(joinpath(julia_root, "share", "julia", "compiled", "v$(VERSION.major).$(VERSION.minor)"))
 
 for dir in readdir(stdlib_cache_dir, join = true)
-    for basename in unique(first.(splitext.(readdir(dir, join=true))))
+    isdir(dir) || continue
+    files = readdir(dir, join=true)
+    sort!(files, by=mtime) # respect mtime order of caches
+    for basename in unique(first.(splitext.(files)))
         endswith(basename, ".dylib") && continue # happens because of .dSYM files
         ji_file = basename * ".ji"
         pkgimg_file = basename * ".dylib"
         update_cache_pkgimg_checksum!(ji_file, pkgimg_file)
+        touch(ji_file) # for case where file was already correct
+        sleep(1) # ensure cache files have different mtime second values to preserve order through tar compression
     end
 end
