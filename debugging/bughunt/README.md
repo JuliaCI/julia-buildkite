@@ -8,6 +8,7 @@ $ julia --project bughunt.jl ${BUILDKITE_WEB_URL}
 
 Where `$BUILDKITE_WEB_URL` is the URL shown when a buildkite job is expanded in the web UI, e.g. something like `https://buildkite.com/julialang/julia-master/builds/13349#0181b36e-6ab1-4e9d-b9bd-5b642e16e761`.
 You will also need to have decrypted the `buildkite_token` in this repository, or saved  your own.
+To get your own buildkite token, navigate to https://buildkite.com/user/api-access-tokens, generate a new personal access token with all `read_*` permissinons and `JuliaLang` organization access, then save that value to the `buildkite_token` file in this directory.
 
 Running the `bughunt.jl` script will drop you into a sandbox environment with the appropriate rootfs, a julia checkout of the correct gitsha in `/build/julia`, and all relevant artifacts from buildkite (such as `rr` traces, core dumps, and previously-build Julia binaries) in `/build/artifacts`.
 
