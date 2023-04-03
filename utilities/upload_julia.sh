@@ -35,6 +35,9 @@ if [[ "${OS}" == "macos" || "${OS}" == "macosnogpl" ]]; then
         --identity "${MACOS_CODESIGN_IDENTITY}" \
         "${JULIA_INSTALL_DIR}"
 
+    echo "--- [mac] Update checksums for stdlib cachefiles"
+    ${JULIA_INSTALL_DIR}/bin/julia .buildkite/utilities/macos/update_stdlib_pkgimage_checksums.jl
+
     # Immediately re-compress that tarball for upload
     echo "--- [mac] Re-compress codesigned tarball"
     rm -f "${UPLOAD_FILENAME}.tar.gz"
