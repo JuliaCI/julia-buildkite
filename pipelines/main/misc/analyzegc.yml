@@ -21,8 +21,8 @@ steps:
           echo "--- Install in-tree LLVM dependencies"
           make --output-sync -j$${JULIA_CPU_THREADS:?} -C src install-analysis-deps
           echo "+++ run clangsa/analyzegc"
-          make --output-sync -j$${JULIA_CPU_THREADS:?} -C test/clangsa
-          make --output-sync -j$${JULIA_CPU_THREADS:?} -C src analyze
+          make --output-sync -j$${JULIA_CPU_THREADS:?} -C test/clangsa --keep-going
+          make --output-sync -j$${JULIA_CPU_THREADS:?} -C src analyze --keep-going
         timeout_in_minutes: 60
         agents:
           queue: "julia"
