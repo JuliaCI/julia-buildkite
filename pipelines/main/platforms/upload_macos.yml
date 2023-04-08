@@ -41,8 +41,7 @@ steps:
         agents:
           queue: "julia"
           os: "macos"
-          # We actually do not need to use the same architecture when signing/uploading
-          #arch: "${ARCH}"
+          arch: "${ARCH}"
         env:
           # Receive cryptic token from parent job
           BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET: ${BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET?}
