@@ -4,6 +4,7 @@ package_linux          x86_64-linux-gnu               x86_64         x86_64     
 package_linux          x86_64-linux-gnuassert         x86_64         x86_64         FORCE_ASSERTIONS=1,LLVM_ASSERTIONS=1,JL_CFLAGS=-Werror,JL_CXXFLAGS=-Werror    .             v5.26         5b0b851aca3c941b900a1301c13922c6cfc7f211
 package_linux          aarch64-linux-gnu              aarch64        aarch64        .                                                                             .             v5.26         dcf39d10ba43bf13c75d5031c3a88f125780033b
 package_linux          powerpc64le-linux-gnu          powerpc64le    powerpc64le    .                                                                             .             v5.26         45378b056347797ff6a5411c05f86a9119d17d19
+package_linux          powerpc64le-linux-gnuassert    powerpc64le    powerpc64le    FORCE_ASSERTIONS=1,LLVM_ASSERTIONS=1                                          .             v5.26         45378b056347797ff6a5411c05f86a9119d17d19
 package_musl           x86_64-linux-musl              x86_64         x86_64         JL_CFLAGS=-Werror,JL_CXXFLAGS=-Werror                                         .             v5.26         c73bbb4c844b34a8ef3bc4c6c68eeb0bc5fdc1e5
 
 # These special lines allow us to embed default values for the columns above.
