@@ -9,3 +9,6 @@ sign_treehashes:
 
 verify_treehashes:
 	cd .buildkite/cryptic_repo_root && verify_treehashes --repo-root=$$(pwd) --verbose
+
+print-%:
+	echo "$*=$($*)"
