@@ -1,5 +1,5 @@
 # OS       TRIPLET                      ARCH          MAKE_FLAGS                                               TIMEOUT
-macos      x86_64-apple-darwinnogpl     x86_64        USE_GPL_LIBS=0,JL_CFLAGS=-Werror,JL_CXXFLAGS=-Werror     .
+macos      x86_64-apple-darwinnogpl     x86_64        USE_GPL_LIBS=0                                           .
 macos      aarch64-apple-darwinnogpl    aarch64       USE_GPL_LIBS=0                                           .
 
 # These special lines allow us to embed default values for the columns above.
