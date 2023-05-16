@@ -17,6 +17,9 @@ case "${TRIPLET}" in
     *-gnuassert) # assert builds (`FORCE_ASSERTIONS=1` and `LLVM_ASSERTIONS=1`)
         OS="linuxassert"
         ;;
+    *-gnuprofiling) # profiling-enabled builds (`WITH_TRACY=1` and `WITH_ITTAPI=1` and `WITH_TIMING_COUNTS=1`)
+        OS="linuxprofiling"
+        ;;
     *-gnusrcassert) # both "from source" and assert
         OS="linuxsrcassert"
         ;;
