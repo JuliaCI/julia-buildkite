@@ -1,0 +1,32 @@
+steps:
+  - group: "Check"
+    steps:
+      - label: ":linux: srcdepchecksums ${TRIPLET?}"
+        key: "srcdepchecksums_${TRIPLET?}"
+        plugins:
+          - JuliaCI/external-buildkite#v1:
+              version: "./.buildkite-external-version"
+              repo_url: "https://github.com/JuliaCI/julia-buildkite"
+          - JuliaCI/julia#v1:
+              # Drop default "registries" directory, so it is not persisted from execution to execution
+              persist_depot_dirs: packages,artifacts,compiled
+              version: '1.6'
+          - staticfloat/sandbox#v1:
+              rootfs_url: https://github.com/JuliaCI/rootfs-images/releases/download/${ROOTFS_TAG?}/${ROOTFS_IMAGE_NAME?}.${ARCH_ROOTFS?}.tar.gz
+              rootfs_treehash: "${ROOTFS_HASH?}"
+              uid: 1000
+              gid: 1000
+              workspaces:
+                # Include `/cache/repos` so that our `git` version introspection works.
+                - "/cache/repos:/cache/repos"
+        timeout_in_minutes: ${TIMEOUT?}
+        commands: "bash .buildkite/utilities/make_deps_no_bb.sh"
+        agents:
+          queue: "julia"
+          # Only run on `sandbox.jl` machines (not `docker`-isolated ones) since we need nestable sandboxing
+          sandbox_capable: "true"
+          os: "linux"
+          arch: "${ARCH?}"
+        env:
+          # Receive some environment mappings from our templating engine
+          TRIPLET: "${TRIPLET?}"
