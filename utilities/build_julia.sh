@@ -44,8 +44,8 @@ for FLAG in "${MFLAGS[@]}"; do
     echo " -> ${FLAG}"
 done
 
-echo "--- Build Julia (debug build)"
-${MAKE} debug "${MFLAGS[@]}"
+echo "--- Build Julia"
+${MAKE} "${MFLAGS[@]}"
 
 
 echo "--- Check that the working directory is clean"
