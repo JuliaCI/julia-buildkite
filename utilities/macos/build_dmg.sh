@@ -59,65 +59,13 @@ function create_dmg() {
 create_dmg
 
 # Upload the `.dmg` for notarization
-xcrun altool \
-    --notarize-app \
-    --primary-bundle-id org.julialang.launcherapp \
-    --username "${NOTARIZATION_APPLE_ID}" \
+
+xcrun notarytool \
+    submit \
+    --apple-id "${NOTARIZATION_APPLE_ID}" \
     --password "${NOTARIZATION_APPLE_KEY}" \
-    -itc_provider A427R7F42H \
-    --file "${DMG_NAME}" \
-    --output-format xml > notarization.xml
-
-# Get the upload UUID from the xml file
-UUID="$(/usr/libexec/PlistBuddy -c "print notarization-upload:RequestUUID" notarization.xml 2>/dev/null)"
-echo "Waiting until UUID ${UUID} is done processing...."
-
-# Wait for apple's servers to give us a valid notarization
-ALTOOL_FAILURES=0
-while true; do
-    if ! xcrun altool \
-        --notarization-info "${UUID}" \
-        --username "${NOTARIZATION_APPLE_ID}" \
-        --password "${NOTARIZATION_APPLE_KEY}" \
-        --output-format xml > notarization.xml; then
-
-        ALTOOL_FAILURES=$((${ALTOOL_FAILURES} + 1))
-        echo -n "altool has failed ${ALTOOL_FAILURES} times " >&2
-        if [[ "${ALTOOL_FAILURES}" < 10 ]]; then
-            echo "looping..."
-            sleep 2
-            continue
-        else
-            # If we've had more than 10 failures in a row, bail.
-            # Something might be wrong with the servers right now,
-            # and there's no sense in holding up the CI queue waiting.
-            echo "bailing out!" >&2
-            false
-        fi
-    else
-        # If we got a good return value, forget about any previous altool failures.
-        ALTOOL_FAILURES=0
-    fi
-
-    STATUS=$(/usr/libexec/PlistBuddy -c "print notarization-info:Status" notarization.xml 2>/dev/null)
-
-    # Process loop exit conditions
-    if [[ ${STATUS} == "success" ]]; then
-        echo "Notarization finished"
-        break
-    elif [[ ${STATUS} == "in progress" ]]; then
-        echo -n "."
-        sleep 10
-        continue
-    elif [[ ${STATUS} == "invalid" ]]; then
-        echo "invalid!  Looks like something got borked:"
-        /usr/libexec/PlistBuddy -c "print notarization-info:LogFileURL" notarization.xml 2>/dev/null
-        exit 1
-    else
-        echo "Notarization failed with status ${STATUS}"
-        exit 1
-    fi
-done
+    --wait \
+    "${DMG_NAME}"
 
 # Staple the notarization to the app
 xcrun stapler staple "${APP_PATH}"
@@ -126,4 +74,4 @@ xcrun stapler staple "${APP_PATH}"
 create_dmg
 
 # Cleanup things we created here
-rm -rf "${DMG_PATH}" notarization.xml
+rm -rf "${DMG_PATH}"
