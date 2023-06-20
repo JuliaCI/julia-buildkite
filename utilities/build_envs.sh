@@ -83,7 +83,11 @@ JULIA_CPU_TARGET="$(printf ";%s" "${JULIA_CPU_TARGETS[@]}")"
 export JULIA_CPU_TARGET="${JULIA_CPU_TARGET:1}"
 
 export JULIA_IMAGE_THREADS="$JULIA_CPU_THREADS"
-
+# Our 32-bit workers often run out of address space; let's make it easier on them
+# by not multithreading our LLVM image generation.
+if [[ "${ARCH}" == "i686" ]]; then
+    export JULIA_IMAGE_THREADS="1"
+fi
 
 # Extract git information
 SHORT_COMMIT_LENGTH=10
