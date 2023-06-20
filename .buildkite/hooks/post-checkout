@@ -11,13 +11,20 @@ UPSTREAM_BRANCH="${UPSTREAM_BRANCH:-master}"
 # We're going to cache repositories in here, just like buildkite itself would:
 UPSTREAM_CACHE="${BUILDKITE_PLUGIN_JULIA_CACHE_DIR?}/repos/$(tr ':/.' '---' <<<"${UPSTREAM_URL}")"
 
-if [[ ! -d "${UPSTREAM_CACHE}" ]]; then
-    echo "Clone ${UPSTREAM_URL}"
-    mkdir -p "$(dirname "${UPSTREAM_CACHE}")"
-    git clone --mirror "${UPSTREAM_URL}" "${UPSTREAM_CACHE}"
-else
-    echo "Update cache for ${UPSTREAM_URL}"
-    git -C "${UPSTREAM_CACHE}" fetch
+DISABLE_UPSTREAM_CACHE="false"
+if [[ "$(uname)" == "FreeBSD" ]]; then
+    DISABLE_UPSTREAM_CACHE="true"
+fi
+
+if [[ "${DISABLE_UPSTREAM_CACHE}" != "true" ]]; then
+    if [[ ! -d "${UPSTREAM_CACHE}" ]]; then
+        echo "Clone ${UPSTREAM_URL}"
+        mkdir -p "$(dirname "${UPSTREAM_CACHE}")"
+        git clone --mirror "${UPSTREAM_URL}" "${UPSTREAM_CACHE}"
+    else
+        echo "Update cache for ${UPSTREAM_URL}"
+        git -C "${UPSTREAM_CACHE}" fetch
+    fi
 fi
 
 # Clear out current directory
@@ -26,7 +33,12 @@ rm -rf ..?* .[!.]* *
 
 # git clone, then force checkout the given gitref
 UPSTREAM_GITREF="$(buildkite-agent meta-data get --default "origin/${UPSTREAM_BRANCH}" BUILDKITE_JULIA_VERSION)"
-git clone --dissociate --reference "${UPSTREAM_CACHE}" "${UPSTREAM_URL}" "./"
+
+if [[ "${DISABLE_UPSTREAM_CACHE}" != "true" ]]; then
+    git clone --dissociate --reference "${UPSTREAM_CACHE}" "${UPSTREAM_URL}" "./"
+else
+    git clone "${UPSTREAM_URL}" "./"
+fi
 git reset --hard "${UPSTREAM_GITREF}"
 echo
 git --no-pager log -1
