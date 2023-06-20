@@ -32,10 +32,8 @@ case "${ARCH?}" in
         ;;
     i686)
         JULIA_CPU_TARGETS+=(
-            # We require SSE2, etc.. so `pentium4` is our base i686 feature set
-            "pentium4"
-            # Add sandybridge level similar to x86_64 above
-            "sandybridge,-xsaveopt,clone_all"
+            # Target only sandybridge because we run out of memory when multiversioning
+             "sandybridge"
         )
         ;;
     armv7l)
