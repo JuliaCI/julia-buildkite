@@ -64,6 +64,7 @@ xcrun notarytool \
     submit \
     --apple-id "${NOTARIZATION_APPLE_ID}" \
     --password "${NOTARIZATION_APPLE_KEY}" \
+    --team-id "A427R7F42H" \
     --wait \
     "${DMG_NAME}"
 
