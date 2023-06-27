@@ -55,6 +55,19 @@ if [[ "${OS}" == "linux" ]]; then
     mkdir -p ${TMPDIR}
 fi
 
+if [[ "${OS}" == "windows" ]]; then
+    # The windows runner has 32GB and 8 workers, but windows doesn't do overcommit so if we go over it it fails spetacularly
+    # UPDATE IF THE RUNNER CONFIG CHANGES
+    export JULIA_TEST_MAXRSS_MB=3800
+fi
+
+if [[ "${ARCH}" == "i686" ]]; then
+    # Assume that we only have 3.5GB available to a single process, and that a single
+    # test can take up to 2GB of RSS.  This means that we should instruct the test
+    # framework to restart any worker that comes into a test set with 1.5GB of RSS.
+    export JULIA_TEST_MAXRSS_MB=1536
+fi
+
 # By default, we'll run all tests and skip nothing
 TESTS_TO_RUN=( "all" )
 TESTS_TO_SKIP=()
