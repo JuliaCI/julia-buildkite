@@ -4,7 +4,7 @@ Sys.isapple() || error("This tool only exists to update caches after MacOS codes
 # Updates cache file checksum for pkgimg i.e. after codesigning pkgimages
 function update_cache_pkgimg_checksum!(ji_file::String, pkgimg_file::String)
     isfile(ji_file) || error("ji file does not exist at $(repr(ji_file))")
-    isfile(pkgimg_file) || error("pkgimg file does not exist at $(repr(pkgimg_file))")
+    isfile(pkgimg_file) || return # if no pkgimage file it should be a --pkgimage=no cache
     crc_so = open(Base._crc32c, pkgimg_file, "r")
     open(ji_file, "r+") do f
         if iszero(Base.isvalid_cache_header(f))
