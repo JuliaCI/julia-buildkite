@@ -27,8 +27,8 @@ steps:
               persist_depot_dirs: packages,artifacts,compiled
               version: '1'
           - staticfloat/sandbox#v1:
-              rootfs_url: https://github.com/JuliaCI/rootfs-images/releases/download/v5.22/aws_uploader.x86_64.tar.gz
-              rootfs_treehash: "486b8618fd0184dd869c9282a73bb08aa1411e82"
+              rootfs_url: https://github.com/JuliaCI/rootfs-images/releases/download/v6.00/aws_uploader.x86_64.tar.gz
+              rootfs_treehash: "61cb30497604eb1581b3ffd6a8058c150f4cbf8b"
               uid: 1000
               gid: 1000
               workspaces:
