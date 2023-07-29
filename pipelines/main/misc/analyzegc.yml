@@ -12,8 +12,8 @@ steps:
               persist_depot_dirs: packages,artifacts,compiled
               version: '1.6'
           - staticfloat/sandbox#v1:
-              rootfs_url: https://github.com/JuliaCI/rootfs-images/releases/download/v4.8/llvm_passes.x86_64.tar.gz
-              rootfs_treehash: "c7a289a8cc544b234b1e2d7cbcce3e6815359ecd"
+              rootfs_url: https://github.com/JuliaCI/rootfs-images/releases/download/v6.00/llvm_passes.x86_64.tar.gz
+              rootfs_treehash: "0badf5d8794e21a03ac2ff2d46c1ab538ac02571"
               workspaces:
                 # Include `/cache/repos` so that our `git` version introspection works.
                 - "/cache/repos:/cache/repos"

@@ -1,5 +1,5 @@
 # ROOTFS_IMAGE_NAME    TRIPLET                  ARCH      ARCH_ROOTFS    MAKE_FLAGS                                              TIMEOUT       ROOTFS_TAG     ROOTFS_HASH
-package_linux          x86_64-linux-gnunogpl    x86_64    x86_64         USE_GPL_LIBS=0,JL_CFLAGS=-Werror,JL_CXXFLAGS=-Werror    .             v5.26          5b0b851aca3c941b900a1301c13922c6cfc7f211
+package_linux          x86_64-linux-gnunogpl    x86_64    x86_64         USE_GPL_LIBS=0,JL_CFLAGS=-Werror,JL_CXXFLAGS=-Werror    .             v6.00          4dcde853eb5baaa0a8f087b633eaf955dc94b5dc
 
 # These special lines allow us to embed default values for the columns above.
 # Any column without a default mapping here will simply substitute a `.` to the empty string

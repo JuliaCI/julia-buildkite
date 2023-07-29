@@ -14,8 +14,8 @@ steps:
               persist_depot_dirs: packages,artifacts,compiled
               version: '1'
           - staticfloat/sandbox#v1:
-              rootfs_url: https://github.com/JuliaCI/rootfs-images/releases/download/v5.38/latex.x86_64.tar.gz
-              rootfs_treehash: "be2d12d899ee334c470a79f6d3f3faa4e63c7c3c"
+              rootfs_url: https://github.com/JuliaCI/rootfs-images/releases/download/v6.00/latex.x86_64.tar.gz
+              rootfs_treehash: "48f7c99f62ac7f2a8212d106059be1dddc3aa6bf"
               uid: 1000
               gid: 1000
               workspaces:
