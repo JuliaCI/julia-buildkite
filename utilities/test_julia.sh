@@ -55,11 +55,8 @@ if [[ "${OS}" == "linux" ]]; then
     mkdir -p ${TMPDIR}
 fi
 
-if [[ "${OS}" == "windows" ]]; then
-    # The windows runner has 32GB and 8 workers, but windows doesn't do overcommit so if we go over it it fails spetacularly
-    # UPDATE IF THE RUNNER CONFIG CHANGES
-    export JULIA_TEST_MAXRSS_MB=3800
-fi
+#Always set the max rss so that if tests add large global variables (which they do) we don't make the GC's life too hard
+export JULIA_TEST_MAXRSS_MB=3800
 
 if [[ "${ARCH}" == "i686" ]]; then
     # Assume that we only have 3.5GB available to a single process, and that a single
