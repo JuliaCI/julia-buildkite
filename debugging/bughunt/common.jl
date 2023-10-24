@@ -132,12 +132,12 @@ end
 function download_rr(platform::Platform, prefix::String)
     if !isfile(joinpath(prefix, "bin", "rr"))
         jlls = [
-            Pkg.PackageSpec(;name = "rr_jll", version = v"5.5.0"),
+            Pkg.PackageSpec(;name = "rr_jll", version = v"5.5.0+7"),
             # Manually work around bad artifact selection with MSAN tags
-            Pkg.PackageSpec(;name = "Zlib_jll", version = v"1.2.11"),
+            Pkg.PackageSpec(;name = "Zlib_jll", version = v"1.2.11+18"),
         ]
         paths = collect_artifact_paths(jlls; platform)
-        copy_artifact_paths(prefix, paths)
+        deploy_artifact_paths(prefix, paths)
     end
 end
 
