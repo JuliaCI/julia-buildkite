@@ -1,5 +1,5 @@
 # ROOTFS_IMAGE_NAME    TRIPLET                   ARCH           ARCH_ROOTFS    MAKE_FLAGS    TIMEOUT     ROOTFS_TAG    ROOTFS_HASH
-# package_linux        armv7l-linux-gnueabihf    armv7l         armv7l         .             .           ----          ----------------------------------------
+package_linux          armv7l-linux-gnueabihf    armv7l         armv7l         .             .           v6.00         e3c3904e49a347d86fbb00c397a96f9a10b9c3e0
 
 # These special lines allow us to embed default values for the columns above.
 # Any column without a default mapping here will simply substitute a `.` to the empty string
