@@ -23,6 +23,7 @@ steps:
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
+        priority: +(build.branch =~ /^(release|backports-release)-/)
         commands: |
           # Launch Linux build jobs
           GROUP="Build" \
@@ -59,6 +60,7 @@ steps:
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
+        priority: +(build.branch =~ /^(release|backports-release)-/)
         commands: |
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/analyzegc.yml
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/doctest.yml
@@ -82,6 +84,7 @@ steps:
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
+        priority: +(build.branch =~ /^(release|backports-release)-/)
         commands: |
           export ALLOW_FAIL="false"
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/gcext.yml
@@ -122,6 +125,7 @@ steps:
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
+        priority: +(build.branch =~ /^(release|backports-release)-/)
         commands: |
           export ALLOW_FAIL="true"
           # Launch Linux allowed-to-fail build jobs
@@ -142,6 +146,7 @@ steps:
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
+        priority: +(build.branch =~ /^(release|backports-release)-/)
         commands: |
           export ALLOW_FAIL="true"
 
