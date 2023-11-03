@@ -148,8 +148,12 @@ if [[ -z "${USE_RR-}" ]]; then
 fi
 
 echo "--- Run the Julia test suite"
-${JULIA_CMD_FOR_TESTS:?} -e "Base.runtests(\"${TESTS:?}\"; ncores = ${NCORES_FOR_TESTS:?})"
-exitVal=$?
+# set -e; requires us using if to check the exit status
+if ${JULIA_CMD_FOR_TESTS:?} -e "Base.runtests(\"${TESTS:?}\"; ncores = ${NCORES_FOR_TESTS:?})"; then
+  exitVal=0
+else
+  exitVal=1
+fi
 
 echo "--- Upload the test/results.json"
 if [[ -f "test/results.json" ]]; then
