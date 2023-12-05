@@ -19,6 +19,23 @@ ld -v
 echo
 buildkite-agent --version
 
+# On Windows, the output of `uname -a` is a little hard to understand,
+# because it doesn't include text like "Windows Server 20xx".
+# So, on Windows, we also print the output of `systeminfo`.
+UNAME_VALUE="$(uname -s)"
+case "${UNAME_VALUE:?}" in
+    MINGW*)
+        # This is Windows.
+        EXPECTED_WORD_SIZE="64"
+        echo "--- Print Windows systeminfo"
+        systeminfo
+        ;;
+    # fallback
+    *)
+        # This is not Windows, so do nothing.
+        ;;
+esac
+
 echo "--- Collect make options"
 # These are the flags we'll provide to `make`
 MFLAGS=()
