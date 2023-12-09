@@ -60,7 +60,19 @@ timer_task = @async begin
 
     # If the process is still running, ask it nicely to terminate
     if isopen(proc)
-        println(stderr, "\n\nProcess failed to exit within $(term_timeout)s, requesting termination (SIGTERM) of PID $(proc_pid).")
+        if Sys.iswindows()
+            println(stderr, "\n\nProcess failed to exit within $(term_timeout)s, requesting termination (SIGTERM) of PID $(proc_pid).")
+        else
+            println(stderr, "\n\nProcess failed to exit within $(term_timeout)s, requesting profile then termination (SIGTERM) of PID $(proc_pid).")
+            if Sys.islinux()
+                kill(proc, 10) # SIGUSR1
+                println(stderr, "\n\nSent SIGUSR1 to PID $(proc_pid).")
+            elseif Sys.isbsd()
+                kill(proc, 29) # SIGINFO
+                println(stderr, "\n\nSent SIGINFO to PID $(proc_pid).")
+            end
+            sleep(10) # give time for 1s profile to run and print
+        end
         kill(proc, Base.SIGTERM)
         println(stderr, "\n\nSent SIGTERM to PID $(proc_pid).")
 
