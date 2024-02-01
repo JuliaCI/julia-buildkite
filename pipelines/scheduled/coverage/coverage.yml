@@ -23,10 +23,10 @@ steps:
               variables:
                 - CODECOV_TOKEN="U2FsdGVkX19l0fhdBabbuiEdysyEabkJLRHfxm7CNRkuGbnwPV365sxxC7Czs/CVcws0N1oB4pVwALRRMe36oA=="
                 - COVERALLS_TOKEN="U2FsdGVkX19zopI0hMNzzi2UUOvNVFD8Y0iisFnO/ryVxU7Tit8ZEaeN+gxodRx4CosUUh192F1+q3dTMWRIvw=="
-        timeout_in_minutes: 360
+        timeout_in_minutes: 720
         commands: |
           echo "--- Build Julia from source"
-          make --output-sync -j 6
+          make --output-sync -j 16
 
           echo "--- Print Julia version info"
           ./julia -e 'using InteractiveUtils; InteractiveUtils.versioninfo()'
