@@ -155,9 +155,11 @@ else
   exitVal=1
 fi
 
-echo "--- Upload the test/results.json"
-if [[ -f "test/results.json" ]]; then
-    buildkite-agent artifact upload "test/results.json"
+echo "--- Upload results.json report"
+if [[ -f "results.json" ]]; then
+    buildkite-agent artifact upload "results.json"
+else
+    echo "no results.json file found"
 fi
 
 exit $exitVal
