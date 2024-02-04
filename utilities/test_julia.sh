@@ -156,8 +156,8 @@ else
 fi
 
 echo "--- Upload results.json report"
-if [[ -f "results.json" ]]; then
-    buildkite-agent artifact upload "results.json"
+if [[ -f "${JULIA_INSTALL_DIR}/share/julia/test/results.json" ]]; then
+    buildkite-agent artifact upload "${JULIA_INSTALL_DIR}/share/julia/test/results.json"
 else
     echo "no results.json file found"
 fi
