@@ -148,4 +148,18 @@ if [[ -z "${USE_RR-}" ]]; then
 fi
 
 echo "--- Run the Julia test suite"
-${JULIA_CMD_FOR_TESTS:?} -e "Base.runtests(\"${TESTS:?}\"; ncores = ${NCORES_FOR_TESTS:?})"
+# set -e; requires us using if to check the exit status
+if ${JULIA_CMD_FOR_TESTS:?} -e "Base.runtests(\"${TESTS:?}\"; ncores = ${NCORES_FOR_TESTS:?})"; then
+  exitVal=0
+else
+  exitVal=1
+fi
+
+echo "--- Upload results.json report"
+if [[ -f "${JULIA_INSTALL_DIR}/share/julia/test/results.json" ]]; then
+    buildkite-agent artifact upload "${JULIA_INSTALL_DIR}/share/julia/test/results.json"
+else
+    echo "no results.json file found"
+fi
+
+exit $exitVal
