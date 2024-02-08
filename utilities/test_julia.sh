@@ -147,7 +147,8 @@ if [[ -z "${USE_RR-}" ]]; then
     echo "Core dump size limit:      $(ulimit -c)"
 fi
 
-echo "--- Run the Julia test suite"
+# Begin with "+++" => Expand test group by default
+echo "+++ Run the Julia test suite"
 # set -e; requires us using if to check the exit status
 if ${JULIA_CMD_FOR_TESTS:?} -e "Base.runtests(\"${TESTS:?}\"; ncores = ${NCORES_FOR_TESTS:?})"; then
   exitVal=0
