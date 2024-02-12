@@ -31,6 +31,13 @@ steps:
               .buildkite/pipelines/main/platforms/upload_windows.arches \
               .buildkite/pipelines/main/platforms/upload_windows.yml
 
+          for OS in linux macos freebsd windows; do \
+              GROUP="Upload" \
+                bash .buildkite/utilities/arches_pipeline_upload.sh \
+                .buildkite/pipelines/main/platforms/upload_$${OS}.arches \
+                .buildkite/pipelines/main/misc/upload_buildkite_results.yml
+          done
+
           # Launch doctest deploy job
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/deploy_docs.yml
 
