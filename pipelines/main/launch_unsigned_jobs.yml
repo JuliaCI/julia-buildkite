@@ -60,6 +60,7 @@ steps:
               version: "./.buildkite-external-version"
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
         commands: |
+          export VERBOSE=1
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/analyzegc.yml
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/doctest.yml
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/pdf_docs/build_pdf_docs.yml
