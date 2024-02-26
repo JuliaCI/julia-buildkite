@@ -28,6 +28,8 @@ case "${ARCH?}" in
             "sandybridge,-xsaveopt,clone_all"
             # Add haswell level (without rdrnd) that is a diff of the sandybridge level
             "haswell,-rdrnd,base(1)"
+            # A common baseline for modern x86-64 server CPUs
+            "x86-64-v4,-rdrnd,base(1)"
         )
         ;;
     i686)
@@ -59,8 +61,12 @@ case "${ARCH?}" in
             "cortex-a57"
             # Cavium ThunderX2T99, a common server architecture
             "thunderx2t99"
-            # NVidia Carmel, e.g. Jetson AGX Xavier
-            "carmel"
+            # NVidia Carmel, e.g. Jetson AGX Xavier; serves as a baseline for later architectures
+            "carmel,clone_all"
+            # Apple M1
+            "apple-m1,base(3)"
+            # Vector-length-agnostic common denominator between Neoverse V1 and V2, recent Arm server architectures
+            "neoverse-512tvb,base(3)"
         )
         ;;
     powerpc64le)
