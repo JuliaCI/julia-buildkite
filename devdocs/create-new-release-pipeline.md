@@ -1,5 +1,5 @@
 1. Go to https://buildkite.com/julialang
-2. In the top-right-hand corner, click on the plus sign (in a white circle).
+2. In the top-right-hand corner, click on the white "New Pipeline" button.
 3. You are now on a page that says "New Pipeline". Fill in the fields as follows:
     - Name: `julia-release-1.9`
     - Description: `https://github.com/JuliaLang/julia`
@@ -16,16 +16,16 @@
 6. Delete ALL text in the text box.
 7. Into the text box, paste the exact contents from the folllowing file: https://github.com/JuliaCI/julia-buildkite/blob/main/pipelines/main/0_webui.yml
 8. Click on the white "Save Steps" button.
-9. Go to https://buildkite.com/julialang/julia-release-1-dot-9 and click on the white "Pipeline Settings" button.
+9. Go to https://buildkite.com/julialang/julia-release-1-dot-9 and click on the white "Pipeline Settings" (or just "Settings") button in the top-right-hand corner.
 10. In the left-hand side, under "Pipeline Settings", click on "General". Then, scroll down to the bottom of the page. In the "Pipeline Management" section, click on the white "Make Pipeline Public" button. If you are asked for confirmation, click on the green "Make Pipeline Public" button to confirm your decision.
-11. Go to https://buildkite.com/julialang/julia-release-1-dot-9 and click on the white "Pipeline Settings" button.
+11. Go to https://buildkite.com/julialang/julia-release-1-dot-9 and click on the white "Pipeline Settings" (or just "Settings") button in the top-right-hand corner.
 12. In the left-hand side, under "Pipeline Settings", click on "Builds". Then, in the "Build Skipping" section, do the following actions:
     - Step i: Make sure that the "Skip Intermediate Builds" checkbox IS checked.
     - Step ii: Make sure that the "Cancel Intermediate Builds" checkbox IS checked.
     - Step iii: Under "Skip Intermediate Builds", in the text box, enter the following text: `!master !main !release-*`
     - Step iv: Under "Cancel Intermediate Builds", in the text box, enter the following text: `!master !main !release-*`
     - Step v: Click on the green "Save Build Skipping" button.
-13. Go to https://buildkite.com/julialang/julia-release-1-dot-9 and click on the white "Pipeline Settings" button.
+13. Go to https://buildkite.com/julialang/julia-release-1-dot-9 and click on the white "Pipeline Settings" (or just "Settings") button in the top-right-hand corner.
 14. In the left-hand side, under "Pipeline Settings", click on "GitHub". Then, in the "Branch Limiting" section, do the following actions:
     - Step i: For "Branch Filter Pattern", enter the following text: `release-1.9 v1.9.*`
     - Step ii: Click on the green "Save Branch Limiting" button.
