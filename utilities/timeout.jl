@@ -65,7 +65,7 @@ timer_task = @async begin
         else
             println(stderr, "\n\nProcess failed to exit within $(term_timeout)s, requesting profile then termination (SIGTERM) of PID $(proc_pid).")
             if Sys.islinux()
-                kill(proc, 10) # SIGUSR1
+                kill(proc, 30) # SIGUSR1
                 println(stderr, "\n\nSent SIGUSR1 to PID $(proc_pid).")
             elseif Sys.isbsd()
                 kill(proc, 29) # SIGINFO
