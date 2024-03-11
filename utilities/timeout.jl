@@ -64,12 +64,17 @@ timer_task = @async begin
             println(stderr, "\n\nProcess failed to exit within $(term_timeout)s, requesting termination (SIGTERM) of PID $(proc_pid).")
         else
             println(stderr, "\n\nProcess failed to exit within $(term_timeout)s, requesting profile then termination (SIGTERM) of PID $(proc_pid).")
-            if Sys.islinux()
-                kill(proc, 30) # SIGUSR1
-                println(stderr, "\n\nSent SIGUSR1 to PID $(proc_pid).")
-            elseif Sys.isbsd()
-                kill(proc, 29) # SIGINFO
-                println(stderr, "\n\nSent SIGINFO to PID $(proc_pid).")
+            if proc_pid == "<unknown>"
+                println(stderr, "Cannot send signal as process PID is unknown.")
+            else
+                # can't use julia kill function as signal numbers are unstable across platform and not defined in Base
+                if Sys.islinux()
+                    run(`kill -USR1 $proc_pid`)
+                    println(stderr, "\n\nSent SIGUSR1 to PID $(proc_pid).")
+                elseif Sys.isbsd()
+                    run(`kill -INFO $proc_pid`)
+                    println(stderr, "\n\nSent SIGINFO to PID $(proc_pid).")
+                end
             end
             sleep(10) # give time for 1s profile to run and print
         end
