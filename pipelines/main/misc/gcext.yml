@@ -1,5 +1,5 @@
 steps:
-  - group: "Allow Fail"
+  - group: "Test"
     steps:
       - label: "gcext"
         key: "gcext"
