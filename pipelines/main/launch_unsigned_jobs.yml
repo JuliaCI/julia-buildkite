@@ -84,6 +84,8 @@ steps:
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
         commands: |
           export ALLOW_FAIL="false"
+          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/gcext.yml
+
           # Launch Linux test jobs
           GROUP="Test" \
               bash .buildkite/utilities/arches_pipeline_upload.sh \
@@ -136,7 +138,6 @@ steps:
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
         commands: |
           export ALLOW_FAIL="true"
-          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/gcext.yml
 
           # Launch Linux allowed-to-fail test jobs
           GROUP="Allow Fail" \
