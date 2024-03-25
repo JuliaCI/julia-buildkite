@@ -36,7 +36,7 @@ MFLAGS+=( "TAGGED_RELEASE_BANNER=Official https://julialang.org/ release" )
 MFLAGS+=( "JULIA_CPU_TARGET=${JULIA_CPU_TARGET}" )
 
 if [[ ! -z "${USE_JULIA_PGO_LTO-}" ]]; then
-    MFLAGS+=( "STAGE2_BUILD=$PWD/usr" )
+    MFLAGS+=( "STAGE2_BUILD=$PWD" )
 
     echo "--- Collect make options"
     echo "Make Options:"
