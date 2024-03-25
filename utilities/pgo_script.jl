@@ -1,13 +1,13 @@
 using Pkg
 Pkg.activate(; temp=true)
 Pkg.add(url="https://github.com/JuliaCI/BaseBenchmarks.jl")
-Pkg.add("DifferentialEquations")
+Pkg.add("OrdinaryDiffEq")
 Pkg.add("Test")
 Pkg.add("LinearAlgebra")
 Pkg.add("ThreadsX")
 Pkg.add("Plots")
 
-using BaseBenchmarks, DifferentialEquations, Test, ThreadsX, LinearAlgebra, Plots
+using BaseBenchmarks, OrdinaryDiffEq, Test, ThreadsX, LinearAlgebra, Plots
 
 BaseBenchmarks.load!("problem")
 
@@ -25,15 +25,9 @@ f_2dlinear_analytic = (u0, p, t) -> @. u0 * exp(p * t)
 prob_ode_2Dlinear = ODEProblem(ODEFunction(f_2dlinear, analytic = f_2dlinear_analytic),
     rand(4, 2), (0.0, 1.0), 1.01)
 
-alg, kwargs = default_algorithm(prob_ode_2Dlinear; dt = 1 // 2^(4))
-integ = init(prob_ode_2Dlinear; dt = 1 // 2^(4))
-sol = solve(prob_ode_2Dlinear; dt = 1 // 2^(4))
+sol = solve(prob_ode_2Dlinear, Tsit5(); dt = 1 // 2^(4))
 
-sol = solve(prob_ode_2Dlinear; reltol = 1e-1)
-
-sol = solve(prob_ode_2Dlinear; reltol = 1e-7)
-
-sol = solve(prob_ode_2Dlinear; alg_hints = [:stiff])
+sol = solve(prob_ode_2Dlinear, Rosenbrock23())
 
 const linear_bigα = parse(BigFloat, "1.01")
 f = (du, u, p, t) -> begin
@@ -45,7 +39,7 @@ end
 prob_ode_bigfloat2Dlinear = ODEProblem(f, map(BigFloat, rand(4, 2)) .* ones(4, 2) / 2,
     (0.0, 1.0))
 
-sol = solve(prob_ode_bigfloat2Dlinear; dt = 1 // 2^(4))
+sol = solve(prob_ode_bigfloat2Dlinear, Tsit5(); dt = 1 // 2^(4))
 
 # From OmniPackage.jl
 function expm(A::AbstractMatrix{S}) where {S}
