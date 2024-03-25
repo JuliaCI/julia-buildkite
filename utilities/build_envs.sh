@@ -218,6 +218,9 @@ fi
 # This is the "main" filename that is used.  We technically don't need this for uploading,
 # but it's very convenient for shuttling binaries between buildkite steps.
 export UPLOAD_FILENAME="julia-${TAR_VERSION?}-${OS?}-${ARCH?}"
+if [[ ! -z "${USE_JULIA_PGO_LTO-}" ]]; then
+    UPLOAD_FILENAME="${UPLOAD_FILENAME}-${USE_JULIA_PGO_LTO}"
+fi
 
 echo "--- Print the full and short commit hashes"
 echo "The full commit is:                      ${LONG_COMMIT}"
