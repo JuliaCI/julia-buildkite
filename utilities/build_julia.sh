@@ -24,7 +24,6 @@ if [[ "${ROOTFS_IMAGE_NAME-}" == "llvm_passes" ]]; then
     contrib/download_cmake.sh
 fi
 
-echo "--- Collect make options"
 # These are the flags we'll provide to `make`
 MFLAGS=()
 
@@ -53,17 +52,43 @@ else
 fi
 MFLAGS+=( "JULIA_CPU_TARGET=${JULIA_CPU_TARGET}" )
 
+if [[ ! -z "${USE_JULIA_PGO_LTO-}" ]]; then
+    MFLAGS+=( "STAGE2_BUILD=$PWD/usr" )
+
+    echo "--- Collect make options"
+    echo "Make Options:"
+    for FLAG in "${MFLAGS[@]}"; do
+        echo " -> ${FLAG}"
+    done
+
+    echo "--- Build Julia Stage 1 - with instrumentation"
+
+    cd contrib/pgo-lto
+    ${MAKE} "${MFLAGS[@]}" stage1
+
+    echo "--- Collecting Profile"
+    ${MAKE} clean-profiles
+    "./stage1.build/julia .buildkite/utilities/pgo_script.jl"
+fi
+
 # Finish off with any extra make flags from the `.arches` file
 MFLAGS+=( $(tr "," " " <<<"${MAKE_FLAGS}") )
 
+echo "--- Collect make options"
 echo "Make Options:"
 for FLAG in "${MFLAGS[@]}"; do
     echo " -> ${FLAG}"
 done
 
-echo "--- Build Julia"
-${MAKE} "${MFLAGS[@]}"
+if [[ ! -z "${USE_JULIA_PGO_LTO-}" ]]; then
+    echo "--- Build Julia Stage 2 - optimised"
+    ${MAKE} "${MFLAGS[@]}" stage2
 
+    cd ../..
+else
+    echo "--- Build Julia"
+    ${MAKE} "${MFLAGS[@]}"
+fi
 
 echo "--- Check that the working directory is clean"
 if [ -n "$(git status --short)" ]; then

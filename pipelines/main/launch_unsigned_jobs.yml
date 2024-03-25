@@ -30,6 +30,11 @@ steps:
               bash .buildkite/utilities/arches_pipeline_upload.sh \
               .buildkite/pipelines/main/platforms/build_linux.arches \
               .buildkite/pipelines/main/platforms/build_linux.yml
+          GROUP="Build" \
+              ALLOW_FAIL="false" \
+              bash .buildkite/utilities/arches_pipeline_upload.sh \
+              .buildkite/pipelines/main/platforms/build_linux.pgo_lto.arches \
+              .buildkite/pipelines/main/platforms/build_linux.yml
           # Launch macOS packaging jobs
           GROUP="Build" \
               ALLOW_FAIL="false" \
@@ -97,6 +102,10 @@ steps:
               bash .buildkite/utilities/arches_pipeline_upload.sh \
               .buildkite/pipelines/main/platforms/test_linux.i686.arches \
               .buildkite/pipelines/main/platforms/test_linux.i686.yml
+          GROUP="Test" \
+              bash .buildkite/utilities/arches_pipeline_upload.sh \
+              .buildkite/pipelines/main/platforms/test_linux.pgo_lto.arches \
+              .buildkite/pipelines/main/platforms/test_linux.yml
           # Launch macOS test jobs
           GROUP="Test" \
               bash .buildkite/utilities/arches_pipeline_upload.sh \
