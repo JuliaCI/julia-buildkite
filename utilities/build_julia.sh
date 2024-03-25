@@ -68,7 +68,7 @@ if [[ ! -z "${USE_JULIA_PGO_LTO-}" ]]; then
 
     echo "--- Collecting Profile"
     ${MAKE} clean-profiles
-    "./stage1.build/julia .buildkite/utilities/pgo_script.jl"
+    ./stage1.build/julia .buildkite/utilities/pgo_script.jl
 fi
 
 # Finish off with any extra make flags from the `.arches` file
