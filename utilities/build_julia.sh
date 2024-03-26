@@ -54,7 +54,7 @@ MFLAGS+=( "JULIA_CPU_TARGET=${JULIA_CPU_TARGET}" )
 
 if [[ ! -z "${USE_JULIA_PGO_LTO-}" ]]; then
     MFLAGS+=( "STAGE2_BUILD=$PWD" )
-    MFLAGS+=( "SANITIZE_OPTS=-m64 --gcc-install-dir=/usr/lib/gcc/x86_64-linux-gnu/9" )
+    MFLAGS+=( "SANITIZE_OPTS=-m64 --gcc-install-dir=/usr/local/lib/gcc/x86_64-linux-gnu/9" )
 
     echo "--- Collect make options"
     echo "Make Options:"
@@ -65,7 +65,7 @@ if [[ ! -z "${USE_JULIA_PGO_LTO-}" ]]; then
     echo "--- Build Julia Stage 1 - with instrumentation"
 
     cd contrib/pgo-lto
-    ${MAKE} "${MFLAGS[@]}" stage1
+    ${MAKE} "${MFLAGS[@]}" stage1 || cat $PWD/stage1.build/deps/patchelf-0.18.0/config.log && exit 1
 
     # We use profile from building stage1
     # echo "--- Collecting Profile"
