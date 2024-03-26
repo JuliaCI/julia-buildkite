@@ -54,7 +54,9 @@ MFLAGS+=( "JULIA_CPU_TARGET=${JULIA_CPU_TARGET}" )
 
 if [[ ! -z "${USE_JULIA_PGO_LTO-}" ]]; then
     MFLAGS+=( "STAGE2_BUILD=$PWD" )
-    MFLAGS+=( "SANITIZE_OPTS=-m64 --gcc-install-dir=/usr/local/lib/gcc/x86_64-linux-gnu/9" )
+    MFLAGS+=( "SANITIZE_OPTS=-m64 --gcc-install-dir=/usr/local/lib/gcc/x86_64-linux-gnu/9.1.0" )
+    CFLAGS+=( "--gcc-install-dir=/usr/local/lib/gcc/x86_64-linux-gnu/9.1.0" )
+    CXXFLAGS+=( "--gcc-install-dir=/usr/local/lib/gcc/x86_64-linux-gnu/9.1.0" )
 
     echo "--- Collect make options"
     echo "Make Options:"
