@@ -54,7 +54,7 @@ MFLAGS+=( "JULIA_CPU_TARGET=${JULIA_CPU_TARGET}" )
 
 if [[ ! -z "${USE_JULIA_PGO_LTO-}" ]]; then
     MFLAGS+=( "STAGE2_BUILD=$PWD" )
-    MFLAGS+= ( "SANITIZE_OPTS=-m64 " )
+    MFLAGS+=( "SANITIZE_OPTS=-m64 " )
 
     echo "--- Collect make options"
     echo "Make Options:"
