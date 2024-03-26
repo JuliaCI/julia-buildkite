@@ -65,7 +65,7 @@ if [[ ! -z "${USE_JULIA_PGO_LTO-}" ]]; then
     echo "--- Build Julia Stage 1 - with instrumentation"
 
     cd contrib/pgo-lto
-    ${MAKE} "${MFLAGS[@]}" stage1
+    ${MAKE} "${MFLAGS[@]}" stage1 || cat $PWD/stage1.build/deps/patchelf-0.18.0/config.log && exit $?
 
     # We use profile from building stage1
     # echo "--- Collecting Profile"
