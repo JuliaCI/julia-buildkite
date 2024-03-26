@@ -13,6 +13,45 @@
 # something about the privileged steps.
 
 steps:
+  - group: "Check"
+    notify:
+      - github_commit_status:
+          context: "Check"
+    steps:
+      - label: "Launch check jobs"
+        plugins:
+          - JuliaCI/external-buildkite#v1:
+              version: "./.buildkite-external-version"
+              repo_url: "https://github.com/JuliaCI/julia-buildkite"
+        commands: |
+          # We launch the whitespace check first, because we want it to finish quickly.
+          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/whitespace.yml
+
+          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/analyzegc.yml
+          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/doctest.yml
+          # buildkite-agent pipeline upload .buildkite/pipelines/main/misc/fullsrcdist.yml # TODO: uncomment this line
+
+          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/embedding.yml
+          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/llvmpasses.yml
+
+          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/pdf_docs/build_pdf_docs.yml
+          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/sanitizers/asan.yml
+          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/sanitizers/tsan.yml
+        agents:
+          queue: "julia"
+          os: "linux"
+  - group: "Full Source Dist"                                                            # TODO: delete this line
+    steps:                                                                               # TODO: delete this line
+      - label: "Launch fullsrcdist jobs"                                                 # TODO: delete this line
+        plugins:                                                                         # TODO: delete this line
+          - JuliaCI/external-buildkite#v1:                                               # TODO: delete this line
+              version: "./.buildkite-external-version"                                   # TODO: delete this line
+              repo_url: "https://github.com/JuliaCI/julia-buildkite"                     # TODO: delete this line
+        commands: |                                                                      # TODO: delete this line
+          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/fullsrcdist.yml # TODO: delete this line
+        agents:                                                                          # TODO: delete this line
+          queue: "julia"                                                                 # TODO: delete this line
+          os: "linux"                                                                    # TODO: delete this line
   - group: "Build"
     notify:
       - github_commit_status:
@@ -46,29 +85,6 @@ steps:
               bash .buildkite/utilities/arches_pipeline_upload.sh \
               .buildkite/pipelines/main/platforms/build_windows.arches \
               .buildkite/pipelines/main/platforms/build_windows.yml
-        agents:
-          queue: "julia"
-          os: "linux"
-  - group: "Check"
-    notify:
-      - github_commit_status:
-          context: "Check"
-    steps:
-      - label: "Launch check jobs"
-        plugins:
-          - JuliaCI/external-buildkite#v1:
-              version: "./.buildkite-external-version"
-              repo_url: "https://github.com/JuliaCI/julia-buildkite"
-        commands: |
-          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/analyzegc.yml
-          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/doctest.yml
-          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/pdf_docs/build_pdf_docs.yml
-          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/embedding.yml
-          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/llvmpasses.yml
-          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/whitespace.yml
-
-          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/sanitizers/asan.yml
-          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/sanitizers/tsan.yml
         agents:
           queue: "julia"
           os: "linux"
