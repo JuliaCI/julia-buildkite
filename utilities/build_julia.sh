@@ -126,3 +126,8 @@ fi
 
 echo "--- Upload build artifacts to buildkite"
 buildkite-agent artifact upload "${UPLOAD_FILENAME}.tar.gz"
+
+# Upload the profile data to allow for reproducible builds
+if [[ ! -z "${USE_JULIA_PGO_LTO-}" ]]; then
+    buildkite-agent artifact upload "contrib/pgo-lto/profiles/merged.prof"
+fi
