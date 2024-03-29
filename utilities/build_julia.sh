@@ -54,8 +54,8 @@ MFLAGS+=( "JULIA_CPU_TARGET=${JULIA_CPU_TARGET}" )
 
 if [[ ! -z "${USE_JULIA_PGO_LTO-}" ]]; then
     MFLAGS+=( "STAGE2_BUILD=$PWD" )
-    # GCCFLAG=--gcc-install-dir=$(LANG=C cc -print-search-dirs | grep '^install: ' | sed -e "s/^install: //")
-    # MFLAGS+=( "SANITIZE_OPTS=$GCCFLAG" )
+    GCCFLAG=--gcc-install-dir=$(LANG=C cc -print-search-dirs | grep '^install: ' | sed -e "s/^install: //")
+    MFLAGS+=( "SANITIZE_OPTS=$GCCFLAG" )
     # MFLAGS+=( "CFLAGS+=$GCCFLAG" )
     # MFLAGS+=( "CXXFLAGS+=$GCCFLAG" )
 
