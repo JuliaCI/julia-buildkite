@@ -1,8 +1,8 @@
 steps:
-  - group: "Check"
+  - group: "Allow Fail"
     steps:
-      - label: "doctest"
-        key: doctest
+      - label: "gcext"
+        key: "gcext"
         depends_on:
           - "build_x86_64-linux-gnu"
         plugins:
@@ -12,7 +12,7 @@ steps:
           - JuliaCI/julia#v1:
               # Drop default "registries" directory, so it is not persisted from execution to execution
               persist_depot_dirs: packages,artifacts,compiled
-              version: '1'
+              version: '1.6'
           - staticfloat/sandbox#v1:
               rootfs_url: https://github.com/JuliaCI/rootfs-images/releases/download/v6.00/package_linux.x86_64.tar.gz
               rootfs_treehash: "4dcde853eb5baaa0a8f087b633eaf955dc94b5dc"
@@ -24,30 +24,18 @@ steps:
         commands: |
           # Download pre-built julia, extract into `usr/`
           buildkite-agent artifact download --step "build_x86_64-linux-gnu" 'julia-*-linux-x86_64.tar.gz' .
-          mkdir -p ./usr
-          tar -C ./usr --strip-components=1 -zxf julia-*-linux-x86_64.tar.gz
-          ln -s ./usr/bin/julia ./julia
+          mkdir -p usr
+          tar -C usr --strip-components=1 -zxf julia-*-linux-x86_64.tar.gz
+          rm -f julia-*-linux-x86_64.tar.gz
 
-          echo "--- Print Julia version info"
-          export JULIA_NUM_THREADS=1
-          ./julia -e 'using InteractiveUtils; InteractiveUtils.versioninfo()'
-
-          TARBALL_NAME="$$(echo julia-*-linux-x86_64.tar.gz)"
-          export DOCUMENTER_ARCHIVE="$${TARBALL_NAME%-linux-x86_64.tar.gz}-htmldocs.tar.gz"
-
-          echo "--- Run Julia doctests/build HTML docs"
-          cd doc
-          make deploy doctest=true
-
-          echo "--- Compress and upload HTML docs"
-          buildkite-agent artifact upload "$${DOCUMENTER_ARCHIVE}"
-        env:
-          # Give a fake documenter key to get Documenter to try and deploy for us
-          DOCUMENTER_KEY: ""
-        timeout_in_minutes: 45
+          gcext_output="/tmp/gcext-test"
+          echo "+++ Run gcext tests, deploy to $${gcext_output:?}"
+          mkdir -p "$${gcext_output:?}"
+          make --output-sync -j$${JULIA_CPU_THREADS:?} -C test/gcext check JULIA="$$(pwd)/usr/bin/julia" BIN="$${gcext_output:?}"
+        timeout_in_minutes: 60
+        soft_fail: true
         agents:
           queue: "julia"
           sandbox_capable: "true"
-          doctest_capable: "true"
           os: "linux"
           arch: "x86_64"

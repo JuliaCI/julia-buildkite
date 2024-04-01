@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # This script performs the basic steps needed to sign and upload a
 # Julia previously built and uploaded as a `.tar.gz`.
@@ -34,6 +34,9 @@ if [[ "${OS}" == "macos" || "${OS}" == "macosnogpl" ]]; then
         --keychain "${KEYCHAIN_PATH}" \
         --identity "${MACOS_CODESIGN_IDENTITY}" \
         "${JULIA_INSTALL_DIR}"
+
+    echo "--- [mac] Update checksums for stdlib cachefiles"
+    ${JULIA_INSTALL_DIR}/bin/julia .buildkite/utilities/macos/update_stdlib_pkgimage_checksums.jl
 
     # Immediately re-compress that tarball for upload
     echo "--- [mac] Re-compress codesigned tarball"
@@ -79,6 +82,12 @@ elif [[ "${OS}" == "windows" || "${OS}" == "windowsnogpl" ]]; then
 
     # Add the `.exe` to our upload targets
     UPLOAD_EXTENSIONS+=( "exe" )
+
+    # Use 7z to create a `.zip` file to upload as well
+    echo "--- [windows] make zip"
+    PATH="${JULIA_INSTALL_DIR}/libexec:${JULIA_INSTALL_DIR}/libexec/julia:${PATH}" \
+    7z.exe a "${UPLOAD_FILENAME}.zip" "$(cygpath -w "$(pwd)/${JULIA_INSTALL_DIR}")"
+    UPLOAD_EXTENSIONS+=( "zip" )
 fi
 
 echo "--- GPG-sign the tarball"

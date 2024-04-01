@@ -1,7 +1,15 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # First, extract information from our triplet
 source .buildkite/utilities/extract_triplet.sh
+
+# Figure out what GNU Make is on this system
+if [[ "${OS}" == "freebsd" ]]; then
+    MAKE="gmake"
+else
+    MAKE="make"
+fi
+export MAKE
 
 # Apply fixups to our environment for when we're running on julia-buildkite pipeline
 if buildkite-agent meta-data exists BUILDKITE_JULIA_BRANCH; then
@@ -20,14 +28,19 @@ case "${ARCH?}" in
             "sandybridge,-xsaveopt,clone_all"
             # Add haswell level (without rdrnd) that is a diff of the sandybridge level
             "haswell,-rdrnd,base(1)"
+            # A common baseline for modern x86-64 server CPUs
+            "x86-64-v4,-rdrnd,base(1)"
         )
         ;;
     i686)
         JULIA_CPU_TARGETS+=(
             # We require SSE2, etc.. so `pentium4` is our base i686 feature set
+            # We used to also target `sandybridge`, but sadly we run out of memory
+            # when linking so much code, so we're temporarily restricting to only
+            # the base set for now.  :(
+            # Please, if you are using Julia for performance-critical work, use
+            # a 64-bit processor!
             "pentium4"
-            # Add sandybridge level similar to x86_64 above
-            "sandybridge,-xsaveopt,clone_all"
         )
         ;;
     armv7l)
@@ -48,8 +61,12 @@ case "${ARCH?}" in
             "cortex-a57"
             # Cavium ThunderX2T99, a common server architecture
             "thunderx2t99"
-            # NVidia Carmel, e.g. Jetson AGX Xavier
-            "carmel"
+            # NVidia Carmel, e.g. Jetson AGX Xavier; serves as a baseline for later architectures
+            "carmel,clone_all"
+            # Apple M1
+            "apple-m1,base(3)"
+            # Vector-length-agnostic common denominator between Neoverse V1 and V2, recent Arm server architectures
+            "neoverse-512tvb,base(3)"
         )
         ;;
     powerpc64le)
@@ -74,6 +91,7 @@ fi
 JULIA_CPU_TARGET="$(printf ";%s" "${JULIA_CPU_TARGETS[@]}")"
 export JULIA_CPU_TARGET="${JULIA_CPU_TARGET:1}"
 
+export JULIA_IMAGE_THREADS="$JULIA_CPU_THREADS"
 
 
 # Extract git information
@@ -98,7 +116,7 @@ export TAR_VERSION
 # Build the filename that we'll upload as, and get the filename that will be built
 # These are not the same in situations such as `musl`, where the build system doesn't
 # differentiate but we need to give it a different name.
-export JULIA_BINARYDIST_FILENAME="$(make print-JULIA_BINARYDIST_FILENAME | cut -c27- | tr -s ' ')"
+export JULIA_BINARYDIST_FILENAME="$(${MAKE} print-JULIA_BINARYDIST_FILENAME | cut -c27- | tr -s ' ')"
 
 export JULIA_INSTALL_DIR="julia-${TAR_VERSION}"
 JULIA_BINARY="${JULIA_INSTALL_DIR}/bin/julia${EXE}"

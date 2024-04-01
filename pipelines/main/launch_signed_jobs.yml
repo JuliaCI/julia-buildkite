@@ -7,7 +7,8 @@ steps:
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
-          - staticfloat/cryptic#v2:
+          - staticfloat/cryptic#sf/group_capable:
+              verbose: true
               signed_pipelines:
                 # Launch the upload jobs
                 - pipeline: .buildkite/pipelines/main/launch_upload_jobs.yml
@@ -28,6 +29,7 @@ steps:
                     - .buildkite/pipelines/main/platforms/upload_macos.yml
                     - .buildkite/pipelines/main/platforms/upload_windows.arches
                     - .buildkite/pipelines/main/platforms/upload_windows.yml
+                    - .buildkite/pipelines/main/misc/upload_buildkite_results.yml
         agents:
           queue: "julia"
           cryptic_capable: "true"

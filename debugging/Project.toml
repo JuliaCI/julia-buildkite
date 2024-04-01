@@ -11,3 +11,6 @@ ProgressMeter = "92933f4c-e287-5a05-a399-4b506db050ca"
 SHA = "ea8e919c-243c-51af-8825-aaa63cd721ce"
 Sandbox = "9307e30f-c43e-9ca7-d17c-c2dc59df670d"
 Scratch = "6c6a2e73-6563-6170-7368-637461726353"
+
+[compat]
+JLLPrefixes = "0.3"

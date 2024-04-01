@@ -11,20 +11,63 @@ steps:
         commands: |
           # Explicitly pass along the cryptic token to child pipelines
           export BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET
+          export ALLOW_FAIL="false"
 
           # Launch `upload_*` jobs to store tarballs into S3 once tests are done
-          bash .buildkite/utilities/arches_pipeline_upload.sh \
+          GROUP="Upload" \
+              bash .buildkite/utilities/arches_pipeline_upload.sh \
               .buildkite/pipelines/main/platforms/upload_linux.arches \
               .buildkite/pipelines/main/platforms/upload_linux.yml
-          bash .buildkite/utilities/arches_pipeline_upload.sh \
+          GROUP="Upload" \
+              bash .buildkite/utilities/arches_pipeline_upload.sh \
               .buildkite/pipelines/main/platforms/upload_macos.arches \
               .buildkite/pipelines/main/platforms/upload_macos.yml
-          bash .buildkite/utilities/arches_pipeline_upload.sh \
+          GROUP="Upload" \
+              bash .buildkite/utilities/arches_pipeline_upload.sh \
+              .buildkite/pipelines/main/platforms/upload_freebsd.arches \
+              .buildkite/pipelines/main/platforms/upload_freebsd.yml
+          GROUP="Upload" \
+              bash .buildkite/utilities/arches_pipeline_upload.sh \
               .buildkite/pipelines/main/platforms/upload_windows.arches \
               .buildkite/pipelines/main/platforms/upload_windows.yml
 
+          for OS in linux macos freebsd windows; do \
+              GROUP="Upload" \
+                bash .buildkite/utilities/arches_pipeline_upload.sh \
+                .buildkite/pipelines/main/platforms/upload_$${OS}.arches \
+                .buildkite/pipelines/main/misc/upload_buildkite_results.yml
+          done
+
           # Launch doctest deploy job
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/deploy_docs.yml
+
+          # Don't share this with buildkite's env display
+          unset BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET
+        agents:
+          queue: "julia"
+          cryptic_capable: "true"
+          os: "linux"
+        env:
+          # Receive cryptic token from parent job
+          BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET: ${BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET?}
+  - group: "Allow Fail (Upload)"
+    steps:
+      - label: "Launch allowed-to-fail upload jobs"
+        plugins:
+          - JuliaCI/external-buildkite#v1:
+              version: "./.buildkite-external-version"
+              repo_url: "https://github.com/JuliaCI/julia-buildkite"
+        commands: |
+          # Explicitly pass along the cryptic token to child pipelines
+          export BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET
+
+          export ALLOW_FAIL="true"
+
+          # Launch Linux allowed-to-fail upload jobs
+          GROUP="Allow Fail (Upload)" \
+              bash .buildkite/utilities/arches_pipeline_upload.sh \
+              .buildkite/pipelines/main/platforms/upload_linux.soft_fail.arches \
+              .buildkite/pipelines/main/platforms/upload_linux.yml
 
           # Don't share this with buildkite's env display
           unset BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET

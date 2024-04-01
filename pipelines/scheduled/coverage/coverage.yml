@@ -15,18 +15,18 @@ steps:
               persist_depot_dirs: packages,artifacts,compiled
               version: '1'
           - staticfloat/sandbox#v1:
-              rootfs_url: https://github.com/JuliaCI/rootfs-images/releases/download/v5.26/package_linux.x86_64.tar.gz
-              rootfs_treehash: "5b0b851aca3c941b900a1301c13922c6cfc7f211"
+              rootfs_url: https://github.com/JuliaCI/rootfs-images/releases/download/v6.00/package_linux.x86_64.tar.gz
+              rootfs_treehash: "4dcde853eb5baaa0a8f087b633eaf955dc94b5dc"
               uid: 1000
               gid: 1000
           - staticfloat/cryptic#v2:
               variables:
                 - CODECOV_TOKEN="U2FsdGVkX19l0fhdBabbuiEdysyEabkJLRHfxm7CNRkuGbnwPV365sxxC7Czs/CVcws0N1oB4pVwALRRMe36oA=="
                 - COVERALLS_TOKEN="U2FsdGVkX19zopI0hMNzzi2UUOvNVFD8Y0iisFnO/ryVxU7Tit8ZEaeN+gxodRx4CosUUh192F1+q3dTMWRIvw=="
-        timeout_in_minutes: 360
+        timeout_in_minutes: 720
         commands: |
           echo "--- Build Julia from source"
-          make --output-sync -j 6
+          make --output-sync -j$${JULIA_NUM_THREADS}
 
           echo "--- Print Julia version info"
           ./julia -e 'using InteractiveUtils; InteractiveUtils.versioninfo()'

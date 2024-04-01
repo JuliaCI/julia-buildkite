@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # This script performs the basic steps needed to build Julia from source
 # It requires the following environment variables to be defined:

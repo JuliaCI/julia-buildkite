@@ -1,0 +1,20 @@
+steps:
+  - group: "${GROUP?}"
+    steps:
+      - label: ":freebsd: build ${TRIPLET?}"
+        key: "build_${TRIPLET?}"
+        plugins:
+          - JuliaCI/external-buildkite#v1:
+              version: "./.buildkite-external-version"
+              repo_url: "https://github.com/JuliaCI/julia-buildkite"
+        timeout_in_minutes: ${TIMEOUT?}
+        soft_fail: ${ALLOW_FAIL?}
+        commands: "bash .buildkite/utilities/build_julia.sh"
+        agents:
+          queue: "julia"
+          os: "freebsd"
+          arch: "${ARCH?}"
+        env:
+          # Receive some environment mappings from our templating engine
+          TRIPLET: "${TRIPLET?}"
+          MAKE_FLAGS: "${MAKE_FLAGS?}"

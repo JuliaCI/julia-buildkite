@@ -13,6 +13,7 @@ steps:
         # Prevent multiple pipelines from pushing to the `git@github.com:JuliaLang/docs.julialang.org` repo simultaneously
         concurrency: 1
         concurrency_group: 'upload/julialang/upload_docs/docs_julialang_org'
+        concurrency_method: eager
         plugins:
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"
@@ -24,8 +25,8 @@ steps:
               version: '1.7'
           - staticfloat/sandbox#v1:
               # Use `aws_uploader` image, since it has things like `git` and `ssh` and whatnot
-              rootfs_url: "https://github.com/JuliaCI/rootfs-images/releases/download/v5.27/aws_uploader.x86_64.tar.gz"
-              rootfs_treehash: "cd5a62e570bda70932217641ec715b2f9fc1cd82"
+              rootfs_url: "https://github.com/JuliaCI/rootfs-images/releases/download/v6.00/aws_uploader.x86_64.tar.gz"
+              rootfs_treehash: "61cb30497604eb1581b3ffd6a8058c150f4cbf8b"
               uid: 1000
               gid: 1000
               workspaces:
@@ -56,8 +57,10 @@ steps:
           tar -zxf ../julia-*-htmldocs.tar.gz
 
           # Build commit message
-          echo "build based on $${BUILDKITE_COMMIT}\n" > ../commit_message
+          echo "build based on $${BUILDKITE_COMMIT}" > ../commit_message
+          echo >> ../commit_message
           echo "build link: $${BUILDKITE_BUILD_URL}" >> ../commit_message
+          echo "commit link: https://github.com/JuliaLang/julia/commit/$${BUILDKITE_COMMIT}" >> ../commit_message
 
           # Add all files to our new commit
           git config --global user.name "Documenter.jl"

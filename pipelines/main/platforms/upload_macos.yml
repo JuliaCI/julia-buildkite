@@ -18,6 +18,7 @@ steps:
         # It is okay for two different triplets to upload simultaneously
         concurrency: 1
         concurrency_group: 'upload/julialangnightlies/${TRIPLET?}'
+        concurrency_method: eager
         plugins:
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"
@@ -32,12 +33,15 @@ steps:
                 - .buildkite/secrets/tarball_signing.gpg
                 - .buildkite/secrets/macos_codesigning.keychain
         timeout_in_minutes: ${TIMEOUT?}
+        retry:
+          automatic:
+            - exit_status: "*"
+              limit: 3
         commands: "bash .buildkite/utilities/upload_julia.sh"
         agents:
           queue: "julia"
           os: "macos"
-          # We actually do not need to use the same architecture when signing/uploading
-          #arch: "${ARCH}"
+          arch: "${ARCH}"
         env:
           # Receive cryptic token from parent job
           BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET: ${BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET?}
