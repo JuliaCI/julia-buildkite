@@ -33,7 +33,7 @@ MFLAGS+=( "-j${JULIA_CPU_THREADS}")
 
 # Add a few default flags to our make flags:
 MFLAGS+=( "VERBOSE=1" )
-MFLAGS+=( "TAGGED_RELEASE_BANNER=Official https://julialang.org/ release" )
+MFLAGS+=( "TAGGED_RELEASE_BANNER=Official https://julialang.org release" )
 MFLAGS+=( "JULIA_CPU_TARGET=${JULIA_CPU_TARGET}" )
 
 # Finish off with any extra make flags from the `.arches` file
