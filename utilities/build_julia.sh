@@ -54,10 +54,6 @@ MFLAGS+=( "JULIA_CPU_TARGET=${JULIA_CPU_TARGET}" )
 
 if [[ ! -z "${USE_JULIA_PGO_LTO-}" ]]; then
     MFLAGS+=( "STAGE2_BUILD=$PWD" )
-    GCCFLAG=--gcc-install-dir=$(LANG=C cc -print-search-dirs | grep '^install: ' | sed -e "s/^install: //")
-    MFLAGS+=( "SANITIZE_OPTS=$GCCFLAG" )
-    MFLAGS+=( "CFLAGS+=$GCCFLAG" )
-    MFLAGS+=( "CXXFLAGS+=$GCCFLAG" )
 
     echo "--- Collect make options"
     echo "Make Options:"
@@ -69,11 +65,7 @@ if [[ ! -z "${USE_JULIA_PGO_LTO-}" ]]; then
 
     cd contrib/pgo-lto
     ${MAKE} "${MFLAGS[@]}" stage1
-
-    # We use profile from building stage1
-    # echo "--- Collecting Profile"
-    # ${MAKE} clean-profiles
-    # ./stage1.build/julia .buildkite/utilities/pgo_script.jl
+    # Building stage1 collects profiling data which we use instead of collecting our own
 fi
 
 # Finish off with any extra make flags from the `.arches` file
