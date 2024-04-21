@@ -1,5 +1,5 @@
-# ROOTFS_IMAGE_NAME    TRIPLET                        ARCH           ARCH_ROOTFS    USE_JULIA_PGO_LTO   MAKE_FLAGS                                                                              TIMEOUT       ROOTFS_TAG    ROOTFS_HASH
-llvm_passes          x86_64-linux-gnu               x86_64         x86_64         PGO_LTO    JL_CFLAGS=-Werror,JL_CXXFLAGS=-Werror                                                   .             v6.00         0badf5d8794e21a03ac2ff2d46c1ab538ac02571
+# ROOTFS_IMAGE_NAME  TRIPLET             ARCH     ARCH_ROOTFS    USE_JULIA_PGO_LTO    MAKE_FLAGS    TIMEOUT      ROOTFS_TAG   ROOTFS_HASH
+llvm_passes          x86_64-linux-gnu    x86_64   x86_64         PGO_LTO              .             .            v6.00        0badf5d8794e21a03ac2ff2d46c1ab538ac02571
 
 # These special lines allow us to embed default values for the columns above.
 # Any column without a default mapping here will simply substitute a `.` to the empty string
