@@ -83,6 +83,11 @@ elif [[ "${OS}" == "windows" || "${OS}" == "windowsnogpl" ]]; then
     # Add the `.exe` to our upload targets
     UPLOAD_EXTENSIONS+=( "exe" )
 
+    # Immediately re-compress that tarball for upload
+    echo "--- [windows] Re-compress codesigned tarball"
+    rm -f "${UPLOAD_FILENAME}.tar.gz"
+    tar zcf "${UPLOAD_FILENAME}.tar.gz" "${JULIA_INSTALL_DIR}"
+
     # Use 7z to create a `.zip` file to upload as well
     echo "--- [windows] make zip"
     PATH="${JULIA_INSTALL_DIR}/libexec:${JULIA_INSTALL_DIR}/libexec/julia:${PATH}" \
