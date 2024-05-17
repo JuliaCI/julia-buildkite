@@ -18,7 +18,7 @@ if buildkite-agent meta-data exists BUILDKITE_JULIA_BRANCH; then
 fi
 
 # Determine JULIA_CPU_TARGETS for different architectures
-JUlIA_CPU_TARGETS=()
+JULIA_CPU_TARGETS=()
 case "${ARCH?}" in
     x86_64)
         JULIA_CPU_TARGETS+=(
