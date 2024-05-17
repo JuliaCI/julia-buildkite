@@ -78,6 +78,7 @@ case "${ARCH?}" in
                 )
                 ;;
         esac
+        ;;
     powerpc64le)
         JULIA_CPU_TARGETS+=(
             # Absolute base POWER-8 feature set
