@@ -73,6 +73,8 @@ case "${ARCH?}" in
                     "thunderx2t99"
                     # NVidia Carmel, e.g. Jetson AGX Xavier; serves as a baseline for later architectures
                     "carmel,clone_all"
+                    # Apple M1
+                    "apple-m1,base(3)"
                     # Vector-length-agnostic common denominator between Neoverse V1 and V2, recent Arm server architectures
                     "neoverse-512tvb,base(3)"
                 )
