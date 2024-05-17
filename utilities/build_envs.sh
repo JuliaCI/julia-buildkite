@@ -60,7 +60,7 @@ case "${ARCH?}" in
                     # Absolute base aarch64 feature set
                     "generic"
                     # Apple M1
-                    "apple-m1,base(3)"
+                    "apple-m1,clone_all"
                 )
                 ;;
             *)
