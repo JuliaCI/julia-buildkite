@@ -18,7 +18,7 @@ if buildkite-agent meta-data exists BUILDKITE_JULIA_BRANCH; then
 fi
 
 # Determine JULIA_CPU_TARGETS for different architectures
-JULIA_CPU_TARGETS=()
+JUlIA_CPU_TARGETS=()
 case "${ARCH?}" in
     x86_64)
         JULIA_CPU_TARGETS+=(
@@ -54,32 +54,20 @@ case "${ARCH?}" in
         )
         ;;
     aarch64)
-        case "${OS?}" in
-            macos)
-                JULIA_CPU_TARGETS+=(
-                    # Absolute base aarch64 feature set
-                    "generic"
-                    # Apple M1
-                    "apple-m1,clone_all"
-                )
-                ;;
-            *)
-                JULIA_CPU_TARGETS+=(
-                    # Absolute base aarch64 feature set
-                    "generic"
-                    # Cortex A57, Example: NVIDIA Jetson TX1, Jetson Nano
-                    "cortex-a57"
-                    # Cavium ThunderX2T99, a common server architecture
-                    "thunderx2t99"
-                    # NVidia Carmel, e.g. Jetson AGX Xavier; serves as a baseline for later architectures
-                    "carmel,clone_all"
-                    # Apple M1
-                    "apple-m1,base(3)"
-                    # Vector-length-agnostic common denominator between Neoverse V1 and V2, recent Arm server architectures
-                    "neoverse-512tvb,base(3)"
-                )
-                ;;
-        esac
+        JULIA_CPU_TARGETS+=(
+            # Absolute base aarch64 feature set
+            "generic"
+            # Cortex A57, Example: NVIDIA Jetson TX1, Jetson Nano
+            "cortex-a57"
+            # Cavium ThunderX2T99, a common server architecture
+            "thunderx2t99"
+            # NVidia Carmel, e.g. Jetson AGX Xavier; serves as a baseline for later architectures
+            "carmel,clone_all"
+            # Apple M1
+            "apple-m1,base(3)"
+            # Vector-length-agnostic common denominator between Neoverse V1 and V2, recent Arm server architectures
+            "neoverse-512tvb,base(3)"
+        )
         ;;
     powerpc64le)
         JULIA_CPU_TARGETS+=(
