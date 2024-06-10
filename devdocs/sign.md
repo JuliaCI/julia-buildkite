@@ -26,7 +26,6 @@ cd julia-buildkite
 git checkout YOURINITIALS/YOUR-BRANCH-NAME
 git clone https://github.com/staticfloat/cryptic-buildkite-plugin.git
 cd cryptic-buildkite-plugin
-git checkout sf/group_capable
 cd ..
 export AGENT_PRIVATE_KEY_PATH=/path/to/my/agent.key
 make sign_treehashes
