@@ -7,7 +7,7 @@ steps:
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
-          - staticfloat/cryptic#sf/group_capable:
+          - staticfloat/cryptic#main:
               verbose: true
               signed_pipelines:
                 # Launch the upload jobs
