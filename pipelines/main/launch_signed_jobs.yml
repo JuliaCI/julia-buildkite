@@ -29,6 +29,7 @@ steps:
                     - .buildkite/pipelines/main/platforms/upload_macos.yml
                     - .buildkite/pipelines/main/platforms/upload_windows.arches
                     - .buildkite/pipelines/main/platforms/upload_windows.yml
+                    - .buildkite/pipelines/main/misc/upload_buildkite_results.yml
         agents:
           queue: "julia"
           cryptic_capable: "true"

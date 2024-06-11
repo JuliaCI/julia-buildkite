@@ -1,5 +1,5 @@
 steps:
-  - group: "Upload"
+  - group: "${GROUP?}"
     steps:
       - label: ":linux: upload ${TRIPLET?}"
         key:   "upload_${TRIPLET?}"
@@ -42,6 +42,7 @@ steps:
               files:
                 - .buildkite/secrets/tarball_signing.gpg
         timeout_in_minutes: ${TIMEOUT?}
+        soft_fail: ${ALLOW_FAIL?}
         commands: "bash .buildkite/utilities/upload_julia.sh"
         agents:
           queue: "julia"
