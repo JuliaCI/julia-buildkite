@@ -67,7 +67,7 @@ ${JULIA_EXE} -e "import Test; Test.@test Sys.ARCH == :${ARCH:?}"
 ${JULIA_EXE} -e "import Test; Test.@test Sys.WORD_SIZE == ${EXPECTED_WORD_SIZE:?}"
 
 echo "--- Show build stats"
-${MAKE} build-stats
+${MAKE} "${MFLAGS[@]}" build-stats
 
 echo "--- Create build artifacts"
 ${MAKE} "${MFLAGS[@]}" binary-dist
