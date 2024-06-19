@@ -138,17 +138,39 @@ S3_BUCKET="${S3_BUCKET:-julialangnightlies}"
 S3_BUCKET_PREFIX="${S3_BUCKET_PREFIX:-bin}"
 
 # We generally upload to multiple upload targets
-UPLOAD_TARGETS=(
+UPLOAD_TARGETS=()
+
+if [[ "${BUILDKITE_BRANCH}" == master ]] || [[ "${BUILDKITE_BRANCH}" == release-* ]] || [[ "${BUILDKITE_TAG}" == v* ]]; then
     # First, we have the canonical fully-specified upload target
-    "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/${ARCH?}/${MAJMIN?}/julia-${TAR_VERSION?}-${OS?}-${ARCH?}"
+    UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/${ARCH?}/${MAJMIN?}/julia-${TAR_VERSION?}-${OS?}-${ARCH?}" )
 
     # Next, we have the "majmin/latest" upload target
-    "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/${ARCH?}/${MAJMIN?}/julia-latest-${OS?}-${ARCH?}"
-)
+    UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/${ARCH?}/${MAJMIN?}/julia-latest-${OS?}-${ARCH?}" )
 
-# The absolute latest upload target is only for if we're on the `master` branch
-if [[ "${BUILDKITE_BRANCH}" == "master" ]]; then
-    UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/${ARCH?}/julia-latest-${OS?}-${ARCH?}" )
+    # The absolute latest upload target is only for if we're on the `master` branch
+    if [[ "${BUILDKITE_BRANCH}" == "master" ]]; then
+        UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/${ARCH?}/julia-latest-${OS?}-${ARCH?}" )
+    fi
+
+    # Finally, for compatibility, we keep on uploading x86_64 and i686 targets to folders called `x64`
+    # and `x86`, and ending in `-linux64` and `-linux32`, although I would very much like to stop doing that.
+    if [[ "${ARCH}" == "x86_64" ]]; then
+        UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/x64/${MAJMIN?}/julia-${TAR_VERSION?}-${OS?}64" )
+        UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/x64/${MAJMIN?}/julia-latest-${OS?}64" )
+
+        # Only upload to absolute latest if we're on `master`
+        if [[ "${BUILDKITE_BRANCH}" == "master" ]]; then
+            UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/x64/julia-latest-${OS?}64" )
+        fi
+    elif [[ "${ARCH}" == "i686" ]]; then
+        UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/x86/${MAJMIN?}/julia-${TAR_VERSION?}-${OS?}32" )
+        UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/x86/${MAJMIN?}/julia-latest-${OS?}32" )
+
+        # Only upload to absolute latest if we're on `master`
+        if [[ "${BUILDKITE_BRANCH}" == "master" ]]; then
+            UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/x86/julia-latest-${OS?}32" )
+        fi
+    fi
 fi
 
 # If we're a pull request build, upload to a special `-prXXXX` location
@@ -156,26 +178,6 @@ if [[ "${BUILDKITE_PULL_REQUEST}" != "false" ]]; then
     UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/${ARCH?}/julia-pr${BUILDKITE_PULL_REQUEST}-${OS?}-${ARCH?}" )
 fi
 
-
-# Finally, for compatibility, we keep on uploading x86_64 and i686 targets to folders called `x64`
-# and `x86`, and ending in `-linux64` and `-linux32`, although I would very much like to stop doing that.
-if [[ "${ARCH}" == "x86_64" ]]; then
-    UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/x64/${MAJMIN?}/julia-${TAR_VERSION?}-${OS?}64" )
-    UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/x64/${MAJMIN?}/julia-latest-${OS?}64" )
-
-    # Only upload to absolute latest if we're on `master`
-    if [[ "${BUILDKITE_BRANCH}" == "master" ]]; then
-        UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/x64/julia-latest-${OS?}64" )
-    fi
-elif [[ "${ARCH}" == "i686" ]]; then
-    UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/x86/${MAJMIN?}/julia-${TAR_VERSION?}-${OS?}32" )
-    UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/x86/${MAJMIN?}/julia-latest-${OS?}32" )
-
-    # Only upload to absolute latest if we're on `master`
-    if [[ "${BUILDKITE_BRANCH}" == "master" ]]; then
-        UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/x86/julia-latest-${OS?}32" )
-    fi
-fi
 
 # We used to name our darwin builds as `julia-*-mac64.tar.gz`, instead of `julia-*-macos-x86_64.tar.gz`.
 # Let's copy things over to the `mac` OS name for backwards compatibility:
