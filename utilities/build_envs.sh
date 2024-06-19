@@ -151,6 +151,11 @@ if [[ "${BUILDKITE_BRANCH}" == "master" ]]; then
     UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/${ARCH?}/julia-latest-${OS?}-${ARCH?}" )
 fi
 
+# If we're a pull request build, upload to a special `-prXXXX` location
+if [[ "${BUILDKITE_PULL_REQUEST}" != "false" ]]; then
+    UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/${ARCH?}/julia-pr${BUILDKITE_PULL_REQUEST}-${OS?}-${ARCH?}" )
+fi
+
 
 # Finally, for compatibility, we keep on uploading x86_64 and i686 targets to folders called `x64`
 # and `x86`, and ending in `-linux64` and `-linux32`, although I would very much like to stop doing that.
