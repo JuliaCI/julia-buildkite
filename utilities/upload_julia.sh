@@ -13,96 +13,90 @@ echo "--- Download ${UPLOAD_FILENAME}.tar.gz to ."
 buildkite-agent artifact download "${UPLOAD_FILENAME}.tar.gz" .
 
 # These are the extensions that we will always upload
-UPLOAD_EXTENSIONS=( "tar.gz" )
+UPLOAD_EXTENSIONS=("tar.gz" "tar.gz.asc")
+# If we're on macOS, we need to re-sign the tarball
+if [[ "${OS}" == "macos" || "${OS}" == "macosnogpl" ]]; then
+    echo "--- [mac] Unlock keychain"
 
-# Only codesign if we are not on a pull request build.
-# Pull request builds only upload unsigned tarballs.
-if [[ "${BUILDKITE_PULL_REQUEST}" == "false" ]]; then
-    # If we're on macOS, we need to re-sign the tarball
-    if [[ "${OS}" == "macos" || "${OS}" == "macosnogpl" ]]; then
-        echo "--- [mac] Unlock keychain"
+    # This _must_ be an absolute path
+    KEYCHAIN_PATH="$(pwd)/.buildkite/secrets/macos_codesigning.keychain"
+    MACOS_CODESIGN_IDENTITY="2053E9292809B66582CA9F042B470C0929340362"
 
-        # This _must_ be an absolute path
-        KEYCHAIN_PATH="$(pwd)/.buildkite/secrets/macos_codesigning.keychain"
-        MACOS_CODESIGN_IDENTITY="2053E9292809B66582CA9F042B470C0929340362"
+    # Add the keychain to the list of keychains to search, then unlock it
+    security -v list-keychains -s -d user "${KEYCHAIN_PATH}"
+    security unlock-keychain -p "keychainpassword" "${KEYCHAIN_PATH}"
+    security find-identity -p codesigning "${KEYCHAIN_PATH}"
 
-        # Add the keychain to the list of keychains to search, then unlock it
-        security -v list-keychains -s -d user "${KEYCHAIN_PATH}"
-        security unlock-keychain -p "keychainpassword" "${KEYCHAIN_PATH}"
-        security find-identity -p codesigning "${KEYCHAIN_PATH}"
+    echo "--- [mac] Codesign tarball contents"
+    mkdir -p "${JULIA_INSTALL_DIR}"
+    tar zxf "${UPLOAD_FILENAME}.tar.gz" -C "${JULIA_INSTALL_DIR}" --strip-components 1
+    .buildkite/utilities/macos/codesign.sh \
+        --keychain "${KEYCHAIN_PATH}" \
+        --identity "${MACOS_CODESIGN_IDENTITY}" \
+        "${JULIA_INSTALL_DIR}"
 
-        echo "--- [mac] Codesign tarball contents"
-        mkdir -p "${JULIA_INSTALL_DIR}"
-        tar zxf "${UPLOAD_FILENAME}.tar.gz" -C "${JULIA_INSTALL_DIR}" --strip-components 1
-        .buildkite/utilities/macos/codesign.sh \
-            --keychain "${KEYCHAIN_PATH}" \
-            --identity "${MACOS_CODESIGN_IDENTITY}" \
-            "${JULIA_INSTALL_DIR}"
+    echo "--- [mac] Update checksums for stdlib cachefiles"
+    ${JULIA_INSTALL_DIR}/bin/julia .buildkite/utilities/macos/update_stdlib_pkgimage_checksums.jl
 
-        echo "--- [mac] Update checksums for stdlib cachefiles"
-        ${JULIA_INSTALL_DIR}/bin/julia .buildkite/utilities/macos/update_stdlib_pkgimage_checksums.jl
+    # Immediately re-compress that tarball for upload
+    echo "--- [mac] Re-compress codesigned tarball"
+    rm -f "${UPLOAD_FILENAME}.tar.gz"
+    tar zcf "${UPLOAD_FILENAME}.tar.gz" "${JULIA_INSTALL_DIR}"
 
-        # Immediately re-compress that tarball for upload
-        echo "--- [mac] Re-compress codesigned tarball"
-        rm -f "${UPLOAD_FILENAME}.tar.gz"
-        tar zcf "${UPLOAD_FILENAME}.tar.gz" "${JULIA_INSTALL_DIR}"
+    # Make a `.dmg` out of those files
+    echo "--- [mac] Build .dmg"
+    KEYCHAIN_PATH="${KEYCHAIN_PATH}" MACOS_CODESIGN_IDENTITY="${MACOS_CODESIGN_IDENTITY}" \
+        .buildkite/utilities/macos/build_dmg.sh
 
-        # Make a `.dmg` out of those files
-        echo "--- [mac] Build .dmg"
-        KEYCHAIN_PATH="${KEYCHAIN_PATH}" MACOS_CODESIGN_IDENTITY="${MACOS_CODESIGN_IDENTITY}" \
-            .buildkite/utilities/macos/build_dmg.sh
+    # Add the `.dmg` to our upload targets
+    UPLOAD_EXTENSIONS+=( "dmg" )
+elif [[ "${OS}" == "windows" || "${OS}" == "windowsnogpl" ]]; then
+    echo "--- [windows] Extract pre-built Julia"
+    mkdir -p "${JULIA_INSTALL_DIR}"
+    tar zxf "${UPLOAD_FILENAME}.tar.gz" -C "${JULIA_INSTALL_DIR}" --strip-components 1
 
-        # Add the `.dmg` to our upload targets
-        UPLOAD_EXTENSIONS+=( "dmg" )
-    elif [[ "${OS}" == "windows" || "${OS}" == "windowsnogpl" ]]; then
-        echo "--- [windows] Extract pre-built Julia"
-        mkdir -p "${JULIA_INSTALL_DIR}"
-        tar zxf "${UPLOAD_FILENAME}.tar.gz" -C "${JULIA_INSTALL_DIR}" --strip-components 1
+    echo "--- [windows] install innosetup"
+    mkdir -p dist-extras
+    curl --fail -L -o 'dist-extras/is.exe' 'https://cache.julialang.org/https://www.jrsoftware.org/download.php/is.exe' || curl --fail -L -o 'dist-extras/is.exe' 'https://www.jrsoftware.org/download.php/is.exe'
+    chmod a+x dist-extras/is.exe
+    MSYS2_ARG_CONV_EXCL='*' ./dist-extras/is.exe \
+        /DIR="$(cygpath -w "$(pwd)/dist-extras/inno")" \
+        /PORTABLE=1 \
+        /CURRENTUSER \
+        /VERYSILENT
+    rm -f dist-extras/is.exe
 
-        echo "--- [windows] install innosetup"
-        mkdir -p dist-extras
-        curl --fail -L -o 'dist-extras/is.exe' 'https://cache.julialang.org/https://www.jrsoftware.org/download.php/is.exe' || curl --fail -L -o 'dist-extras/is.exe' 'https://www.jrsoftware.org/download.php/is.exe'
-        chmod a+x dist-extras/is.exe
-        MSYS2_ARG_CONV_EXCL='*' ./dist-extras/is.exe \
-            /DIR="$(cygpath -w "$(pwd)/dist-extras/inno")" \
-            /PORTABLE=1 \
-            /CURRENTUSER \
-            /VERYSILENT
-        rm -f dist-extras/is.exe
+    echo "--- [windows] make exe"
+    codesign_script="$(pwd)/.buildkite/utilities/windows/codesign.sh"
+    certificate="$(pwd)/.buildkite/secrets/windows_codesigning.pfx"
+    iss_file="$(pwd)/.buildkite/utilities/windows/build-installer.iss"
+    MSYS2_ARG_CONV_EXCL='*' ./dist-extras/inno/iscc.exe \
+        /DAppVersion=${JULIA_VERSION} \
+        /DSourceDir="$(cygpath -w "$(pwd)/${JULIA_INSTALL_DIR}")" \
+        /DRepoDir="$(cygpath -w "$(pwd)")" \
+        /F"${UPLOAD_FILENAME}" \
+        /O"$(cygpath -w "$(pwd)")" \
+        /Dsign=true \
+        /Smysigntool="bash.exe '${codesign_script}' --certificate='${certificate}' \$f" \
+        "$(cygpath -w "${iss_file}")"
 
-        echo "--- [windows] make exe"
-        codesign_script="$(pwd)/.buildkite/utilities/windows/codesign.sh"
-        certificate="$(pwd)/.buildkite/secrets/windows_codesigning.pfx"
-        iss_file="$(pwd)/.buildkite/utilities/windows/build-installer.iss"
-        MSYS2_ARG_CONV_EXCL='*' ./dist-extras/inno/iscc.exe \
-            /DAppVersion=${JULIA_VERSION} \
-            /DSourceDir="$(cygpath -w "$(pwd)/${JULIA_INSTALL_DIR}")" \
-            /DRepoDir="$(cygpath -w "$(pwd)")" \
-            /F"${UPLOAD_FILENAME}" \
-            /O"$(cygpath -w "$(pwd)")" \
-            /Dsign=true \
-            /Smysigntool="bash.exe '${codesign_script}' --certificate='${certificate}' \$f" \
-            "$(cygpath -w "${iss_file}")"
+    # Add the `.exe` to our upload targets
+    UPLOAD_EXTENSIONS+=( "exe" )
 
-        # Add the `.exe` to our upload targets
-        UPLOAD_EXTENSIONS+=( "exe" )
+    # Immediately re-compress that tarball for upload
+    echo "--- [windows] Re-compress codesigned tarball"
+    rm -f "${UPLOAD_FILENAME}.tar.gz"
+    tar zcf "${UPLOAD_FILENAME}.tar.gz" "${JULIA_INSTALL_DIR}"
 
-        # Immediately re-compress that tarball for upload
-        echo "--- [windows] Re-compress codesigned tarball"
-        rm -f "${UPLOAD_FILENAME}.tar.gz"
-        tar zcf "${UPLOAD_FILENAME}.tar.gz" "${JULIA_INSTALL_DIR}"
-
-        # Use 7z to create a `.zip` file to upload as well
-        echo "--- [windows] make zip"
-        PATH="${JULIA_INSTALL_DIR}/libexec:${JULIA_INSTALL_DIR}/libexec/julia:${PATH}" \
-        7z.exe a "${UPLOAD_FILENAME}.zip" "$(cygpath -w "$(pwd)/${JULIA_INSTALL_DIR}")"
-        UPLOAD_EXTENSIONS+=( "zip" )
-    fi
-
-    echo "--- GPG-sign the tarball"
-    .buildkite/utilities/sign_tarball.sh .buildkite/secrets/tarball_signing.gpg "${UPLOAD_FILENAME}.tar.gz"
-    UPLOAD_EXTENSIONS+=( "tar.gz.asc" )
+    # Use 7z to create a `.zip` file to upload as well
+    echo "--- [windows] make zip"
+    PATH="${JULIA_INSTALL_DIR}/libexec:${JULIA_INSTALL_DIR}/libexec/julia:${PATH}" \
+    7z.exe a "${UPLOAD_FILENAME}.zip" "$(cygpath -w "$(pwd)/${JULIA_INSTALL_DIR}")"
+    UPLOAD_EXTENSIONS+=( "zip" )
 fi
+
+echo "--- GPG-sign the tarball"
+.buildkite/utilities/sign_tarball.sh .buildkite/secrets/tarball_signing.gpg "${UPLOAD_FILENAME}.tar.gz"
 
 # Helper function to explicitly `wait` on each given PID.
 # Because `wait` returns the exit code of the waited-upon PID,
@@ -115,7 +109,7 @@ wait_pids() {
 }
 
 # First, upload our signed products to buildkite, for easy downloading
-echo "--- Upload products to buildkite"
+echo "--- Upload signed products to buildkite"
 PIDS=()
 for EXT in "${UPLOAD_EXTENSIONS[@]}"; do
     buildkite-agent artifact upload "${UPLOAD_FILENAME}.${EXT}" &

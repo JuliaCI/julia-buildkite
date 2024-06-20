@@ -3,6 +3,12 @@ steps:
     steps:
       - label: ":windows: upload ${TRIPLET?}"
         key:   "upload_${TRIPLET?}"
+        # We only upload to S3 if one of the following criteria are true:
+        # 1. The branch is `master`.
+        # 2. The branch is `release-*`.
+        # 3. The build is a tag build AND the tag is `v*`.
+        # 4. The pipeline is `julia-buildkite`.
+        if: (build.branch == "master") || (build.branch =~ /^release-/) || (build.tag =~ /^v/) || (pipeline.slug == "julia-buildkite")
         depends_on:
           # Wait for the builder to finish
           - "build_${TRIPLET?}"
