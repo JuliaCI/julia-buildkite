@@ -1,0 +1,48 @@
+steps:
+  - group: "Full Source Dist" # TODO: delete this line
+  # - group: "Check" # TODO: uncomment this line
+    steps:
+      - label: "fullsrcdist"
+        key: "fullsrcdist"
+        depends_on:
+          - "build_x86_64-linux-gnu"
+        soft_fail: true # TODO: delete this line
+        plugins:
+          - JuliaCI/external-buildkite#v1:
+              version: "./.buildkite-external-version"
+              repo_url: "https://github.com/JuliaCI/julia-buildkite"
+          - JuliaCI/julia#v1:
+              # Drop default "registries" directory, so it is not persisted from execution to execution
+              persist_depot_dirs: packages,artifacts,compiled
+              version: '1.6'
+          - staticfloat/sandbox#v1:
+              rootfs_url: https://github.com/JuliaCI/rootfs-images/releases/download/v5.26/llvm_passes.x86_64.tar.gz
+              rootfs_treehash: "ab2b59a86d9bec3a4bc701127037637bedf9fe51"
+              uid: 1000
+              gid: 1000
+              workspaces:
+                - "/cache/repos:/cache/repos"
+          - JuliaCI/julia#v1:
+              # Drop default "registries" directory, so it is not persisted from execution to execution
+              persist_depot_dirs: packages,artifacts,compiled
+              version: '1.6'
+        # timeout_in_minutes: 10 # TODO: uncomment this line
+        timeout_in_minutes: 90   # TODO: delete this line
+        commands: |
+          # Download pre-built julia, extract into `usr/`
+          # buildkite-agent artifact download --step "build_x86_64-linux-gnu" 'julia-*-linux-x86_64.tar.gz' .
+          # mkdir -p ./usr
+          # tar -C ./usr --strip-components=1 -zxf julia-*-linux-x86_64.tar.gz
+          # ln -s ./usr/bin/julia ./julia
+          # echo "--- Print Julia version info"
+          # ./julia -e 'using InteractiveUtils; InteractiveUtils.versioninfo()'
+          echo "--- Light-source-dist"
+          make light-source-dist
+          echo "--- Full-source-dist"
+          make full-source-dist
+        agents:
+          queue: "julia"
+          # Only run on `sandbox.jl`-capable machines (not `docker`-isolated ones) since we need nestable sandboxing
+          sandbox_capable: "true"
+          os: "linux"
+          arch: "x86_64"
