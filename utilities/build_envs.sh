@@ -140,7 +140,7 @@ S3_BUCKET_PREFIX="${S3_BUCKET_PREFIX:-bin}"
 # We generally upload to multiple upload targets
 UPLOAD_TARGETS=()
 
-if [[ "${BUILDKITE_BRANCH}" == master ]] || [[ "${BUILDKITE_BRANCH}" == release-* ]] || [[ "${BUILDKITE_TAG:-}" == v* ]]; then
+if [[ "${BUILDKITE_BRANCH}" == master ]] || [[ "${BUILDKITE_BRANCH}" == release-* ]] || [[ "${BUILDKITE_TAG:-}" == v* ]] || [[ "${BUILDKITE_PIPELINE_SLUG}" == "julia-buildkite" ]]; then
     # First, we have the canonical fully-specified upload target
     UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/${ARCH?}/${MAJMIN?}/julia-${TAR_VERSION?}-${OS?}-${ARCH?}" )
 
