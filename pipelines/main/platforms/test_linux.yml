@@ -41,3 +41,4 @@ steps:
           JULIA_SHELL: "/bin/bash"
           TRIPLET: "${TRIPLET?}"
           USE_RR: "${USE_RR?}"
+          BUILDKITE_CANCEL_SIGNAL: "SIGQUIT"

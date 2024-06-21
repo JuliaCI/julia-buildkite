@@ -25,3 +25,4 @@ steps:
         env:
           JULIA_SHELL: "/bin/bash"
           TRIPLET: "${TRIPLET?}"
+          BUILDKITE_CANCEL_SIGNAL: "SIGQUIT"
