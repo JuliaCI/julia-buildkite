@@ -140,7 +140,7 @@ S3_BUCKET_PREFIX="${S3_BUCKET_PREFIX:-bin}"
 # We generally upload to multiple upload targets
 UPLOAD_TARGETS=()
 
-if [[ "${BUILDKITE_BRANCH}" == master ]] || [[ "${BUILDKITE_BRANCH}" == release-* ]] || [[ "${BUILDKITE_TAG:-}" == v* ]]; then
+if [[ "${BUILDKITE_BRANCH}" == master ]] || [[ "${BUILDKITE_BRANCH}" == release-* ]] || [[ "${BUILDKITE_TAG:-}" == v* ]] || [[ "${BUILDKITE_PIPELINE_SLUG}" == "julia-buildkite" ]]; then
     # First, we have the canonical fully-specified upload target
     UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/${ARCH?}/${MAJMIN?}/julia-${TAR_VERSION?}-${OS?}-${ARCH?}" )
 
@@ -171,49 +171,48 @@ if [[ "${BUILDKITE_BRANCH}" == master ]] || [[ "${BUILDKITE_BRANCH}" == release-
             UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/x86/julia-latest-${OS?}32" )
         fi
     fi
+
+    # We used to name our darwin builds as `julia-*-mac64.tar.gz`, instead of `julia-*-macos-x86_64.tar.gz`.
+    # Let's copy things over to the `mac` OS name for backwards compatibility:
+    if [[ "${OS?}" == "macos" ]] || [[ "${OS?}" == "windows" ]]; then
+        if [[ "${OS?}" == "macos" ]]; then
+            FOLDER_OS="mac"
+            SHORT_OS="mac"
+        elif [[ "${OS?}" == "windows" ]]; then
+            FOLDER_OS="winnt"
+            SHORT_OS="win"
+        else
+            FOLDER_OS="${OS}"
+            SHORT_OS="${OS}"
+        fi
+
+        if [[ "${ARCH}" == "x86_64" ]]; then
+            FOLDER_ARCH="x64"
+            SHORT_ARCH="64"
+        elif [[ "${ARCH}" == "i686" ]]; then
+            FOLDER_ARCH="x86"
+            SHORT_ARCH="32"
+        else
+            FOLDER_ARCH="${ARCH}"
+            SHORT_ARCH="${ARCH}"
+        fi
+
+        # First, we have the canonical fully-specified upload target
+        UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${FOLDER_OS}/${FOLDER_ARCH}/${MAJMIN?}/julia-${TAR_VERSION?}-${SHORT_OS}${SHORT_ARCH}" )
+
+        # Next, we have the "majmin/latest" upload target
+        UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${FOLDER_OS}/${FOLDER_ARCH}/${MAJMIN?}/julia-latest-${SHORT_OS}${SHORT_ARCH}" )
+
+        # If we're on `master` and we're uploading, we consider ourselves "absolute latest"
+        if [[ "${BUILDKITE_BRANCH}" == "master" ]]; then
+            UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${FOLDER_OS}/${FOLDER_ARCH}/julia-latest-${SHORT_OS}${SHORT_ARCH}" )
+        fi
+    fi
 fi
 
 # If we're a pull request build, upload to a special `-prXXXX` location
 if [[ "${BUILDKITE_PULL_REQUEST}" != "false" ]]; then
     UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/${ARCH?}/julia-pr${BUILDKITE_PULL_REQUEST}-${OS?}-${ARCH?}" )
-fi
-
-
-# We used to name our darwin builds as `julia-*-mac64.tar.gz`, instead of `julia-*-macos-x86_64.tar.gz`.
-# Let's copy things over to the `mac` OS name for backwards compatibility:
-if [[ "${OS?}" == "macos" ]] || [[ "${OS?}" == "windows" ]]; then
-    if [[ "${OS?}" == "macos" ]]; then
-        FOLDER_OS="mac"
-        SHORT_OS="mac"
-    elif [[ "${OS?}" == "windows" ]]; then
-        FOLDER_OS="winnt"
-        SHORT_OS="win"
-    else
-        FOLDER_OS="${OS}"
-        SHORT_OS="${OS}"
-    fi
-
-    if [[ "${ARCH}" == "x86_64" ]]; then
-        FOLDER_ARCH="x64"
-        SHORT_ARCH="64"
-    elif [[ "${ARCH}" == "i686" ]]; then
-        FOLDER_ARCH="x86"
-        SHORT_ARCH="32"
-    else
-        FOLDER_ARCH="${ARCH}"
-        SHORT_ARCH="${ARCH}"
-    fi
-
-    # First, we have the canonical fully-specified upload target
-    UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${FOLDER_OS}/${FOLDER_ARCH}/${MAJMIN?}/julia-${TAR_VERSION?}-${SHORT_OS}${SHORT_ARCH}" )
-
-    # Next, we have the "majmin/latest" upload target
-    UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${FOLDER_OS}/${FOLDER_ARCH}/${MAJMIN?}/julia-latest-${SHORT_OS}${SHORT_ARCH}" )
-
-    # If we're on `master` and we're uploading, we consider ourselves "absolute latest"
-    if [[ "${BUILDKITE_BRANCH}" == "master" ]]; then
-        UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${FOLDER_OS}/${FOLDER_ARCH}/julia-latest-${SHORT_OS}${SHORT_ARCH}" )
-    fi
 fi
 
 # This is the "main" filename that is used.  We technically don't need this for uploading,
