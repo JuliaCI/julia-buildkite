@@ -19,7 +19,6 @@ ld -v
 echo
 buildkite-agent --version
 
-echo "--- Collect make options"
 # These are the flags we'll provide to `make`
 MFLAGS=()
 
@@ -36,17 +35,40 @@ MFLAGS+=( "VERBOSE=1" )
 MFLAGS+=( "TAGGED_RELEASE_BANNER=Official https://julialang.org/ release" )
 MFLAGS+=( "JULIA_CPU_TARGET=${JULIA_CPU_TARGET}" )
 
+if [[ ! -z "${USE_JULIA_PGO_LTO-}" ]]; then
+    MFLAGS+=( "STAGE2_BUILD=$PWD" )
+
+    echo "--- Collect make options"
+    echo "Make Options:"
+    for FLAG in "${MFLAGS[@]}"; do
+        echo " -> ${FLAG}"
+    done
+
+    echo "--- Build Julia Stage 1 - with instrumentation"
+
+    cd contrib/pgo-lto
+    ${MAKE} "${MFLAGS[@]}" stage1
+    # Building stage1 collects profiling data which we use instead of collecting our own
+fi
+
 # Finish off with any extra make flags from the `.arches` file
 MFLAGS+=( $(tr "," " " <<<"${MAKE_FLAGS}") )
 
+echo "--- Collect make options"
 echo "Make Options:"
 for FLAG in "${MFLAGS[@]}"; do
     echo " -> ${FLAG}"
 done
 
-echo "--- Build Julia"
-${MAKE} "${MFLAGS[@]}"
+if [[ ! -z "${USE_JULIA_PGO_LTO-}" ]]; then
+    echo "--- Build Julia Stage 2 - optimised"
+    ${MAKE} "${MFLAGS[@]}" stage2
 
+    cd ../..
+else
+    echo "--- Build Julia"
+    ${MAKE} "${MFLAGS[@]}"
+fi
 
 echo "--- Check that the working directory is clean"
 if [ -n "$(git status --short)" ]; then
@@ -79,3 +101,8 @@ fi
 
 echo "--- Upload build artifacts to buildkite"
 buildkite-agent artifact upload "${UPLOAD_FILENAME}.tar.gz"
+
+# Upload the profile data to allow for reproducible builds
+if [[ ! -z "${USE_JULIA_PGO_LTO-}" ]]; then
+    buildkite-agent artifact upload "contrib/pgo-lto/profiles/merged.prof"
+fi
