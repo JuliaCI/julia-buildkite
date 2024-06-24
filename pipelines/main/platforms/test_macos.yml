@@ -6,7 +6,7 @@ steps:
         depends_on:
           - "build_${TRIPLET?}"
         plugins:
-          - JuliaCI/coreupload#v2:
+          - JuliaCI/coreupload#sf/error_reporting:
               core_pattern: "**/*.core"
               compressor: "zstd"
               create_bundle: "true"
@@ -25,3 +25,4 @@ steps:
         env:
           JULIA_SHELL: "/bin/bash"
           TRIPLET: "${TRIPLET?}"
+          BUILDKITE_CANCEL_SIGNAL: "SIGQUIT"
