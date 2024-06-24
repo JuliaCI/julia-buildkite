@@ -4,7 +4,7 @@ steps:
       - label: ":macos: build ${TRIPLET?}"
         key: "build_${TRIPLET?}"
         plugins:
-          - JuliaCI/coreupload#v2:
+          - JuliaCI/coreupload#sf/error_reporting:
               core_pattern: "**/*.core"
               compressor: "zstd"
               create_bundle: "true"

@@ -4,7 +4,7 @@ steps:
       - label: ":freebsd: build ${TRIPLET?}"
         key: "build_${TRIPLET?}"
         plugins:
-          - JuliaCI/coreupload#v2:
+          - JuliaCI/coreupload#sf/error_reporting:
               core_pattern: "**/*.core"
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"
