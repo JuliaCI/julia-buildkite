@@ -136,16 +136,15 @@ echo "TESTS is:                  ${TESTS:?}"
 echo "USE_RR is:                 ${USE_RR-}"
 echo "JL_TERM_TIMEOUT is:        ${JL_TERM_TIMEOUT}"
 
-# Show our core dump file pattern and size limit if we're going to be recording them
-if [[ -z "${USE_RR-}" ]]; then
-    ulimit -c unlimited
-    if [[ "${OS}" == linux* || "${OS}" == "musl" ]]; then
-        echo "Core dump pattern:         $(cat /proc/sys/kernel/core_pattern)"
-    elif [[ "${OS}" == "macos" || "${OS}" == "freebsd" ]]; then
-        echo "Core dump pattern:         $(sysctl -n kern.corefile)"
-    fi
-    echo "Core dump size limit:      $(ulimit -c)"
+# Show our core dump file pattern and size limit if we're going to be recording them.
+# Yes, we upload core dumps even if we are also using rr.
+ulimit -c unlimited
+if [[ "${OS}" == linux* || "${OS}" == "musl" ]]; then
+    echo "Core dump pattern:         $(cat /proc/sys/kernel/core_pattern)"
+elif [[ "${OS}" == "macos" || "${OS}" == "freebsd" ]]; then
+    echo "Core dump pattern:         $(sysctl -n kern.corefile)"
 fi
+echo "Core dump size limit:      $(ulimit -c)"
 
 # Begin with "+++" => Expand test group by default
 echo "+++ Run the Julia test suite"
