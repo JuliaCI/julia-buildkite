@@ -6,6 +6,7 @@ DMG_PATH="dmg"
 mkdir -p "${DMG_PATH}"
 APP_PATH="${DMG_PATH}/Julia-${MAJMIN?}.app"
 DMG_NAME="${UPLOAD_FILENAME?}.dmg"
+TAR_NAME="${UPLOAD_FILENAME}.tar.gz"
 
 # Start by compiling an applescript into a `.app`, which creates the skeleton, which we will fill out
 osacompile -o "${APP_PATH}" "contrib/mac/app/startup.applescript"
@@ -76,3 +77,17 @@ create_dmg
 
 # Cleanup things we created here
 rm -rf "${DMG_PATH}"
+
+### Also notarize the `.tar.gz` because juliaup uses it
+# Upload the `.tar.gz` for notarization
+
+xcrun notarytool \
+    submit \
+    --apple-id "${NOTARIZATION_APPLE_ID}" \
+    --password "${NOTARIZATION_APPLE_KEY}" \
+    --team-id "A427R7F42H" \
+    --wait \
+    "${TAR_NAME}"
+
+# Staple the notarization to the tarball
+xcrun stapler staple "${TAR_NAME}"
