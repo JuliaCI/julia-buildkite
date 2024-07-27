@@ -19,8 +19,6 @@ ld -v
 echo
 buildkite-agent --version
 
-echo "${ROOTFS_IMAGE_NAME-}" 
-echo ROOTFS_IMAGE_NAME
 if [[ "${ROOTFS_IMAGE_NAME-}" == "llvm_passes" ]]; then
     echo "--- Update CMake"
     contrib/download_cmake.sh
