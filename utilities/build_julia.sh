@@ -19,6 +19,9 @@ ld -v
 echo
 buildkite-agent --version
 
+echo "--- Update CMake"
+contrib/download_cmake.sh
+
 echo "--- Collect make options"
 # These are the flags we'll provide to `make`
 MFLAGS=()
