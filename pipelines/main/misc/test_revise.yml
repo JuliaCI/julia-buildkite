@@ -29,7 +29,8 @@ steps:
           ln -s ./usr/bin/julia ./julia
 
           echo "--- Install and test Revise"
-          ./julia -e 'using Pkg; Pkg.add("Revise"); Pkg.test("Revise")'
+          ./julia -e '@show DEPOT_PATH'
+          JULIA_PKG_PRECOMPILE_AUTO=0 JULIA_DEBUG=loading ./julia -e 'using Pkg; Pkg.add("Revise"); Pkg.test("Revise")'
         timeout_in_minutes: 30
         soft_fail: true
         agents:
