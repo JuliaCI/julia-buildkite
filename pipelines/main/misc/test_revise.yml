@@ -30,7 +30,7 @@ steps:
 
           echo "--- Install and test Revise"
           unset JULIA_DEPOT_PATH
-          JULIA_PKG_PRECOMPILE_AUTO=0 ./julia -e 'using Pkg; Pkg.add("Revise"); @show Revise.juliadir; @show Revise.git_repo(Revise.juliadir)'
+          JULIA_PKG_PRECOMPILE_AUTO=0 ./julia -e 'using Pkg; Pkg.add("Revise"); using Revise; @show Revise.juliadir; @show Revise.git_repo(Revise.juliadir)'
         timeout_in_minutes: 30
         soft_fail: true
         agents:
