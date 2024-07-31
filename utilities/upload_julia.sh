@@ -87,6 +87,10 @@ if [[ "${BUILDKITE_PULL_REQUEST}" == "false" ]]; then
         # Add the `.exe` to our upload targets
         UPLOAD_EXTENSIONS+=( "exe" )
 
+        # Next, directly codesign every executable file in the install dir
+        echo "--- [windows] Codesign everything in the install directory"
+        "${codesign_script}" --certificate="${certificate}" "${JULIA_INSTALL_DIR}"
+
         # Immediately re-compress that tarball for upload
         echo "--- [windows] Re-compress codesigned tarball"
         rm -f "${UPLOAD_FILENAME}.tar.gz"
