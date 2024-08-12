@@ -1,6 +1,6 @@
 # ROOTFS_IMAGE_NAME    TRIPLET                   ARCH           ARCH_ROOTFS    MAKE_FLAGS                               TIMEOUT     ROOTFS_TAG    ROOTFS_HASH
-# package_musl           x86_64-linux-musl         x86_64         x86_64         JL_CFLAGS=-Werror,JL_CXXFLAGS=-Werror    .           v7.3          0566496527284ed8b638273babbb5735b44d2b7e
-package_linux          x86_64-linux-gnummtk           x86_64         x86_64         JL_CFLAGS=-Werror,JL_CXXFLAGS=-Werror,WITH_THIRD_PARTY_GC=mmtk,MMTK_PLAN=Immix,MMTK_MOVING=0    .             v7.3          0566496527284ed8b638273babbb5735b44d2b7e
+# package_musl           x86_64-linux-musl         x86_64         x86_64         JL_CFLAGS=-Werror,JL_CXXFLAGS=-Werror    .           v7.6          ee00851bfbd742f895a7c5c94d5369abe88ffcbc
+package_linux          x86_64-linux-gnummtk           x86_64         x86_64         JL_CFLAGS=-Werror,JL_CXXFLAGS=-Werror,WITH_THIRD_PARTY_GC=mmtk,MMTK_PLAN=Immix,MMTK_MOVING=0    .             v7.6          ee00851bfbd742f895a7c5c94d5369abe88ffcbc
 # package_linux        armv7l-linux-gnueabihf    armv7l         armv7l         .                                        .           ----          ----------------------------------------
 
 
