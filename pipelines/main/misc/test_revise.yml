@@ -1,0 +1,40 @@
+steps:
+  - group: "Test"
+    steps:
+      - label: "test revise"
+        key: "test-revise"
+        depends_on:
+          - "build_x86_64-linux-gnu"
+        plugins:
+          - JuliaCI/external-buildkite#v1:
+              version: "./.buildkite-external-version"
+              repo_url: "https://github.com/JuliaCI/julia-buildkite"
+          - JuliaCI/julia#v1:
+              # Drop default "registries" directory, so it is not persisted from execution to execution
+              persist_depot_dirs: packages,artifacts,compiled
+              version: '1'
+          - staticfloat/sandbox#v1:
+              rootfs_url: https://github.com/JuliaCI/rootfs-images/releases/download/v6.00/package_linux.x86_64.tar.gz
+              rootfs_treehash: "4dcde853eb5baaa0a8f087b633eaf955dc94b5dc"
+              uid: 1000
+              gid: 1000
+              workspaces:
+                # Include `/cache/repos` so that our `git` version introspection works.
+                - "/cache/repos:/cache/repos"
+        commands: |
+          # Download pre-built julia, extract into `usr/`
+          buildkite-agent artifact download --step "build_x86_64-linux-gnu" 'julia-*-linux-x86_64.tar.gz' .
+          mkdir -p ./usr
+          tar -C ./usr --strip-components=1 -zxf julia-*-linux-x86_64.tar.gz
+          ln -s ./usr/bin/julia ./julia
+
+          echo "--- Install and test Revise"
+          unset JULIA_DEPOT_PATH
+          JULIA_PKG_PRECOMPILE_AUTO=0 ./julia -e 'using Pkg; Pkg.add(name="Revise", rev="master"); ENV["JULIA_PKG_PRECOMPILE_AUTO"]=1; Pkg.test("Revise")'
+        timeout_in_minutes: 30
+        soft_fail: true
+        agents:
+          queue: "julia"
+          sandbox_capable: "true"
+          os: "linux"
+          arch: "x86_64"
