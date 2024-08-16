@@ -97,3 +97,6 @@ for dir in readdir(stdlib_cache_dir, join = true)
         end
     end
 end
+
+# check stdlibs caches are valid
+Base.isprecompiled(Base.PkgId(Base.UUID("44cfe95a-1eb2-52ea-b672-e2afdf69b78f"), "Pkg")) || error()
