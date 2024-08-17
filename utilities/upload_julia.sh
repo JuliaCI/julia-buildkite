@@ -40,7 +40,7 @@ if [[ "${BUILDKITE_PULL_REQUEST}" == "false" ]]; then
             "${JULIA_INSTALL_DIR}"
 
         echo "--- [mac] Update checksums for stdlib cachefiles"
-        ${JULIA_INSTALL_DIR}/bin/julia .buildkite/utilities/macos/update_stdlib_pkgimage_checksums.jl
+        ${JULIA_INSTALL_DIR}/bin/julia .buildkite/utilities/update_stdlib_pkgimage_checksums.jl
 
         # Immediately re-compress that tarball for upload
         echo "--- [mac] Re-compress codesigned tarball"
@@ -90,6 +90,9 @@ if [[ "${BUILDKITE_PULL_REQUEST}" == "false" ]]; then
         # Next, directly codesign every executable file in the install dir
         echo "--- [windows] Codesign everything in the install directory"
         "${codesign_script}" --certificate="${certificate}" "${JULIA_INSTALL_DIR}"
+
+        echo "--- [windows] Update checksums for stdlib cachefiles"
+        ${JULIA_INSTALL_DIR}/bin/julia .buildkite/utilities/update_stdlib_pkgimage_checksums.jl
 
         # Immediately re-compress that tarball for upload
         echo "--- [windows] Re-compress codesigned tarball"
