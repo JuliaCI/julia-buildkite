@@ -81,7 +81,7 @@ if [[ "${BUILDKITE_PULL_REQUEST}" == "false" ]]; then
             /F"${UPLOAD_FILENAME}" \
             /O"$(cygpath -w "$(pwd)")" \
             /Dsign=true \
-            /Smysigntool="bash.exe '${codesign_script}' --certificate='${certificate}' \$f" \
+            /Smysigntool="bash.exe '${codesign_script}' \$f" \
             "$(cygpath -w "${iss_file}")"
 
         # Add the `.exe` to our upload targets
@@ -89,7 +89,7 @@ if [[ "${BUILDKITE_PULL_REQUEST}" == "false" ]]; then
 
         # Next, directly codesign every executable file in the install dir
         echo "--- [windows] Codesign everything in the install directory"
-        "${codesign_script}" --certificate="${certificate}" "${JULIA_INSTALL_DIR}"
+        "${codesign_script}" "${JULIA_INSTALL_DIR}"
 
         echo "--- [windows] Update checksums for stdlib cachefiles"
         ${JULIA_INSTALL_DIR}/bin/julia .buildkite/utilities/update_stdlib_pkgimage_checksums.jl
