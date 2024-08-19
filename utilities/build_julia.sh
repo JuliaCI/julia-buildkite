@@ -38,8 +38,8 @@ MFLAGS+=( "-j${JULIA_CPU_THREADS}")
 
 # Add a few default flags to our make flags:
 MFLAGS+=( "VERBOSE=1" )
-# NOTE: this breaks if you build v1.9 or lower with this
-if awk "BEGIN {exit !($d1 >= 1.12)}"; then
+# NOTE: this breaks if you build v1.9 or lower or v1.100 or higher with this
+if awk "BEGIN {exit !($VERSION >= 1.12)}"; then
     MFLAGS+=( "TAGGED_RELEASE_BANNER=Official https://julialang.org release" )
 else
     # Keep trailing slash for compatability. The slash was removed in 1.12 with https://github.com/JuliaLang/julia/pull/53978
