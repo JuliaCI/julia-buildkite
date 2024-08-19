@@ -32,3 +32,4 @@ steps:
           # Receive some environment mappings from our templating engine
           TRIPLET: "${TRIPLET?}"
           MAKE_FLAGS: "${MAKE_FLAGS?}"
+          ROOTFS_IMAGE_NAME: "${ROOTFS_IMAGE_NAME?}"

@@ -33,7 +33,7 @@ if [[ "${OS}" == "macos" ]]; then
     echo "--- [mac] Codesigning"
     .buildkite/utilities/macos/codesign.sh "${JULIA_INSTALL_DIR}"
     echo "--- [mac] Update checksums for stdlib cachefiles after codesigning"
-    ${JULIA_INSTALL_DIR}/bin/julia .buildkite/utilities/macos/update_stdlib_pkgimage_checksums.jl
+    ${JULIA_INSTALL_DIR}/bin/julia .buildkite/utilities/update_stdlib_pkgimage_checksums.jl
 fi
 
 
@@ -147,5 +147,20 @@ if [[ -z "${USE_RR-}" ]]; then
     echo "Core dump size limit:      $(ulimit -c)"
 fi
 
-echo "--- Run the Julia test suite"
-${JULIA_CMD_FOR_TESTS:?} -e "Base.runtests(\"${TESTS:?}\"; ncores = ${NCORES_FOR_TESTS:?})"
+# Begin with "+++" => Expand test group by default
+echo "+++ Run the Julia test suite"
+# set -e; requires us using if to check the exit status
+if ${JULIA_CMD_FOR_TESTS:?} -e "Base.runtests(\"${TESTS:?}\"; ncores = ${NCORES_FOR_TESTS:?})"; then
+  exitVal=0
+else
+  exitVal=1
+fi
+
+echo "--- Upload results.json report"
+if compgen -G "${JULIA_INSTALL_DIR}/share/julia/test/results*.json"; then
+    (cd "${JULIA_INSTALL_DIR}/share/julia/test"; buildkite-agent artifact upload results*.json)
+else
+    echo "no JSON results files found"
+fi
+
+exit $exitVal
