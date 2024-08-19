@@ -76,7 +76,7 @@ function do_codesign() {
         for SERVER in ${SERVERS[@]}; do
             # Note that we're using SHA1 signing here, because that's what our certificate supports.
             # In the future, we may be able to upgrade to SHA256.
-            if signtool sign /debug /fd SHA1 /f "${CERT_PATH}" /p "${CERT_PASSWORD}" /t "${SERVER}" "$1"; then
+            if MSYS2_ARG_CONV_EXCL='*' signtool sign /debug /fd certHash /f "${CERT_PATH}" /p "${CERT_PASSWORD}" /t "${SERVER}" "$1"; then
                 return 0
             fi
         done
@@ -88,11 +88,33 @@ function do_codesign() {
 
 # This codesign script only works on files
 if [ -f "${1}" ]; then
-    if ! do_codesign "${1}"; then
-        echo "Codesigning failed!" >&2
-        exit 1
-    fi
+    # If we're codesigning a single file, directly invoke codesign on that file
+    echo "Codesigning file ${1} with certificate ${CERT_PATH}"
+    do_codesign "${1}"
+elif [ -d "${1}" ]; then
+    # Create a fifo to communicate from `find` to `while`
+    trap 'rm -rf $TMPFIFODIR' EXIT
+    TMPFIFODIR="$(mktemp -d)"
+    mkfifo "$TMPFIFODIR/findpipe"
+
+    # If we're codesigning a whole directory, use `find` to discover every
+    # executable file within the directory, then pass that off to a while
+    # read loop.  This safely handles whitespace in filenames.
+    find "${1}" -type f -perm -0111 -print0 > "$TMPFIFODIR/findpipe" &
+
+    # This while loop reads in from the fifo, and invokes `do_codesign`,
+    # but it does so in a background task, so that the codesigning can
+    # happen in parallel.  This speeds things up by a few seconds.
+    echo "Codesigning dir ${1} with certificate ${CERT_PATH}"
+    NUM_CODESIGNS=0
+    while IFS= read -r -d '' exe_file; do
+        do_codesign "${exe_file}" &
+        NUM_CODESIGNS="$((NUM_CODESIGNS + 1))"
+    done < "${TMPFIFODIR}/findpipe"
+    wait
+    echo "Codesigned ${NUM_CODESIGNS} files"
 else
-    echo "Don't know how to codesign '${1}'!" >&2
+    echo "Given codesigning target '${1}' not a file or directory!" >&2
+    usage
     exit 1
 fi
