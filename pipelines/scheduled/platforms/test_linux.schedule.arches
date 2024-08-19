@@ -1,6 +1,6 @@
 # ROOTFS_IMAGE_NAME    TRIPLET                       ARCH           ARCH_ROOTFS    TIMEOUT    USE_RR     ROOTFS_TAG     ROOTFS_HASH
-llvm_passes            x86_64-linux-gnusrcassert     x86_64         x86_64         150        rr         v5.21          e3fcf9b97c8f37f8de308214e377d99ad2071772
-llvm_passes            x86_64-linux-gnusrcassert     x86_64         x86_64         150        rr-net     v5.21          e3fcf9b97c8f37f8de308214e377d99ad2071772
+llvm_passes            x86_64-linux-gnusrcassert     x86_64         x86_64         150        rr         v6.00          0badf5d8794e21a03ac2ff2d46c1ab538ac02571
+llvm_passes            x86_64-linux-gnusrcassert     x86_64         x86_64         150        rr-net     v6.00          0badf5d8794e21a03ac2ff2d46c1ab538ac02571
 
 # These special lines allow us to embed default values for the columns above.
 # Any column without a default mapping here will simply substitute a `.` to the empty string

@@ -1,7 +1,15 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # First, extract information from our triplet
 source .buildkite/utilities/extract_triplet.sh
+
+# Figure out what GNU Make is on this system
+if [[ "${OS}" == "freebsd" ]]; then
+    MAKE="gmake"
+else
+    MAKE="make"
+fi
+export MAKE
 
 # Apply fixups to our environment for when we're running on julia-buildkite pipeline
 if buildkite-agent meta-data exists BUILDKITE_JULIA_BRANCH; then
@@ -10,7 +18,7 @@ if buildkite-agent meta-data exists BUILDKITE_JULIA_BRANCH; then
 fi
 
 # Determine JULIA_CPU_TARGETS for different architectures
-JUlIA_CPU_TARGETS=()
+JULIA_CPU_TARGETS=()
 case "${ARCH?}" in
     x86_64)
         JULIA_CPU_TARGETS+=(
@@ -20,14 +28,19 @@ case "${ARCH?}" in
             "sandybridge,-xsaveopt,clone_all"
             # Add haswell level (without rdrnd) that is a diff of the sandybridge level
             "haswell,-rdrnd,base(1)"
+            # A common baseline for modern x86-64 server CPUs
+            "x86-64-v4,-rdrnd,base(1)"
         )
         ;;
     i686)
         JULIA_CPU_TARGETS+=(
             # We require SSE2, etc.. so `pentium4` is our base i686 feature set
+            # We used to also target `sandybridge`, but sadly we run out of memory
+            # when linking so much code, so we're temporarily restricting to only
+            # the base set for now.  :(
+            # Please, if you are using Julia for performance-critical work, use
+            # a 64-bit processor!
             "pentium4"
-            # Add sandybridge level similar to x86_64 above
-            "sandybridge,-xsaveopt,clone_all"
         )
         ;;
     armv7l)
@@ -41,16 +54,32 @@ case "${ARCH?}" in
         )
         ;;
     aarch64)
-        JULIA_CPU_TARGETS+=(
-            # Absolute base aarch64 feature set
-            "generic"
-            # Cortex A57, Example: NVIDIA Jetson TX1, Jetson Nano
-            "cortex-a57"
-            # Cavium ThunderX2T99, a common server architecture
-            "thunderx2t99"
-            # NVidia Carmel, e.g. Jetson AGX Xavier
-            "carmel"
-        )
+        case "${OS?}" in
+            macos)
+                JULIA_CPU_TARGETS+=(
+                    # Absolute base aarch64 feature set
+                    "generic"
+                    # Apple M1
+                    "apple-m1,clone_all"
+                )
+                ;;
+            *)
+                JULIA_CPU_TARGETS+=(
+                    # Absolute base aarch64 feature set
+                    "generic"
+                    # Cortex A57, Example: NVIDIA Jetson TX1, Jetson Nano
+                    "cortex-a57"
+                    # Cavium ThunderX2T99, a common server architecture
+                    "thunderx2t99"
+                    # NVidia Carmel, e.g. Jetson AGX Xavier; serves as a baseline for later architectures
+                    "carmel,clone_all"
+                    # Apple M1
+                    "apple-m1,base(3)"
+                    # Vector-length-agnostic common denominator between Neoverse V1 and V2, recent Arm server architectures
+                    "neoverse-512tvb,base(3)"
+                )
+                ;;
+        esac
         ;;
     powerpc64le)
         JULIA_CPU_TARGETS+=(
@@ -74,6 +103,7 @@ fi
 JULIA_CPU_TARGET="$(printf ";%s" "${JULIA_CPU_TARGETS[@]}")"
 export JULIA_CPU_TARGET="${JULIA_CPU_TARGET:1}"
 
+export JULIA_IMAGE_THREADS="$JULIA_CPU_THREADS"
 
 
 # Extract git information
@@ -98,7 +128,7 @@ export TAR_VERSION
 # Build the filename that we'll upload as, and get the filename that will be built
 # These are not the same in situations such as `musl`, where the build system doesn't
 # differentiate but we need to give it a different name.
-export JULIA_BINARYDIST_FILENAME="$(make print-JULIA_BINARYDIST_FILENAME | cut -c27- | tr -s ' ')"
+export JULIA_BINARYDIST_FILENAME="$(${MAKE} print-JULIA_BINARYDIST_FILENAME | cut -c27- | tr -s ' ')"
 
 export JULIA_INSTALL_DIR="julia-${TAR_VERSION}"
 JULIA_BINARY="${JULIA_INSTALL_DIR}/bin/julia${EXE}"
@@ -108,75 +138,81 @@ S3_BUCKET="${S3_BUCKET:-julialangnightlies}"
 S3_BUCKET_PREFIX="${S3_BUCKET_PREFIX:-bin}"
 
 # We generally upload to multiple upload targets
-UPLOAD_TARGETS=(
+UPLOAD_TARGETS=()
+
+if [[ "${BUILDKITE_BRANCH}" == master ]] || [[ "${BUILDKITE_BRANCH}" == release-* ]] || [[ "${BUILDKITE_TAG:-}" == v* ]] || [[ "${BUILDKITE_PIPELINE_SLUG}" == "julia-buildkite" ]]; then
     # First, we have the canonical fully-specified upload target
-    "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/${ARCH?}/${MAJMIN?}/julia-${TAR_VERSION?}-${OS?}-${ARCH?}"
+    UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/${ARCH?}/${MAJMIN?}/julia-${TAR_VERSION?}-${OS?}-${ARCH?}" )
 
     # Next, we have the "majmin/latest" upload target
-    "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/${ARCH?}/${MAJMIN?}/julia-latest-${OS?}-${ARCH?}"
-)
+    UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/${ARCH?}/${MAJMIN?}/julia-latest-${OS?}-${ARCH?}" )
 
-# The absolute latest upload target is only for if we're on the `master` branch
-if [[ "${BUILDKITE_BRANCH}" == "master" ]]; then
-    UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/${ARCH?}/julia-latest-${OS?}-${ARCH?}" )
-fi
-
-
-# Finally, for compatibility, we keep on uploading x86_64 and i686 targets to folders called `x64`
-# and `x86`, and ending in `-linux64` and `-linux32`, although I would very much like to stop doing that.
-if [[ "${ARCH}" == "x86_64" ]]; then
-    UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/x64/${MAJMIN?}/julia-${TAR_VERSION?}-${OS?}64" )
-    UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/x64/${MAJMIN?}/julia-latest-${OS?}64" )
-
-    # Only upload to absolute latest if we're on `master`
+    # The absolute latest upload target is only for if we're on the `master` branch
     if [[ "${BUILDKITE_BRANCH}" == "master" ]]; then
-        UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/x64/julia-latest-${OS?}64" )
-    fi
-elif [[ "${ARCH}" == "i686" ]]; then
-    UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/x86/${MAJMIN?}/julia-${TAR_VERSION?}-${OS?}32" )
-    UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/x86/${MAJMIN?}/julia-latest-${OS?}32" )
-
-    # Only upload to absolute latest if we're on `master`
-    if [[ "${BUILDKITE_BRANCH}" == "master" ]]; then
-        UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/x86/julia-latest-${OS?}32" )
-    fi
-fi
-
-# We used to name our darwin builds as `julia-*-mac64.tar.gz`, instead of `julia-*-macos-x86_64.tar.gz`.
-# Let's copy things over to the `mac` OS name for backwards compatibility:
-if [[ "${OS?}" == "macos" ]] || [[ "${OS?}" == "windows" ]]; then
-    if [[ "${OS?}" == "macos" ]]; then
-        FOLDER_OS="mac"
-        SHORT_OS="mac"
-    elif [[ "${OS?}" == "windows" ]]; then
-        FOLDER_OS="winnt"
-        SHORT_OS="win"
-    else
-        FOLDER_OS="${OS}"
-        SHORT_OS="${OS}"
+        UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/${ARCH?}/julia-latest-${OS?}-${ARCH?}" )
     fi
 
+    # Finally, for compatibility, we keep on uploading x86_64 and i686 targets to folders called `x64`
+    # and `x86`, and ending in `-linux64` and `-linux32`, although I would very much like to stop doing that.
     if [[ "${ARCH}" == "x86_64" ]]; then
-        FOLDER_ARCH="x64"
-        SHORT_ARCH="64"
+        UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/x64/${MAJMIN?}/julia-${TAR_VERSION?}-${OS?}64" )
+        UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/x64/${MAJMIN?}/julia-latest-${OS?}64" )
+
+        # Only upload to absolute latest if we're on `master`
+        if [[ "${BUILDKITE_BRANCH}" == "master" ]]; then
+            UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/x64/julia-latest-${OS?}64" )
+        fi
     elif [[ "${ARCH}" == "i686" ]]; then
-        FOLDER_ARCH="x86"
-        SHORT_ARCH="32"
-    else
-        FOLDER_ARCH="${ARCH}"
-        SHORT_ARCH="${ARCH}"
+        UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/x86/${MAJMIN?}/julia-${TAR_VERSION?}-${OS?}32" )
+        UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/x86/${MAJMIN?}/julia-latest-${OS?}32" )
+
+        # Only upload to absolute latest if we're on `master`
+        if [[ "${BUILDKITE_BRANCH}" == "master" ]]; then
+            UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/x86/julia-latest-${OS?}32" )
+        fi
     fi
 
-    # First, we have the canonical fully-specified upload target
-    UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${FOLDER_OS}/${FOLDER_ARCH}/${MAJMIN?}/julia-${TAR_VERSION?}-${SHORT_OS}${SHORT_ARCH}" )
+    # We used to name our darwin builds as `julia-*-mac64.tar.gz`, instead of `julia-*-macos-x86_64.tar.gz`.
+    # Let's copy things over to the `mac` OS name for backwards compatibility:
+    if [[ "${OS?}" == "macos" ]] || [[ "${OS?}" == "windows" ]]; then
+        if [[ "${OS?}" == "macos" ]]; then
+            FOLDER_OS="mac"
+            SHORT_OS="mac"
+        elif [[ "${OS?}" == "windows" ]]; then
+            FOLDER_OS="winnt"
+            SHORT_OS="win"
+        else
+            FOLDER_OS="${OS}"
+            SHORT_OS="${OS}"
+        fi
 
-    # Next, we have the "majmin/latest" upload target
-    UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${FOLDER_OS}/${FOLDER_ARCH}/${MAJMIN?}/julia-latest-${SHORT_OS}${SHORT_ARCH}" )
+        if [[ "${ARCH}" == "x86_64" ]]; then
+            FOLDER_ARCH="x64"
+            SHORT_ARCH="64"
+        elif [[ "${ARCH}" == "i686" ]]; then
+            FOLDER_ARCH="x86"
+            SHORT_ARCH="32"
+        else
+            FOLDER_ARCH="${ARCH}"
+            SHORT_ARCH="${ARCH}"
+        fi
 
-    # If we're on `master` and we're uploading, we consider ourselves "absolute latest"
-    if [[ "${BUILDKITE_BRANCH}" == "master" ]]; then
-        UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${FOLDER_OS}/${FOLDER_ARCH}/julia-latest-${SHORT_OS}${SHORT_ARCH}" )
+        # First, we have the canonical fully-specified upload target
+        UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${FOLDER_OS}/${FOLDER_ARCH}/${MAJMIN?}/julia-${TAR_VERSION?}-${SHORT_OS}${SHORT_ARCH}" )
+
+        # Next, we have the "majmin/latest" upload target
+        UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${FOLDER_OS}/${FOLDER_ARCH}/${MAJMIN?}/julia-latest-${SHORT_OS}${SHORT_ARCH}" )
+
+        # If we're on `master` and we're uploading, we consider ourselves "absolute latest"
+        if [[ "${BUILDKITE_BRANCH}" == "master" ]]; then
+            UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${FOLDER_OS}/${FOLDER_ARCH}/julia-latest-${SHORT_OS}${SHORT_ARCH}" )
+        fi
     fi
+fi
+
+# If we're a pull request build, upload to a special `-prXXXX` location
+if [[ "${BUILDKITE_PULL_REQUEST}" != "false" ]]; then
+    UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/${ARCH?}/julia-pr${BUILDKITE_PULL_REQUEST}-${OS?}-${ARCH?}" )
 fi
 
 # This is the "main" filename that is used.  We technically don't need this for uploading,

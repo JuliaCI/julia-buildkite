@@ -9,10 +9,7 @@ struct BughuntBuildInfo
     platform::Platform
     env::Dict{String,String}
 
-    rootfs_url::String
-    rootfs_treehash::SHA1
-    rootfs_uid::Int
-    rootfs_gid::Int
+    rootfs_data::Dict{String,Any}
 
     # Which version of Julia was being built/tested
     julia_checkout::GitCheckout
@@ -26,24 +23,42 @@ end
 
 function get_rootfs_data(env)
     plugins = JSON3.read(env["BUILDKITE_PLUGINS"])
-    rootfs_url = nothing
-    rootfs_treehash = nothing
-    rootfs_uid = Sandbox.getuid()
-    rootfs_gid = Sandbox.getgid()
     for plugin in plugins
         for (plugin_name, plugin_values) in plugin
+            # If we find a `sandbox` plugin, extract that information here
             if occursin("staticfloat/sandbox-buildkite-plugin", String(plugin_name))
-                rootfs_url = get(plugin_values, "rootfs_url", rootfs_url)
-                rootfs_treehash = get(plugin_values, "rootfs_treehash", rootfs_treehash)
-                rootfs_uid = get(plugin_values, "uid", rootfs_uid)
-                rootfs_gid = get(plugin_values, "gid", rootfs_gid)
+                rootfs_url = get(plugin_values, "rootfs_url", nothing)
+                rootfs_treehash = get(plugin_values, "rootfs_treehash", nothing)
+                rootfs_uid = get(plugin_values, "uid", Sandbox.getuid())
+                rootfs_gid = get(plugin_values, "gid", Sandbox.getgid())
+
+                if rootfs_url === nothing || rootfs_treehash === nothing
+                    @error("Plugin values:", plugin_values)
+                    throw(ArgumentError("Invalid sandbox plugin values!"))
+                end
+
+                return Dict{String,Any}(
+                    "type" => "sandbox",
+                    "url" => rootfs_url,
+                    "treehash" => rootfs_treehash,
+                    "uid" => rootfs_uid,
+                    "gid" => rootfs_gid,
+                )
+            end
+            if occursin("docker", String(plugin_name))
+                image = get(plugin_values, "image", nothing)
+                if image === nothing
+                    @error("Plugin values:", plugin_values)
+                    throw(ArgumentError("Invalid docker plugin values!"))
+                end
+                return Dict{String,Any}(
+                    "type" => "docker",
+                    "image" => image,
+                )
             end
         end
     end
-    if rootfs_url === nothing || rootfs_treehash === nothing
-        throw(ArgumentError("Cannot bughunt step without sandbox plugin!"))
-    end
-    return rootfs_url, rootfs_treehash, rootfs_uid, rootfs_gid
+    return Dict{String,Any}()
 end
 
 
@@ -60,7 +75,7 @@ function BughuntBuildInfo(job::BuildkiteJob; prefer_build_rootfs::Bool = true)
     env["MAKE_FLAGS"] = get(env, "MAKE_FLAGS", "")
 
     triplet = env["TRIPLET"]
-    platform = parse(Platform, replace(triplet, "gnuassert" => "gnu"))
+    platform = parse(Platform, replace(triplet, "gnuassert" => "gnu", "gnuprofiling" => "gnu"))
     if !Sandbox.natively_runnable(platform)
         throw(ArgumentError("Cannot natively run triplet '$(triplet)'!"))
     end
@@ -72,7 +87,10 @@ function BughuntBuildInfo(job::BuildkiteJob; prefer_build_rootfs::Bool = true)
 
     # Collect the artifacts we should download (such as prebuilt versions of Julia)
     artifacts = BuildkiteArtifact[]
+
+    # If this was a build within sandbox or docker, extract its information here.
     rootfs_data = get_rootfs_data(env)
+
     if startswith(step_key, "test_")
         # If we're a `test_*` step, search for the corresponding `build_` step,
         # and download its artifacts:
@@ -86,9 +104,6 @@ function BughuntBuildInfo(job::BuildkiteJob; prefer_build_rootfs::Bool = true)
         end
     end
     append!(artifacts, get_buildkite_job_artifacts(job))
-
-    # Extract rootfs_data from the returned tuple
-    rootfs_url, rootfs_treehash, rootfs_uid, rootfs_gid = rootfs_data
 
     # If this is a PR, we'll have a pull request repo field, to track 3rd party PR repo urls
     # If it's not a PR, this will be empty, so we should just use the typical repo url
@@ -106,10 +121,7 @@ function BughuntBuildInfo(job::BuildkiteJob; prefer_build_rootfs::Bool = true)
     return BughuntBuildInfo(
         platform,
         Dict(string(k) => string(v) for (k, v) in env),
-        rootfs_url,
-        SHA1(rootfs_treehash),
-        rootfs_uid,
-        rootfs_gid,
+        rootfs_data,
         GitCheckout(julia_repo_url, env["BUILDKITE_COMMIT"], "."),
         GitCheckout(julia_buildkite_repo_url, julia_buildkite_commit, julia_buildkite_checkout_dir),
         artifacts,
@@ -119,8 +131,13 @@ end
 # Download `rr` for the given platform, into the given prefix
 function download_rr(platform::Platform, prefix::String)
     if !isfile(joinpath(prefix, "bin", "rr"))
-        paths = collect_artifact_paths(["rr_jll"]; platform)
-        copy_artifact_paths(prefix, paths)
+        jlls = [
+            Pkg.PackageSpec(;name = "rr_jll", version = v"5.5.0+7"),
+            # Manually work around bad artifact selection with MSAN tags
+            Pkg.PackageSpec(;name = "Zlib_jll", version = v"1.2.11+18"),
+        ]
+        paths = collect_artifact_paths(jlls; platform)
+        deploy_artifact_paths(prefix, paths)
     end
 end
 
@@ -227,12 +244,15 @@ function collect_resources(build_info::BughuntBuildInfo, prefix::String;
         end)
 
         @sync begin
-            # Collect rootfs artifact
-            Base.errormonitor(@async begin
-                if !Pkg.Artifacts.artifact_exists(build_info.rootfs_treehash)
-                    Pkg.Artifacts.download_artifact(build_info.rootfs_treehash, build_info.rootfs_url, nothing; verbose=true)
-                end
-            end)
+            # If we're a sandbox build, collect the rootfs:
+            if build_info.rootfs_data["type"] == "sandbox"
+                Base.errormonitor(@async begin
+                    treehash = Base.SHA1(build_info.rootfs_data["treehash"])
+                    if !Pkg.Artifacts.artifact_exists(treehash)
+                        Pkg.Artifacts.download_artifact(treehash, build_info.rootfs_data["url"], nothing; verbose=true)
+                    end
+                end)
+            end
 
             # Collect buildkite artifacts into `prefix/artifacts`
             mkpath(joinpath(prefix, "artifacts"))
@@ -244,7 +264,7 @@ function collect_resources(build_info::BughuntBuildInfo, prefix::String;
                     if match(r"\.tar\.\w+$", basename(apath)) !== nothing
                         unpack_dir = joinpath(prefix, "artifacts", first(split(basename(apath), ".tar")))
                         mkpath(unpack_dir)
-                        p = run(ignorestatus(`tar -I unzstd -C $(unpack_dir) -xf $(apath)`))
+                        p = run(ignorestatus(`tar -C $(unpack_dir) -xf $(apath)`))
                         if success(p)
                             # If the artifact is a coredump, generate a core launch script:
                             if match(r"\.core\.tar\.\w+$", basename(apath)) !== nothing
@@ -291,13 +311,18 @@ function collect_resources(build_info::BughuntBuildInfo, prefix::String;
 end
 
 function SandboxConfig(build_info::BughuntBuildInfo, prefix::String)
+    if build_info.rootfs_data["type"] != "sandbox"
+        throw(ArgumentError("Invalid job rootfs; no sandbox rootfs data found!"))
+    end
+
     # Add the bughunt commands to our PATH
     return SandboxConfig(
         Dict(
-             "/" => Pkg.Artifacts.artifact_path(build_info.rootfs_treehash),
+             "/" => Pkg.Artifacts.artifact_path(Base.SHA1(build_info.rootfs_data["treehash"])),
              # We have some debugging commands that we want on the PATH
              "/usr/local/libexec/bughunt_commands" => joinpath(@__DIR__, "commands"),
-             # mount the `.bashrc` into our home directory as well
+             # mount the `.bash_profile` into our home directory as well
+             # We use `.bash_profile` here because we launch `bash` with `-l`
              "/home/juliaci/.bash_profile" => joinpath(@__DIR__, "bashrc.sh"),
         ),
         Dict(
@@ -312,11 +337,81 @@ function SandboxConfig(build_info::BughuntBuildInfo, prefix::String)
             build_info.env...,
         );
         pwd="/build",
-        uid=build_info.rootfs_uid,
-        gid=build_info.rootfs_gid,
+        uid=build_info.rootfs_data["uid"],
+        gid=build_info.rootfs_data["gid"],
         stdin,
         stdout,
         stderr,
         verbose=true,
     )
+end
+
+struct DockerConfig
+    image::String
+
+    mounts::Dict{String,String}
+    env::Dict{String,String}
+end
+
+function DockerConfig(build_info::BughuntBuildInfo, prefix::String)
+    if build_info.rootfs_data["type"] != "docker"
+        throw(ArgumentError("Invalid job rootfs; no docker rootfs data found!"))
+    end
+
+    # Docker on windows doesn't do file mounts, so we create a fake home directory here
+    # with `.bash_profile` in it:
+    fake_home = mktempdir()
+    cp(joinpath(@__DIR__, "bashrc.sh"), joinpath(fake_home, ".bashrc"))
+
+    # Build mount and env maps:
+    return DockerConfig(
+        build_info.rootfs_data["image"],
+
+        # We have some debugging commands that we want on the PATH, store them
+        # in the msys64 equivalent of `/usr/local/libexec/bughunt_commands`,
+        # so that our `.bashrc` works everywhere...
+        Dict(
+            "C:\\msys64\\build" => prefix,
+            "C:\\Users\\ContainerUser" => fake_home,
+            "C:\\msys64\\usr\\local\\libexec\\bughunt_commands" => joinpath(@__DIR__, "commands"),
+        ),
+        Dict(
+            "TERM" => "xterm-256color",
+            "JULIA_CPU_THREADS" => string(Sys.CPU_THREADS),
+            build_info.env...,
+        );
+    )
+end
+
+function Base.run(dc::DockerConfig, cmd::Cmd)
+    docker_cmd_line = String[
+        "docker",
+        "run",
+
+        # Give us an interactive session
+        "-ti",
+
+        # Start in `/build`
+        "-wC:\\msys64\\build",
+    ]
+
+    # Build mount flags
+    for (target, host) in dc.mounts
+        push!(docker_cmd_line, "-v$(host):$(target)")
+    end
+
+    # Inherit environment (we'll use `setenv` to actually communicate them to docker)
+    for (name, _) in dc.env
+        push!(docker_cmd_line, "-e$(name)")
+    end
+
+    # Finally, pass the image and command
+    push!(docker_cmd_line, dc.image)
+    append!(docker_cmd_line, cmd.exec)
+    docker_cmd = setenv(Cmd(docker_cmd_line), dc.env)
+
+    if cmd.ignorestatus
+        docker_cmd = ignorestatus(docker_cmd)
+    end
+    run(docker_cmd)
 end

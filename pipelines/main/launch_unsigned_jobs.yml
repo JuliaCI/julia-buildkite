@@ -4,9 +4,9 @@
 #
 # Yes, this is creating another layer of indirection; the flow now looks like:
 #
-#   [webui] -> launch_unsigned_builders.yml -> misc/whitespace.yml
+#   [webui] -> launch_unsigned_builders.yml -> misc/llvmpasses.yml
 #
-# when we could theoretically just have the `webui` launch `misc/whitespace.yml`,
+# when we could theoretically just have the `webui` launch `misc/llvmpasses.yml`,
 # however this raises the bar for contributors to add new (unsigned) steps to
 # our CI configuration, so I'd rather live with an extra layer of indirection
 # and only need to touch the webui configuration when we need to alter
@@ -39,6 +39,11 @@ steps:
           GROUP="Build" \
               ALLOW_FAIL="false" \
               bash .buildkite/utilities/arches_pipeline_upload.sh \
+              .buildkite/pipelines/main/platforms/build_freebsd.arches \
+              .buildkite/pipelines/main/platforms/build_freebsd.yml
+          GROUP="Build" \
+              ALLOW_FAIL="false" \
+              bash .buildkite/utilities/arches_pipeline_upload.sh \
               .buildkite/pipelines/main/platforms/build_windows.arches \
               .buildkite/pipelines/main/platforms/build_windows.yml
         agents:
@@ -60,7 +65,7 @@ steps:
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/pdf_docs/build_pdf_docs.yml
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/embedding.yml
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/llvmpasses.yml
-          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/whitespace.yml
+          # buildkite-agent pipeline upload .buildkite/pipelines/main/misc/whitespace.yml # Currently runs in GitHub Actions instead of Buildkite
 
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/sanitizers/asan.yml
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/sanitizers/tsan.yml
@@ -79,6 +84,9 @@ steps:
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
         commands: |
           export ALLOW_FAIL="false"
+          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/gcext.yml
+          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/test_revise.yml
+
           # Launch Linux test jobs
           GROUP="Test" \
               bash .buildkite/utilities/arches_pipeline_upload.sh \
@@ -87,8 +95,8 @@ steps:
           # Launch i686-linux-gnu test jobs
           GROUP="Test" \
               bash .buildkite/utilities/arches_pipeline_upload.sh \
-              .buildkite/pipelines/main/platforms/test_linux.32.arches \
-              .buildkite/pipelines/main/platforms/test_linux.32.yml
+              .buildkite/pipelines/main/platforms/test_linux.i686.arches \
+              .buildkite/pipelines/main/platforms/test_linux.i686.yml
           # Launch macOS test jobs
           GROUP="Test" \
               bash .buildkite/utilities/arches_pipeline_upload.sh \
@@ -142,6 +150,11 @@ steps:
               bash .buildkite/utilities/arches_pipeline_upload.sh \
               .buildkite/pipelines/main/platforms/test_macos.soft_fail.arches \
               .buildkite/pipelines/main/platforms/test_macos.yml
+          # Launch FreeBSD allowed-to-fail jobs
+          GROUP="Allow Fail" \
+              bash .buildkite/utilities/arches_pipeline_upload.sh \
+              .buildkite/pipelines/main/platforms/test_freebsd.soft_fail.arches \
+              .buildkite/pipelines/main/platforms/test_freebsd.yml
           # Launch windows allowed-to-fail test jobs
           GROUP="Allow Fail" \
               bash .buildkite/utilities/arches_pipeline_upload.sh \

@@ -180,12 +180,6 @@ filter!(fcs) do fc
     fc.filename ∈ base_jl_files || occursin("/src/", fc.filename)
 end;
 
-# Exclude all external stdlibs (stdlibs that live in external repos).
-const external_stdlib_prefixes = get_external_stdlib_prefixes("stdlib")
-filter!(fcs) do fc
-    all(x -> !startswith(fc.filename, x), external_stdlib_prefixes)
-end;
-
 # Exclude all stdlib JLLs (stdlibs of the form `stdlib/*_jll/`).
 filter!(fcs) do fc
     !occursin(r"^stdlib\/[A-Za-z0-9]*?_jll\/", fc.filename)
@@ -193,6 +187,30 @@ end;
 
 fcs = Coverage.merge_coverage_counts(fcs)
 sort!(fcs; by = fc -> fc.filename);
+fcs = map(fcs) do fc
+    fc.filename ∈ base_jl_files && return Coverage.FileCoverage(joinpath("base", fc.filename), fc.source, fc.coverage)
+    if occursin("stdlib", fc.filename)
+        new_name = "stdlib" * String(split(fc.filename, joinpath("stdlib", "v" * string(VERSION.major) * "." * string(VERSION.minor)))[end])
+        return Coverage.FileCoverage(new_name, fc.source, fc.coverage)
+    else
+        return fc
+    end
+end
+
+# Must occur after truncation performed above
+# Exclude all external stdlibs (stdlibs that live in external repos).
+const external_stdlib_prefixes = get_external_stdlib_prefixes("stdlib")
+filter!(fcs) do fc
+    all(x -> !startswith(fc.filename, x), external_stdlib_prefixes)
+end;
+
+filter!(fc -> (startswith(fc.filename, "base") || startswith(fc.filename, "stdlib")), fcs)
+
+# This must be run to make sure all lines of code are hit.
+# See docstring for `Coverage.amend_coverage_from_src!``
+for fc in fcs
+    Coverage.amend_coverage_from_src!(fc.coverage, fc.filename)
+end
 
 print_coverage_summary.(fcs);
 const total_cov_pct = print_coverage_summary(fcs, "Total").cov_pct

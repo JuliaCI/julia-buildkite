@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # This script performs the basic steps needed to test Julia previously
 # built and uploaded as a `.tar.gz`.
@@ -30,7 +30,10 @@ fi
 # If we're on macOS, we need to re-sign the downloaded tarball so it will
 # execute on this machine
 if [[ "${OS}" == "macos" ]]; then
+    echo "--- [mac] Codesigning"
     .buildkite/utilities/macos/codesign.sh "${JULIA_INSTALL_DIR}"
+    echo "--- [mac] Update checksums for stdlib cachefiles after codesigning"
+    ${JULIA_INSTALL_DIR}/bin/julia .buildkite/utilities/update_stdlib_pkgimage_checksums.jl
 fi
 
 
@@ -50,6 +53,16 @@ unset JULIA_PKG_SERVER
 if [[ "${OS}" == "linux" ]]; then
     export TMPDIR="$(pwd)/tmp"
     mkdir -p ${TMPDIR}
+fi
+
+#Always set the max rss so that if tests add large global variables (which they do) we don't make the GC's life too hard
+export JULIA_TEST_MAXRSS_MB=3800
+
+if [[ "${ARCH}" == "i686" ]]; then
+    # Assume that we only have 3.5GB available to a single process, and that a single
+    # test can take up to 2GB of RSS.  This means that we should instruct the test
+    # framework to restart any worker that comes into a test set with 1.5GB of RSS.
+    export JULIA_TEST_MAXRSS_MB=1536
 fi
 
 # By default, we'll run all tests and skip nothing
@@ -138,5 +151,20 @@ if [[ -z "${USE_RR-}" ]]; then
     echo "Timeout signal set to:     ${JULIA_TEST_TIMEOUT_SIGNUM}"
 fi
 
-echo "--- Run the Julia test suite"
-${JULIA_CMD_FOR_TESTS:?} -e "Base.runtests(\"${TESTS:?}\"; ncores = ${NCORES_FOR_TESTS:?})"
+# Begin with "+++" => Expand test group by default
+echo "+++ Run the Julia test suite"
+# set -e; requires us using if to check the exit status
+if ${JULIA_CMD_FOR_TESTS:?} -e "Base.runtests(\"${TESTS:?}\"; ncores = ${NCORES_FOR_TESTS:?})"; then
+  exitVal=0
+else
+  exitVal=1
+fi
+
+echo "--- Upload results.json report"
+if compgen -G "${JULIA_INSTALL_DIR}/share/julia/test/results*.json"; then
+    (cd "${JULIA_INSTALL_DIR}/share/julia/test"; buildkite-agent artifact upload results*.json)
+else
+    echo "no JSON results files found"
+fi
+
+exit $exitVal

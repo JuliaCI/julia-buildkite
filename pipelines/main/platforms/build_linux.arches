@@ -1,10 +1,12 @@
-# ROOTFS_IMAGE_NAME    TRIPLET                    ARCH           ARCH_ROOTFS    MAKE_FLAGS                                                                    TIMEOUT       ROOTFS_TAG    ROOTFS_HASH
-package_linux          i686-linux-gnu             x86_64         i686           JL_CFLAGS=-Werror,JL_CXXFLAGS=-Werror                                         .             v5.26         abe9ca251b93980e444738b3996779d60ea7045d
-package_linux          x86_64-linux-gnu           x86_64         x86_64         JL_CFLAGS=-Werror,JL_CXXFLAGS=-Werror                                         .             v5.26         5b0b851aca3c941b900a1301c13922c6cfc7f211
-package_linux          x86_64-linux-gnuassert     x86_64         x86_64         FORCE_ASSERTIONS=1,LLVM_ASSERTIONS=1,JL_CFLAGS=-Werror,JL_CXXFLAGS=-Werror    .             v5.26         5b0b851aca3c941b900a1301c13922c6cfc7f211
-package_linux          aarch64-linux-gnu          aarch64        aarch64        .                                                                             .             v5.26         dcf39d10ba43bf13c75d5031c3a88f125780033b
-package_linux          powerpc64le-linux-gnu      powerpc64le    powerpc64le    .                                                                             .             v5.26         45378b056347797ff6a5411c05f86a9119d17d19
-package_musl           x86_64-linux-musl          x86_64         x86_64         JL_CFLAGS=-Werror,JL_CXXFLAGS=-Werror                                         .             v5.26         c73bbb4c844b34a8ef3bc4c6c68eeb0bc5fdc1e5
+# ROOTFS_IMAGE_NAME    TRIPLET                        ARCH           ARCH_ROOTFS    MAKE_FLAGS                                                                              TIMEOUT       ROOTFS_TAG    ROOTFS_HASH
+package_linux          i686-linux-gnu                 x86_64         i686           JL_CFLAGS=-Werror,JL_CXXFLAGS=-Werror                                                   .             v6.00         a0c4756ee7827b3a75d4a62ff543315c1547e3d6
+package_linux          x86_64-linux-gnu               x86_64         x86_64         JL_CFLAGS=-Werror,JL_CXXFLAGS=-Werror                                                   .             v6.00         4dcde853eb5baaa0a8f087b633eaf955dc94b5dc
+package_linux          x86_64-linux-gnuassert         x86_64         x86_64         FORCE_ASSERTIONS=1,LLVM_ASSERTIONS=1,JL_CFLAGS=-Werror,JL_CXXFLAGS=-Werror              .             v6.00         4dcde853eb5baaa0a8f087b633eaf955dc94b5dc
+package_linux          x86_64-linux-gnuprofiling      x86_64         x86_64         WITH_TRACY=1,WITH_ITTAPI=1,WITH_TIMING_COUNTS=1,JL_CFLAGS=-Werror,JL_CXXFLAGS=-Werror   .             v6.00         4dcde853eb5baaa0a8f087b633eaf955dc94b5dc
+package_linux          aarch64-linux-gnu              aarch64        aarch64        .                                                                                       .             v6.00         e32c05f36d0a5bb0f94a17d99647f0b3352a8256
+package_linux          powerpc64le-linux-gnu          powerpc64le    powerpc64le    .                                                                                       .             v6.00         a7e3fe07d581d5c97e2c7aca85b2273597f21c0b
+package_linux          powerpc64le-linux-gnuassert    powerpc64le    powerpc64le    FORCE_ASSERTIONS=1,LLVM_ASSERTIONS=1                                                    .             v6.00         a7e3fe07d581d5c97e2c7aca85b2273597f21c0b
+# package_musl           x86_64-linux-musl              x86_64         x86_64         JL_CFLAGS=-Werror,JL_CXXFLAGS=-Werror                                                   .             v6.00         948ca1e496231e4c280c236a3e9bb01c95c2cda5
 
 # These special lines allow us to embed default values for the columns above.
 # Any column without a default mapping here will simply substitute a `.` to the empty string

@@ -1,14 +1,8 @@
 steps:
-  - group: "Upload"
+  - group: "${GROUP?}"
     steps:
       - label: ":linux: upload ${TRIPLET?}"
         key:   "upload_${TRIPLET?}"
-        # We only upload to S3 if one of the following criteria are true:
-        # 1. The branch is `master`.
-        # 2. The branch is `release-*`.
-        # 3. The build is a tag build AND the tag is `v*`.
-        # 4. The pipeline is `julia-buildkite`.
-        if: (build.branch == "master") || (build.branch =~ /^release-/) || (build.tag =~ /^v/) || (pipeline.slug == "julia-buildkite")
         depends_on:
           # Wait for the builder to finish
           - "build_${TRIPLET?}"
@@ -18,6 +12,7 @@ steps:
         # It is okay for two different triplets to upload simultaneously
         concurrency: 1
         concurrency_group: 'upload/julialangnightlies/${TRIPLET?}'
+        concurrency_method: eager
         plugins:
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"
@@ -27,8 +22,8 @@ steps:
               persist_depot_dirs: packages,artifacts,compiled
               version: '1'
           - staticfloat/sandbox#v1:
-              rootfs_url: https://github.com/JuliaCI/rootfs-images/releases/download/v5.22/aws_uploader.x86_64.tar.gz
-              rootfs_treehash: "486b8618fd0184dd869c9282a73bb08aa1411e82"
+              rootfs_url: https://github.com/JuliaCI/rootfs-images/releases/download/v6.00/aws_uploader.x86_64.tar.gz
+              rootfs_treehash: "61cb30497604eb1581b3ffd6a8058c150f4cbf8b"
               uid: 1000
               gid: 1000
               workspaces:
@@ -41,6 +36,7 @@ steps:
               files:
                 - .buildkite/secrets/tarball_signing.gpg
         timeout_in_minutes: ${TIMEOUT?}
+        soft_fail: ${ALLOW_FAIL?}
         commands: "bash .buildkite/utilities/upload_julia.sh"
         agents:
           queue: "julia"
