@@ -1,6 +1,6 @@
 # OS     TRIPLET              ARCH       DOCKER_ARCH   MAKE_FLAGS                                TIMEOUT     DOCKER_TAG
-windows  x86_64-w64-mingw32   x86_64     x86_64        VERBOSE=1                                 .           v5.44
-windows  i686-w64-mingw32     x86_64     i686          VERBOSE=1                                 .           v5.44
+windows  x86_64-w64-mingw32   x86_64     x86_64        VERBOSE=1                                 .           v7.2
+windows  i686-w64-mingw32     x86_64     i686          VERBOSE=1                                 .           v7.2
 
 # These special lines allow us to embed default values for the columns above.
 # Any column without a default mapping here will simply substitute a `.` to the empty string

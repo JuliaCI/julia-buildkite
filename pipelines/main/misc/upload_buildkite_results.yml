@@ -1,0 +1,33 @@
+steps:
+  - group: "Upload"
+    steps:
+      - label: "upload test results ${TRIPLET?}"
+        key:   "upload_results_${TRIPLET?}"
+        depends_on:
+          # Wait for the builder to finish
+          - step: "build_${TRIPLET?}"
+          # Wait for the tester to finish
+          - step: "test_${TRIPLET?}"
+            allow_failure: true
+        plugins:
+          - JuliaCI/external-buildkite#v1:
+              version: "./.buildkite-external-version"
+              repo_url: "https://github.com/JuliaCI/julia-buildkite"
+          - staticfloat/cryptic#v2:
+              variables:
+                - BUILDKITE_ANALYTICS_TOKEN="U2FsdGVkX18BUSpNWNimRUOAh2ku0ugS7x3RRy1CfJBCxTLWArJpa1PXKoILfI7q"
+          - test-collector#v1.10.1:
+              files: "results*.json"
+              format: "json"
+        timeout_in_minutes: ${TIMEOUT?}
+        soft_fail: true
+        commands: |
+          buildkite-agent artifact download --step "test_${TRIPLET?}" "results*.json" . || true
+        agents:
+          queue: "julia"
+        env:
+          # Receive cryptic token from parent job
+          BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET: ${BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET?}
+          TRIPLET: "${TRIPLET?}"
+
+
