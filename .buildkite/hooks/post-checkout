@@ -22,6 +22,9 @@ if [[ "${DISABLE_UPSTREAM_CACHE}" != "true" ]]; then
         mkdir -p "$(dirname "${UPSTREAM_CACHE}")"
         git clone --mirror "${UPSTREAM_URL}" "${UPSTREAM_CACHE}"
     else
+        echo "Prune cache for ${UPSTREAM_URL}"
+        rm -f "${UPSTREAM_CACHE}/gc.log"
+        git -C "${UPSTREAM_CACHE}" prune
         echo "Update cache for ${UPSTREAM_URL}"
         git -C "${UPSTREAM_CACHE}" fetch
     fi
