@@ -51,6 +51,8 @@ else
     MFLAGS+=( "TAGGED_RELEASE_BANNER=Official https://julialang.org/ release" )
 fi
 MFLAGS+=( "JULIA_CPU_TARGET=${JULIA_CPU_TARGET}" )
+# Finish off with any extra make flags from the `.arches` file
+MFLAGS+=( $(tr "," " " <<<"${MAKE_FLAGS}") )
 
 if [[ ! -z "${USE_JULIA_PGO_LTO-}" ]]; then
     MFLAGS+=( "STAGE2_BUILD=$PWD" )
@@ -67,9 +69,6 @@ if [[ ! -z "${USE_JULIA_PGO_LTO-}" ]]; then
     ${MAKE} "${MFLAGS[@]}" stage1
     # Building stage1 collects profiling data which we use instead of collecting our own
 fi
-
-# Finish off with any extra make flags from the `.arches` file
-MFLAGS+=( $(tr "," " " <<<"${MAKE_FLAGS}") )
 
 echo "--- Collect make options"
 echo "Make Options:"
