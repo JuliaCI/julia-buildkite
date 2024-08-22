@@ -56,6 +56,7 @@ MFLAGS+=( $(tr "," " " <<<"${MAKE_FLAGS}") )
 
 if [[ ! -z "${USE_JULIA_PGO_LTO-}" ]]; then
     MFLAGS+=( "STAGE2_BUILD=$PWD" )
+    MFLAGS+=( "LDFLAGS=-Wl,--undefined-version" )
 
     echo "--- Collect make options"
     echo "Make Options:"
