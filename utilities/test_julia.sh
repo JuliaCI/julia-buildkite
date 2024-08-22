@@ -21,7 +21,7 @@ if [[ ! -d "${JULIA_INSTALL_DIR}/bin" ]]; then
     # first, however in the event of a soft-fail test, we can re-run a test after a successful
     # upload has occured.
     echo "--- Download build artifacts"
-    buildkite-agent artifact download --step "build_${TRIPLET}${USE_JULIA_PGO_LTO-}" "${UPLOAD_FILENAME}.tar.gz" .
+    buildkite-agent artifact download --step "build_${TRIPLET}" "${UPLOAD_FILENAME}.tar.gz" .
 
     echo "--- Extract build artifacts"
     tar xzf "${UPLOAD_FILENAME}.tar.gz" "${JULIA_INSTALL_DIR}/"

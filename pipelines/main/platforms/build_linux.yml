@@ -1,8 +1,8 @@
 steps:
   - group: "${GROUP?}"
     steps:
-      - label: ":linux: build ${TRIPLET?}${USE_JULIA_PGO_LTO-}"
-        key: "build_${TRIPLET?}${USE_JULIA_PGO_LTO-}"
+      - label: ":linux: build ${TRIPLET?}"
+        key: "build_${TRIPLET?}"
         plugins:
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"

@@ -1,15 +1,15 @@
 steps:
   - group: "${GROUP?}"
     steps:
-      - label: ":linux: test ${TRIPLET?}${USE_RR-}${USE_JULIA_PGO_LTO-}"
-        key: "test_${TRIPLET?}${USE_RR-}${USE_JULIA_PGO_LTO-}"
+      - label: ":linux: test ${TRIPLET?}${USE_RR-}"
+        key: "test_${TRIPLET?}${USE_RR-}"
         depends_on:
-          - "build_${TRIPLET?}${USE_JULIA_PGO_LTO-}"
+          - "build_${TRIPLET?}"
         plugins:
           - JuliaCI/coreupload#v2:
               core_pattern: "**/*.core"
               compressor: "zstd"
-              disabled: "${USE_RR?}${USE_JULIA_PGO_LTO-}"
+              disabled: "${USE_RR?}"
               create_bundle: "true"
               lldb_commands:
                 - "bt all"
@@ -41,4 +41,3 @@ steps:
           JULIA_SHELL: "/bin/bash"
           TRIPLET: "${TRIPLET?}"
           USE_RR: "${USE_RR?}"
-          USE_JULIA_PGO_LTO: "${USE_JULIA_PGO_LTO}"

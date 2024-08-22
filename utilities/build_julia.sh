@@ -78,7 +78,7 @@ for FLAG in "${MFLAGS[@]}"; do
 done
 
 if [[ ! -z "${USE_JULIA_PGO_LTO-}" ]]; then
-    echo "--- Build Julia Stage 2 - optimised"
+    echo "--- Build Julia Stage 2 - PGO + LTO optimised"
     ${MAKE} "${MFLAGS[@]}" stage2
 
     cd ../..
