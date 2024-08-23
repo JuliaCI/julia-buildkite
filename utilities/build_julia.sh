@@ -65,8 +65,7 @@ if [[ ! -z "${USE_JULIA_PGO_LTO-}" ]]; then
 
     echo "--- Build Julia Stage 1 - with instrumentation"
 
-    cd contrib/pgo-lto
-    ${MAKE} "${MFLAGS[@]}" LDFLAGS=-Wl,--undefined-version stage1 # Workaround https://github.com/JuliaLang/julia/issues/54533
+    ${MAKE} -C contrib/pgo-lto "${MFLAGS[@]}" LDFLAGS=-Wl,--undefined-version stage1 # Workaround https://github.com/JuliaLang/julia/issues/54533
     # Building stage1 collects profiling data which we use instead of collecting our own
 fi
 
@@ -78,9 +77,7 @@ done
 
 if [[ ! -z "${USE_JULIA_PGO_LTO-}" ]]; then
     echo "--- Build Julia Stage 2 - PGO + LTO optimised"
-    ${MAKE} "${MFLAGS[@]}" LDFLAGS=-Wl,--undefined-version stage2
-
-    cd ../..
+    ${MAKE} -C contrib/pgo-lto "${MFLAGS[@]}" LDFLAGS=-Wl,--undefined-version stage2
 else
     echo "--- Build Julia"
     ${MAKE} "${MFLAGS[@]}"
