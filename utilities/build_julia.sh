@@ -57,13 +57,13 @@ else
 fi
 MFLAGS+=( "JULIA_CPU_TARGET=${JULIA_CPU_TARGET}" )
 
-# Finish off with any extra make flags from the `.arches` file
-MFLAGS+=( $(tr "," " " <<<"${MAKE_FLAGS}") )
-
 if [[ ! -z "${USE_JULIA_PGO_LTO-}" ]]; then
     MFLAGS+=( "-C contrib/pgo-lto" )
     MFLAGS+=( "STAGE2_BUILD=$PWD" )
 fi
+
+# Finish off with any extra make flags from the `.arches` file
+MFLAGS+=( $(tr "," " " <<<"${MAKE_FLAGS}") )
 
 echo "Make Options:"
 for FLAG in "${MFLAGS[@]}"; do
