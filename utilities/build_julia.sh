@@ -32,6 +32,11 @@ echo "--- Collect make options"
 # These are the flags we'll provide to `make`
 MFLAGS=()
 
+if [[ ! -z "${USE_JULIA_PGO_LTO-}" ]]; then
+    MFLAGS+=( "-C contrib/pgo-lto" )
+    MFLAGS+=( "STAGE2_BUILD=$PWD" )
+fi
+
 # If we have the option, let's use `--output-sync`
 if ${MAKE} --help | grep output-sync >/dev/null 2>/dev/null; then
     MFLAGS+=( "--output-sync" )
@@ -56,11 +61,6 @@ else
     MFLAGS+=( "TAGGED_RELEASE_BANNER=Official https://julialang.org/ release" )
 fi
 MFLAGS+=( "JULIA_CPU_TARGET=${JULIA_CPU_TARGET}" )
-
-if [[ ! -z "${USE_JULIA_PGO_LTO-}" ]]; then
-    MFLAGS+=( "-C contrib/pgo-lto" )
-    MFLAGS+=( "STAGE2_BUILD=$PWD" )
-fi
 
 # Finish off with any extra make flags from the `.arches` file
 MFLAGS+=( $(tr "," " " <<<"${MAKE_FLAGS}") )
