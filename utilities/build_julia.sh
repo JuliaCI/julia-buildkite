@@ -102,10 +102,10 @@ ${JULIA_EXE} -e "import Test; Test.@test Sys.ARCH == :${ARCH:?}"
 ${JULIA_EXE} -e "import Test; Test.@test Sys.WORD_SIZE == ${EXPECTED_WORD_SIZE:?}"
 
 echo "--- Show build stats"
-${MAKE} "${MFLAGS[@]}" USE_BINARYBUILDER_LLVM=0 LDFLAGS="-Wl,--undefined-version -fuse-ld=lld" build-stats
+${MAKE} "${MFLAGS[@]}" USE_BINARYBUILDER_LLVM=0 LDFLAGS="-Wl,--undefined-version -fuse-ld=lld" CC=contrib/pgo-lto/stage0.build/clang CXX=contrib/pgo-lto/stage0.build/clang++ LD=contrib/pgo-lto/stage0.build/ld.lld AR=contrib/pgo-lto/stage0.build/llvm-ar RANLIB=contrib/pgo-lto/stage0.build/llvm-ranlib build-stats
 
 echo "--- Create build artifacts"
-${MAKE} "${MFLAGS[@]}" USE_BINARYBUILDER_LLVM=0 LDFLAGS="-Wl,--undefined-version -fuse-ld=lld" binary-dist
+${MAKE} "${MFLAGS[@]}" USE_BINARYBUILDER_LLVM=0 LDFLAGS="-Wl,--undefined-version -fuse-ld=lld" CC=contrib/pgo-lto/stage0.build/clang CXX=contrib/pgo-lto/stage0.build/clang++ LD=contrib/pgo-lto/stage0.build/ld.lld AR=contrib/pgo-lto/stage0.build/llvm-ar RANLIB=contrib/pgo-lto/stage0.build/llvm-ranlib binary-dist
 
 # Rename the build artifact in case we want to name it differently, as is the case on `musl`.
 if [[ "${JULIA_BINARYDIST_FILENAME}.tar.gz" != "${UPLOAD_FILENAME}.tar.gz" ]]; then
