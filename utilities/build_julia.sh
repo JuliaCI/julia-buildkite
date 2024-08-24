@@ -102,10 +102,10 @@ ${JULIA_EXE} -e "import Test; Test.@test Sys.ARCH == :${ARCH:?}"
 ${JULIA_EXE} -e "import Test; Test.@test Sys.WORD_SIZE == ${EXPECTED_WORD_SIZE:?}"
 
 echo "--- Show build stats"
-${MAKE} "${MFLAGS[@]}" build-stats
+${MAKE} "${MFLAGS[@]}" USE_BINARYBUILDER_LLVM=0 build-stats
 
 echo "--- Create build artifacts"
-${MAKE} "${MFLAGS[@]}" binary-dist
+${MAKE} "${MFLAGS[@]}" USE_BINARYBUILDER_LLVM=0 binary-dist
 
 # Rename the build artifact in case we want to name it differently, as is the case on `musl`.
 if [[ "${JULIA_BINARYDIST_FILENAME}.tar.gz" != "${UPLOAD_FILENAME}.tar.gz" ]]; then
