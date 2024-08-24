@@ -61,7 +61,7 @@ MFLAGS+=( "JULIA_CPU_TARGET=${JULIA_CPU_TARGET}" )
 MFLAGS+=( $(tr "," " " <<<"${MAKE_FLAGS}") )
 
 if [[ ! -z "${USE_JULIA_PGO_LTO-}" ]]; then
-    MFLAGS+=( "STAGE2_BUILD=$PWD" )
+    MFLAGS+=( "-C contrib/pgo-lto STAGE2_BUILD=$PWD" )
 fi
 
 echo "Make Options:"

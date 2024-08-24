@@ -1,5 +1,5 @@
-# ROOTFS_IMAGE_NAME  TRIPLET                    ARCH     ARCH_ROOTFS    USE_JULIA_PGO_LTO    MAKE_FLAGS           TIMEOUT      ROOTFS_TAG   ROOTFS_HASH
-llvm_passes          x86_64-linux-gnu-pgo-lto   x86_64   x86_64         PGO_LTO              -C contrib/pgo-lto   .            v7.6         ebdfa2d40c0e27842cccbfdd43710144f9adf9d8
+# ROOTFS_IMAGE_NAME  TRIPLET                    ARCH     ARCH_ROOTFS    USE_JULIA_PGO_LTO    MAKE_FLAGS      TIMEOUT      ROOTFS_TAG   ROOTFS_HASH
+llvm_passes          x86_64-linux-gnu-pgo-lto   x86_64   x86_64         PGO_LTO              .               .            v7.6         ebdfa2d40c0e27842cccbfdd43710144f9adf9d8
 
 # These special lines allow us to embed default values for the columns above.
 # Any column without a default mapping here will simplpy substitute a `.` to the empty string
