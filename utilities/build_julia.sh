@@ -19,11 +19,16 @@ ld -v
 echo
 buildkite-agent --version
 
+git remote add test https://github.com/Zentrik/julia
+git fetch test
+git switch fix-pgo
+
 if [[ "${ROOTFS_IMAGE_NAME-}" == "llvm_passes" ]]; then
     echo "--- Update CMake"
     contrib/download_cmake.sh
 fi
 
+echo "--- Collect make options"
 # These are the flags we'll provide to `make`
 MFLAGS=()
 
@@ -51,37 +56,21 @@ else
     MFLAGS+=( "TAGGED_RELEASE_BANNER=Official https://julialang.org/ release" )
 fi
 MFLAGS+=( "JULIA_CPU_TARGET=${JULIA_CPU_TARGET}" )
+
 # Finish off with any extra make flags from the `.arches` file
 MFLAGS+=( $(tr "," " " <<<"${MAKE_FLAGS}") )
 
 if [[ ! -z "${USE_JULIA_PGO_LTO-}" ]]; then
     MFLAGS+=( "STAGE2_BUILD=$PWD" )
-
-    echo "--- Collect make options"
-    echo "Make Options:"
-    for FLAG in "${MFLAGS[@]}"; do
-        echo " -> ${FLAG}"
-    done
-
-    echo "--- Build Julia Stage 1 - with instrumentation"
-
-    ${MAKE} -C contrib/pgo-lto "${MFLAGS[@]}" LDFLAGS=-Wl,--undefined-version stage1 # Workaround https://github.com/JuliaLang/julia/issues/54533
-    # Building stage1 collects profiling data which we use instead of collecting our own
 fi
 
-echo "--- Collect make options"
 echo "Make Options:"
 for FLAG in "${MFLAGS[@]}"; do
     echo " -> ${FLAG}"
 done
 
-if [[ ! -z "${USE_JULIA_PGO_LTO-}" ]]; then
-    echo "--- Build Julia Stage 2 - PGO + LTO optimised"
-    ${MAKE} -C contrib/pgo-lto "${MFLAGS[@]}" LDFLAGS=-Wl,--undefined-version stage2
-else
-    echo "--- Build Julia"
-    ${MAKE} "${MFLAGS[@]}"
-fi
+echo "--- Build Julia"
+${MAKE} "${MFLAGS[@]}"
 
 echo "--- Check that the working directory is clean"
 if [ -n "$(git status --short)" ]; then
@@ -102,10 +91,10 @@ ${JULIA_EXE} -e "import Test; Test.@test Sys.ARCH == :${ARCH:?}"
 ${JULIA_EXE} -e "import Test; Test.@test Sys.WORD_SIZE == ${EXPECTED_WORD_SIZE:?}"
 
 echo "--- Show build stats"
-${MAKE} "${MFLAGS[@]}" USE_BINARYBUILDER_LLVM=0 LDFLAGS="-Wl,--undefined-version -fuse-ld=lld" CC=$PWD/contrib/pgo-lto/stage0.build/usr/tools/clang CXX=$PWD/contrib/pgo-lto/stage0.build/usr/tools/clang++ LD=$PWD/contrib/pgo-lto/stage0.build/usr/tools/ld.lld AR=$PWD/contrib/pgo-lto/stage0.build/usr/tools/llvm-ar RANLIB=$PWD/contrib/pgo-lto/stage0.build/usr/tools/llvm-ranlib build-stats
+${MAKE} build-stats
 
 echo "--- Create build artifacts"
-${MAKE} "${MFLAGS[@]}" USE_BINARYBUILDER_LLVM=0 LDFLAGS="-Wl,--undefined-version -fuse-ld=lld" CC=$PWD/contrib/pgo-lto/stage0.build/usr/tools/clang CXX=$PWD/contrib/pgo-lto/stage0.build/usr/tools/clang++ LD=$PWD/contrib/pgo-lto/stage0.build/usr/tools/ld.lld AR=$PWD/contrib/pgo-lto/stage0.build/usr/tools/llvm-ar RANLIB=$PWD/contrib/pgo-lto/stage0.build/usr/tools/llvm-ranlib binary-dist
+${MAKE} binary-dist
 
 # Rename the build artifact in case we want to name it differently, as is the case on `musl`.
 if [[ "${JULIA_BINARYDIST_FILENAME}.tar.gz" != "${UPLOAD_FILENAME}.tar.gz" ]]; then
