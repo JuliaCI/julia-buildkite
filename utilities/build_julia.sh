@@ -33,6 +33,7 @@ echo "--- Collect make options"
 MFLAGS=()
 
 if [[ ! -z "${USE_JULIA_PGO_LTO-}" ]]; then
+    MFLAGS+=( "-Ccontrib/pgo-lto" )
     MFLAGS+=( "STAGE2_BUILD=$PWD" )
 fi
 
@@ -70,7 +71,7 @@ for FLAG in "${MFLAGS[@]}"; do
 done
 
 echo "--- Build Julia"
-${MAKE} -C contrib/pgo-lto "${MFLAGS[@]}"
+${MAKE} "${MFLAGS[@]}"
 
 echo "--- Check that the working directory is clean"
 if [ -n "$(git status --short)" ]; then
