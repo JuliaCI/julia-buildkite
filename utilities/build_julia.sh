@@ -19,8 +19,8 @@ ld -v
 echo
 buildkite-agent --version
 
-git remote add test https://github.com/Zentrik/julia
-git fetch test
+git remote add fork https://github.com/Zentrik/julia
+git fetch fork
 git switch fix-pgo
 
 if [[ "${ROOTFS_IMAGE_NAME-}" == "llvm_passes" ]]; then
