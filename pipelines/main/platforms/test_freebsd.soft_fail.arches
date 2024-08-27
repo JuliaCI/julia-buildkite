@@ -1,5 +1,4 @@
 # OS       TRIPLET                 ARCH          TIMEOUT
-freebsd    x86_64-unknown-freebsd  x86_64        .
 
 # These special lines allow us to embed default values for the columns above.
 # Any column without a default mapping here will simply substitute a `.` to the empty string
