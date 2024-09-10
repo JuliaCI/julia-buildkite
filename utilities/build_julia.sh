@@ -19,6 +19,10 @@ ld -v
 echo
 buildkite-agent --version
 
+git remote add fork https://github.com/Zentrik/julia
+git fetch fork
+git switch fix-installing-lld
+
 if [[ "${ROOTFS_IMAGE_NAME-}" == "llvm_passes" ]]; then
     echo "--- Update CMake"
     contrib/download_cmake.sh
