@@ -24,7 +24,7 @@ if [[ "${BUILDKITE_PULL_REQUEST}" == "false" ]]; then
 
         # This _must_ be an absolute path
         KEYCHAIN_PATH="$(pwd)/.buildkite/secrets/macos_codesigning.keychain"
-        MACOS_CODESIGN_IDENTITY="2053E9292809B66582CA9F042B470C0929340362"
+        MACOS_CODESIGN_IDENTITY="E7CEA0DEF3BD5B83E9C50D9318845219097F43A0"
 
         # Add the keychain to the list of keychains to search, then unlock it
         security -v list-keychains -s -d user "${KEYCHAIN_PATH}"
