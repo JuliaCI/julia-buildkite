@@ -38,7 +38,19 @@ MFLAGS+=( "-j${JULIA_CPU_THREADS}")
 
 # Add a few default flags to our make flags:
 MFLAGS+=( "VERBOSE=1" )
-MFLAGS+=( "TAGGED_RELEASE_BANNER=Official https://julialang.org/ release" )
+# Taken from https://stackoverflow.com/a/4024263
+verlte() {
+    printf '%s\n' "$1" "$2" | sort -C -V
+}
+verlt() {
+    ! verlte "$2" "$1"
+}
+if verlt "1.12" "$(cat VERSION)"; then
+    MFLAGS+=( "TAGGED_RELEASE_BANNER=Official https://julialang.org release" )
+else
+    # Keep trailing slash for compatability. The slash was removed in 1.12 with https://github.com/JuliaLang/julia/pull/53978
+    MFLAGS+=( "TAGGED_RELEASE_BANNER=Official https://julialang.org/ release" )
+fi
 MFLAGS+=( "JULIA_CPU_TARGET=${JULIA_CPU_TARGET}" )
 
 # Finish off with any extra make flags from the `.arches` file

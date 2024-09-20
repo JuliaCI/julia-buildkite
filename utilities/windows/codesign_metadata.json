@@ -1,0 +1,16 @@
+{
+    "Endpoint": "https://eus.codesigning.azure.net/",
+    "CodeSigningAccountName": "juliahubwincertsaccount",
+    "CertificateProfileName": "JuliaHubWinCert",
+    "ExcludeCredentials": [
+        "WorkloadIdentityCredential",
+        "ManagedIdentityCredential",
+        "SharedTokenCacheCredential",
+        "VisualStudioCredential",
+        "VisualStudioCodeCredential",
+        "AzureCliCredential",
+        "AzurePowerShellCredential",
+        "AzureDeveloperCliCredential",
+        "InteractiveBrowserCredential"
+    ]
+}
