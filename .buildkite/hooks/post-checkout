@@ -22,6 +22,9 @@ if [[ "${DISABLE_UPSTREAM_CACHE}" != "true" ]]; then
         mkdir -p "$(dirname "${UPSTREAM_CACHE}")"
         git clone --mirror "${UPSTREAM_URL}" "${UPSTREAM_CACHE}"
     else
+        echo "Prune cache for ${UPSTREAM_URL}"
+        rm -f "${UPSTREAM_CACHE}/gc.log"
+        git -C "${UPSTREAM_CACHE}" prune
         echo "Update cache for ${UPSTREAM_URL}"
         git -C "${UPSTREAM_CACHE}" fetch
     fi
@@ -35,7 +38,16 @@ rm -rf ..?* .[!.]* *
 UPSTREAM_GITREF="$(buildkite-agent meta-data get --default "origin/${UPSTREAM_BRANCH}" BUILDKITE_JULIA_VERSION)"
 
 if [[ "${DISABLE_UPSTREAM_CACHE}" != "true" ]]; then
-    git clone --dissociate --reference "${UPSTREAM_CACHE}" "${UPSTREAM_URL}" "./"
+    # For some unknown reason, the `--dissociate` flag (which causes a `git repack -a -d`
+    # to be run after the clone is set) causes a spurious error on macOS:
+    #     fatal: unable to parse commit 1a2b3c3d
+    #     warning: Clone succeeded, but checkout failed.
+    #     You can inspect what was checked out with 'git status'
+    #     and retry with 'git restore --source=HEAD :/'
+    # This occurs when cloning manually as well, however the `git reset --hard`
+    # below tends to work.  So we just ignore the error with `|| true` here,
+    # and leave it to `git reset` to fail if there is actually a problem.
+    git clone --dissociate --reference "${UPSTREAM_CACHE}" "${UPSTREAM_URL}" "./" || true
 else
     git clone "${UPSTREAM_URL}" "./"
 fi
