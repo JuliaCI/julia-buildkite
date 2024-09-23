@@ -4,6 +4,10 @@ steps:
       - label: ":linux: build ${TRIPLET?}"
         key: "build_${TRIPLET?}"
         plugins:
+          - JuliaCI/coreupload#v2:
+              core_pattern: "**/*.core"
+              compressor: "zstd"
+              create_bundle: "true"
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
@@ -11,7 +15,7 @@ steps:
               # Drop default "registries" directory, so it is not persisted from execution to execution
               persist_depot_dirs: packages,artifacts,compiled
               version: '1.6'
-          - staticfloat/sandbox#v1:
+          - staticfloat/sandbox#v2:
               rootfs_url: https://github.com/JuliaCI/rootfs-images/releases/download/${ROOTFS_TAG?}/${ROOTFS_IMAGE_NAME?}.${ARCH_ROOTFS?}.tar.gz
               rootfs_treehash: "${ROOTFS_HASH?}"
               uid: 1000
@@ -33,3 +37,4 @@ steps:
           TRIPLET: "${TRIPLET?}"
           MAKE_FLAGS: "${MAKE_FLAGS?}"
           ROOTFS_IMAGE_NAME: "${ROOTFS_IMAGE_NAME?}"
+          BUILDKITE_CANCEL_SIGNAL: "SIGQUIT"
