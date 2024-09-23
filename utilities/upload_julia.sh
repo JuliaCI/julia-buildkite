@@ -17,7 +17,7 @@ UPLOAD_EXTENSIONS=( "tar.gz" )
 
 # Only codesign if we are not on a pull request build.
 # Pull request builds only upload unsigned tarballs.
-if [[ "${BUILDKITE_PULL_REQUEST}" == "false" ]]; then
+if true; then
     # If we're on macOS, we need to re-sign the tarball
     if [[ "${OS}" == "macos" || "${OS}" == "macosnogpl" ]]; then
         echo "--- [mac] Unlock keychain"
