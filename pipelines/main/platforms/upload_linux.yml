@@ -21,7 +21,7 @@ steps:
               # Drop default "registries" directory, so it is not persisted from execution to execution
               persist_depot_dirs: packages,artifacts,compiled
               version: '1'
-          - staticfloat/sandbox#v1:
+          - staticfloat/sandbox#v2:
               rootfs_url: https://github.com/JuliaCI/rootfs-images/releases/download/v6.00/aws_uploader.x86_64.tar.gz
               rootfs_treehash: "61cb30497604eb1581b3ffd6a8058c150f4cbf8b"
               uid: 1000
