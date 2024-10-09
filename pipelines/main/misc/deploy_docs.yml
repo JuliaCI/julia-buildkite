@@ -23,7 +23,7 @@ steps:
               persist_depot_dirs: packages,artifacts,compiled
               # Use Julia v1.7 for upload, that's the version embedded in the documenter manifest
               version: '1.7'
-          - staticfloat/sandbox#v1:
+          - staticfloat/sandbox#v2:
               # Use `aws_uploader` image, since it has things like `git` and `ssh` and whatnot
               rootfs_url: "https://github.com/JuliaCI/rootfs-images/releases/download/v6.00/aws_uploader.x86_64.tar.gz"
               rootfs_treehash: "61cb30497604eb1581b3ffd6a8058c150f4cbf8b"
