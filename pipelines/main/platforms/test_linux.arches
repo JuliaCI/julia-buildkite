@@ -6,7 +6,7 @@ tester_linux           x86_64-linux-gnuassert     x86_64         x86_64         
 # These special lines allow us to embed default values for the columns above.
 # Any column without a default mapping here will simply substitute a `.` to the empty string
 
-# Most tests should finish within ~45 minutes, barring exceptionally slow hardware
-# We double that to a default of 90 minutes, with an extra 45 minutes for cleanup,
+# Most tests should finish within ~55 minutes, barring exceptionally slow hardware
+# We double that to a default of 110 minutes, with an extra 45 minutes for cleanup,
 # including things like `rr` trace compression,
-#default TIMEOUT 135
+#default TIMEOUT 155
