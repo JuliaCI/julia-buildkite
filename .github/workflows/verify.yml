@@ -1,0 +1,32 @@
+name: Verify Signatures
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+    tags: '*'
+  workflow_dispatch:
+concurrency:
+  # Skip intermediate builds: all builds except for builds on the `main` branch
+  # Cancel intermediate builds: only pull request builds
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.ref != 'refs/heads/main' || github.run_number }}
+  cancel-in-progress: ${{ startsWith(github.ref, 'refs/pull/') }}
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          persist-credentials: false
+      - name: Install dependencies (shyaml)
+        run: pip install shyaml
+      - run: |
+          git clone https://github.com/staticfloat/cryptic-buildkite-plugin.git
+          cd cryptic-buildkite-plugin
+          git checkout sf/group_capable
+          cd ..
+      - run: make verify_treehashes
