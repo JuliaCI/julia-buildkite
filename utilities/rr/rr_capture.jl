@@ -64,7 +64,7 @@ mktempdir(temp_parent_dir) do dir
     # version number, Pkg will always install the latest build number. If you need to
     # install a build number that is not the latest build number, you must provide the
     # commit instead of providing the version number.
-    Pkg.add(Pkg.PackageSpec(name = "rr_jll", version = "5.5.0", uuid = "e86bdf43-55f7-5ea2-9fd0-e7daa2c0f2b4"))
+    Pkg.add(Pkg.PackageSpec(name = "rr_jll", version = "5.8.0", uuid = "e86bdf43-55f7-5ea2-9fd0-e7daa2c0f2b4"))
     Pkg.add(Pkg.PackageSpec(name = "Zstd_jll", version = "1.5.0", uuid = "3161d3a3-bdf6-5164-811a-617609db77b4"))
     rr_jll = Base.require(Base.PkgId(Base.UUID("e86bdf43-55f7-5ea2-9fd0-e7daa2c0f2b4"), "rr_jll"))
     zstd_jll = Base.require(Base.PkgId(Base.UUID("3161d3a3-bdf6-5164-811a-617609db77b4"), "Zstd_jll"))

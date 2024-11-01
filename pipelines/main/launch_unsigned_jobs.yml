@@ -86,6 +86,7 @@ steps:
         commands: |
           export ALLOW_FAIL="false"
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/gcext.yml
+          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/test_revise.yml
 
           # Launch Linux test jobs
           GROUP="Test" \
@@ -102,6 +103,11 @@ steps:
               bash .buildkite/utilities/arches_pipeline_upload.sh \
               .buildkite/pipelines/main/platforms/test_macos.arches \
               .buildkite/pipelines/main/platforms/test_macos.yml
+          # Launch FreeBSD test jobs
+          GROUP="Test" \
+              bash .buildkite/utilities/arches_pipeline_upload.sh \
+              .buildkite/pipelines/main/platforms/test_freebsd.arches \
+              .buildkite/pipelines/main/platforms/test_freebsd.yml
           # Launch windows test jobs
           GROUP="Test" \
               bash .buildkite/utilities/arches_pipeline_upload.sh \

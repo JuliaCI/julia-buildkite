@@ -1,0 +1,7 @@
+# .kodiak.toml
+
+version = 1
+merge.delete_branch_on_merge = true
+merge.prioritize_ready_to_merge=true
+merge.priority_merge_label="automerge_priority"
+merge.method="squash"

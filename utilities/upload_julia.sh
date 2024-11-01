@@ -24,7 +24,7 @@ if [[ "${BUILDKITE_PULL_REQUEST}" == "false" ]]; then
 
         # This _must_ be an absolute path
         KEYCHAIN_PATH="$(pwd)/.buildkite/secrets/macos_codesigning.keychain"
-        MACOS_CODESIGN_IDENTITY="2053E9292809B66582CA9F042B470C0929340362"
+        MACOS_CODESIGN_IDENTITY="E7CEA0DEF3BD5B83E9C50D9318845219097F43A0"
 
         # Add the keychain to the list of keychains to search, then unlock it
         security -v list-keychains -s -d user "${KEYCHAIN_PATH}"
@@ -40,7 +40,7 @@ if [[ "${BUILDKITE_PULL_REQUEST}" == "false" ]]; then
             "${JULIA_INSTALL_DIR}"
 
         echo "--- [mac] Update checksums for stdlib cachefiles"
-        ${JULIA_INSTALL_DIR}/bin/julia .buildkite/utilities/macos/update_stdlib_pkgimage_checksums.jl
+        ${JULIA_INSTALL_DIR}/bin/julia .buildkite/utilities/update_stdlib_pkgimage_checksums.jl
 
         # Immediately re-compress that tarball for upload
         echo "--- [mac] Re-compress codesigned tarball"
@@ -81,7 +81,7 @@ if [[ "${BUILDKITE_PULL_REQUEST}" == "false" ]]; then
             /F"${UPLOAD_FILENAME}" \
             /O"$(cygpath -w "$(pwd)")" \
             /Dsign=true \
-            /Smysigntool="bash.exe '${codesign_script}' --certificate='${certificate}' \$f" \
+            /Smysigntool="bash.exe '${codesign_script}' \$f" \
             "$(cygpath -w "${iss_file}")"
 
         # Add the `.exe` to our upload targets
@@ -89,7 +89,10 @@ if [[ "${BUILDKITE_PULL_REQUEST}" == "false" ]]; then
 
         # Next, directly codesign every executable file in the install dir
         echo "--- [windows] Codesign everything in the install directory"
-        "${codesign_script}" --certificate="${certificate}" "${JULIA_INSTALL_DIR}"
+        "${codesign_script}" "${JULIA_INSTALL_DIR}"
+
+        echo "--- [windows] Update checksums for stdlib cachefiles"
+        ${JULIA_INSTALL_DIR}/bin/julia .buildkite/utilities/update_stdlib_pkgimage_checksums.jl
 
         # Immediately re-compress that tarball for upload
         echo "--- [windows] Re-compress codesigned tarball"
