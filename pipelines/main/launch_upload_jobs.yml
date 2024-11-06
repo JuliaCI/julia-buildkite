@@ -6,11 +6,10 @@ common:
         name: "TRIGGER_BUILD"
         ignore:
           - "*.md"
-          - "*.json"
+          - ".*"
+          - "julia.spdx.json"
           - "CITATION.*"
-          - ".gitignore"
-          - ".clangd"
-          - ".mailmap"
+          - "typos.toml"
         # TODO: Need this option because BUILDKITE_PULL_REQUEST_BRANCH=main
         # when running tests in Julia-CI/julia-buildkite,
         # but for PRs against Julia/JuliaLang BUILDKITE_PULL_REQUEST_BRANCH=master
