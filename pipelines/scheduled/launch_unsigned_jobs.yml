@@ -63,7 +63,7 @@ steps:
         commands: |
           FORCE=$(test -n "$(echo $${PULL_REQUEST_LABELS} | grep "\\<ci-force-build\\>")" && echo 1 || echo 0)
           BUILD=$(($${TRIGGER_BUILD} || $${FORCE}))
-          if [[ ${BUILD} == 1 ]]; then
+          if [[ $${BUILD} == 1 ]]; then
             GROUP="Source Tests (Allow Fail)" \
                 ALLOW_FAIL="true" \
                 bash .buildkite/utilities/arches_pipeline_upload.sh \
