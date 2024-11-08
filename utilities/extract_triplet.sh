@@ -26,6 +26,9 @@ case "${TRIPLET}" in
     *-gnunogpl) # builds that use `USE_GPL_LIBS=0`
         OS="linuxnogpl"
         ;;
+    *-gnu-pgo-lto) # PGO + LTO builds
+        OS="linuxpgolto"
+        ;;
     *-musl)
         OS="musl"
         ;;
