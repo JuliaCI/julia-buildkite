@@ -72,3 +72,10 @@ fi
 # Export S3_BUCKET and S3_BUCKET_PREFIX, to force our CI to upload to a different S3 target than the actual CI pipeline would.
 export S3_BUCKET="julialang-ephemeral"
 export S3_BUCKET_PREFIX="julia-buildkite-uploads/bin"
+
+# for PRs from a julia-buildkite repo we have to set the target branch manually
+if [[ ${BUILDKITE_PULL_REQUEST_REPO} =~ julia-buildkite.git$ ]]; then
+  export DIFF_FILTER_TARGET_BRANCH="master"
+else
+  export DIFF_FILTER_TARGET_BRANCH=""
+fi

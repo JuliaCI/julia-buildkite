@@ -10,10 +10,8 @@ common:
           - "julia.spdx.json"
           - "CITATION.*"
           - "typos.toml"
-        # TODO: Need this option because BUILDKITE_PULL_REQUEST_BRANCH=main
-        # when running tests in Julia-CI/julia-buildkite,
-        # but for PRs against Julia/JuliaLang BUILDKITE_PULL_REQUEST_BRANCH=master
-        target_branch: "master"
+        # exported from .buildkite/hooks/post-checkout
+        target_branch: "${DIFF_FILTER_TARGET_BRANCH?}"
   - pr-labels_plugin: &pr-labels
       sv-oss/github-pr-labels#v0.0.2:
         publish-env-var: PULL_REQUEST_LABELS
