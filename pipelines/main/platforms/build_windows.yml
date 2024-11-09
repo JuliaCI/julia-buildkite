@@ -21,8 +21,7 @@ steps:
                 - "JULIA_CPU_THREADS"
                 # Have to include this for `buildkite-agent` to work:
                 - "BUILDKITE_AGENT_ACCESS_TOKEN"
-        commands: |
-          bash .buildkite/utilities/build_julia.sh
+        command: "[[ ${BUILD?} == 1 ]] && bash .buildkite/utilities/build_julia.sh;"
         timeout_in_minutes: ${TIMEOUT?}
         soft_fail: ${ALLOW_FAIL?}
         agents:
