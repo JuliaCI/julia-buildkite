@@ -52,7 +52,7 @@ steps:
           - *diff-filter-build
           - *pr-labels
         commands: |
-          FORCE=$(test -n "$(echo $${PULL_REQUEST_LABELS} | grep "\\<ci-force-build\\>")" && echo 1 || echo 0)
+          FORCE=$(test -n "$(echo $${PULL_REQUEST_LABELS} | grep -E "\bci-force-build\b")" && echo 1 || echo 0)
           BUILD=$(($${TRIGGER_BUILD} || $${FORCE}))
           ### Launch Linux build jobs
           # Regular:
@@ -109,7 +109,7 @@ steps:
         commands: |
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/doctest.yml
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/pdf_docs/build_pdf_docs.yml
-          FORCE=$(test -n "$(echo $${PULL_REQUEST_LABELS} | grep "\\<ci-force-build\\>")" && echo 1 || echo 0)
+          FORCE=$(test -n "$(echo $${PULL_REQUEST_LABELS} | grep -E "\bci-force-build\b")" && echo 1 || echo 0)
           BUILD=$(($${TRIGGER_BUILD} || $${FORCE}))
           if [[ $${BUILD} == 1 ]]; then
             buildkite-agent pipeline upload .buildkite/pipelines/main/misc/analyzegc.yml
@@ -139,7 +139,7 @@ steps:
           - *pr-labels
         commands: |
           export ALLOW_FAIL="false"
-          FORCE=$(test -n "$(echo $${PULL_REQUEST_LABELS} | grep "\\<ci-force-build\\>")" && echo 1 || echo 0)
+          FORCE=$(test -n "$(echo $${PULL_REQUEST_LABELS} | grep -E "\bci-force-build\b")" && echo 1 || echo 0)
           BUILD=$(($${TRIGGER_BUILD} || $${FORCE}))
           if [[ $${BUILD} == 1 ]]; then
             buildkite-agent pipeline upload .buildkite/pipelines/main/misc/gcext.yml
@@ -187,7 +187,7 @@ steps:
           - *pr-labels
         commands: |
           export ALLOW_FAIL="true"
-          FORCE=$(test -n "$(echo $${PULL_REQUEST_LABELS} | grep "\\<ci-force-build\\>")" && echo 1 || echo 0)
+          FORCE=$(test -n "$(echo $${PULL_REQUEST_LABELS} | grep -E "\bci-force-build\b")" && echo 1 || echo 0)
           BUILD=$(($${TRIGGER_BUILD} || $${FORCE}))
           # Launch Linux allowed-to-fail build jobs
           GROUP="Allow Fail" \
@@ -224,7 +224,7 @@ steps:
           - *pr-labels
         commands: |
           export ALLOW_FAIL="true"
-          FORCE=$(test -n "$(echo $${PULL_REQUEST_LABELS} | grep "\\<ci-force-build\\>")" && echo 1 || echo 0)
+          FORCE=$(test -n "$(echo $${PULL_REQUEST_LABELS} | grep -E "\bci-force-build\b")" && echo 1 || echo 0)
           BUILD=$(($${TRIGGER_BUILD} || $${FORCE}))
           if [[ $${BUILD} == 1 ]]; then
             ### Launch Linux allowed-to-fail test jobs.

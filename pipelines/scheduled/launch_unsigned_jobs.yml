@@ -39,7 +39,7 @@ steps:
           - *diff-filter-build
           - *pr-labels
         commands: |
-          FORCE=$(test -n "$(echo $${PULL_REQUEST_LABELS} | grep "\\<ci-force-build\\>")" && echo 1 || echo 0)
+          FORCE=$(test -n "$(echo $${PULL_REQUEST_LABELS} | grep -E "\bci-force-build\b")" && echo 1 || echo 0)
           BUILD=$(($${TRIGGER_BUILD} || $${FORCE}))
           GROUP="Source Build" \
               ALLOW_FAIL="false" \
@@ -59,7 +59,7 @@ steps:
               version: "./.buildkite-external-version"
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
         commands: |
-          FORCE=$(test -n "$(echo $${PULL_REQUEST_LABELS} | grep "\\<ci-force-build\\>")" && echo 1 || echo 0)
+          FORCE=$(test -n "$(echo $${PULL_REQUEST_LABELS} | grep -E "\bci-force-build\b")" && echo 1 || echo 0)
           BUILD=$(($${TRIGGER_BUILD} || $${FORCE}))
           if [[ $${BUILD} == 1 ]]; then
             GROUP="Source Tests (Allow Fail)" \
@@ -82,7 +82,7 @@ steps:
           - *diff-filter-build
           - *pr-labels
         commands: |
-          FORCE=$(test -n "$(echo $${PULL_REQUEST_LABELS} | grep "\\<ci-force-build\\>")" && echo 1 || echo 0)
+          FORCE=$(test -n "$(echo $${PULL_REQUEST_LABELS} | grep -E "\bci-force-build\b")" && echo 1 || echo 0)
           BUILD=$(($${TRIGGER_BUILD} || $${FORCE}))
           GROUP="no_GPL" \
               ALLOW_FAIL="false" \
