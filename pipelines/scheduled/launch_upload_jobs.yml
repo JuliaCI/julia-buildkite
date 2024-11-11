@@ -1,5 +1,8 @@
 # This file launches upload jobs that wait upon previous jobs, then upload their artifacts to S3
 
+env:
+  DIFF_FILTER_TARGET_BRANCH: ""
+
 common:
   - diff-filter-build_plugin: &diff-filter-build
       https://github.com/fatteneder/diff-filter-buildkite-plugin#main:
@@ -10,7 +13,6 @@ common:
           - "julia.spdx.json"
           - "CITATION.*"
           - "typos.toml"
-        # exported from .buildkite/hooks/post-checkout
         target_branch: "${DIFF_FILTER_TARGET_BRANCH?}"
   - pr-labels_plugin: &pr-labels
       sv-oss/github-pr-labels#v0.0.2:
