@@ -43,7 +43,8 @@ steps:
           export BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET
           export ALLOW_FAIL="false"
           FORCE=$(test -n "$(echo $${PULL_REQUEST_LABELS} | grep -E "\bci-force-build\b")" && echo 1 || echo 0)
-          BUILD=$(($${TRIGGER_BUILD} || $${FORCE}))
+          MERGED=$(test "$${BUILDKITE_PULL_REQUEST}" = "false" && echo 1 || echo 0)
+          BUILD=$(($${TRIGGER_BUILD} || $${FORCE} || $${MERGED}))
           if [[ $${BUILD} == 1 ]]; then
             ##### Launch `upload_*` jobs to store tarballs into S3 once tests are done
             ### Linux:
@@ -106,7 +107,8 @@ steps:
           # Explicitly pass along the cryptic token to child pipelines
           export BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET
           FORCE=$(test -n "$(echo $${PULL_REQUEST_LABELS} | grep -E "\bci-force-build\b")" && echo 1 || echo 0)
-          BUILD=$(($${TRIGGER_BUILD} || $${FORCE}))
+          MERGED=$(test "$${BUILDKITE_PULL_REQUEST}" = "false" && echo 1 || echo 0)
+          BUILD=$(($${TRIGGER_BUILD} || $${FORCE} || $${MERGED}))
 
           export ALLOW_FAIL="true"
 
