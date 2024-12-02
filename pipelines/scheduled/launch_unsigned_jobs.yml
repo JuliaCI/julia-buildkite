@@ -12,6 +12,22 @@
 # and only need to touch the webui configuration when we need to alter
 # something about the privileged steps.
 
+common:
+  - diff-filter-build_plugin: &diff-filter-build
+      https://github.com/fatteneder/diff-filter-buildkite-plugin#main:
+        name: "build"
+        ignore:
+          - "*.md"
+          - "*.json"
+          - "CITATION.*"
+          - ".gitignore"
+          - ".clangd"
+          - ".mailmap"
+        # TODO: Need this option because BUILDKITE_PULL_REQUEST_BRANCH=main
+        # when running tests in Julia-CI/julia-buildkite,
+        # but for PRs against Julia/JuliaLang BUILDKITE_PULL_REQUEST_BRANCH=master
+        target_branch: "master"
+
 steps:
   - group: "Source Build"
     steps:
@@ -20,12 +36,15 @@ steps:
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
+          - *diff-filter-build
         commands: |
-          GROUP="Source Build" \
-              ALLOW_FAIL="false" \
-              bash .buildkite/utilities/arches_pipeline_upload.sh \
-              .buildkite/pipelines/scheduled/platforms/build_linux.schedule.arches \
-              .buildkite/pipelines/main/platforms/build_linux.yml
+          if [[ $${BUILDKITE_PLUGIN_DIFF_FILTER_TRIGGERED_BUILD} == 1 ]]; then
+            GROUP="Source Build" \
+                ALLOW_FAIL="false" \
+                bash .buildkite/utilities/arches_pipeline_upload.sh \
+                .buildkite/pipelines/scheduled/platforms/build_linux.schedule.arches \
+                .buildkite/pipelines/main/platforms/build_linux.yml
+          fi
         agents:
           queue: "julia"
           os: "linux"
@@ -37,11 +56,13 @@ steps:
               version: "./.buildkite-external-version"
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
         commands: |
-          GROUP="Source Tests (Allow Fail)" \
-              ALLOW_FAIL="true" \
-              bash .buildkite/utilities/arches_pipeline_upload.sh \
-              .buildkite/pipelines/scheduled/platforms/test_linux.schedule.arches \
-              .buildkite/pipelines/main/platforms/test_linux.yml
+          if [[ $${BUILDKITE_PLUGIN_DIFF_FILTER_TRIGGERED_BUILD} == 1 ]]; then
+            GROUP="Source Tests (Allow Fail)" \
+                ALLOW_FAIL="true" \
+                bash .buildkite/utilities/arches_pipeline_upload.sh \
+                .buildkite/pipelines/scheduled/platforms/test_linux.schedule.arches \
+                .buildkite/pipelines/main/platforms/test_linux.yml
+          fi
         agents:
           queue: "julia"
           os: "linux"
@@ -53,20 +74,22 @@ steps:
               version: "./.buildkite-external-version"
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
         commands: |
-          GROUP="no_GPL" \
-              ALLOW_FAIL="false" \
-              bash .buildkite/utilities/arches_pipeline_upload.sh \
-              .buildkite/pipelines/scheduled/platforms/build_linux.no_gpl.arches \
-              .buildkite/pipelines/main/platforms/build_linux.yml
-          GROUP="no_GPL" \
-              ALLOW_FAIL="false" \
-              bash .buildkite/utilities/arches_pipeline_upload.sh \
-              .buildkite/pipelines/scheduled/platforms/build_macos.no_gpl.arches \
-              .buildkite/pipelines/main/platforms/build_macos.yml
-          GROUP="no_GPL" \
-              ALLOW_FAIL="false" \
-              bash .buildkite/utilities/arches_pipeline_upload.sh \
-              .buildkite/pipelines/scheduled/platforms/build_windows.no_gpl.arches \
-              .buildkite/pipelines/main/platforms/build_windows.yml
+          if [[ $${BUILDKITE_PLUGIN_DIFF_FILTER_TRIGGERED_BUILD} == 1 ]]; then
+            GROUP="no_GPL" \
+                ALLOW_FAIL="false" \
+                bash .buildkite/utilities/arches_pipeline_upload.sh \
+                .buildkite/pipelines/scheduled/platforms/build_linux.no_gpl.arches \
+                .buildkite/pipelines/main/platforms/build_linux.yml
+            GROUP="no_GPL" \
+                ALLOW_FAIL="false" \
+                bash .buildkite/utilities/arches_pipeline_upload.sh \
+                .buildkite/pipelines/scheduled/platforms/build_macos.no_gpl.arches \
+                .buildkite/pipelines/main/platforms/build_macos.yml
+            GROUP="no_GPL" \
+                ALLOW_FAIL="false" \
+                bash .buildkite/utilities/arches_pipeline_upload.sh \
+                .buildkite/pipelines/scheduled/platforms/build_windows.no_gpl.arches \
+                .buildkite/pipelines/main/platforms/build_windows.yml
+          fi
         agents:
           queue: "julia"
