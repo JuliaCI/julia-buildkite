@@ -15,6 +15,9 @@ common:
         # when running tests in Julia-CI/julia-buildkite,
         # but for PRs against Julia/JuliaLang BUILDKITE_PULL_REQUEST_BRANCH=master
         target_branch: "master"
+  - pr-labels_plugin: &pr-labels
+      sv-oss/github-pr-labels#v0.0.2:
+        publish-env-var: PULL_REQUEST_LABELS
 
 steps:
   - group: "Upload (no GPL)"
@@ -24,11 +27,14 @@ steps:
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
+          - *diff-filter-build
+          - *pr-labels
         commands: |
           # Explicitly pass along the cryptic token to child pipelines
           export BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET
-
-          if [[ $${BUILDKITE_PLUGIN_DIFF_FILTER_TRIGGERED_BUILD} == 1 ]]; then
+          FORCE=$(test -n "$(echo $${PULL_REQUEST_LABELS} | grep "\\<ci-force-build\\>")" && echo 1 || echo 0)
+          BUILD=$(($${BUILDKITE_PLUGIN_DIFF_FILTER_TRIGGERED_BUILD} || $${FORCE}))
+          if [[ $${BUILD} == 1 ]]; then
             # Launch `upload_*` jobs to store tarballs into S3 once tests are done
             bash .buildkite/utilities/arches_pipeline_upload.sh \
                 .buildkite/pipelines/scheduled/platforms/upload_linux.no_gpl.arches \
