@@ -67,7 +67,7 @@ steps:
           # PowerPC (only for Julia prior to 1.12):
           GROUP="Build" \
               ALLOW_FAIL="false" \
-              BUILD="$${BUILDKITE_PLUGIN_DIFF_FILTER_TRIGGERED_BUILD}" \
+              BUILD="$${BUILD}" \
               julia .buildkite/pipelines/main/platforms/launch_powerpc.jl \
               .buildkite/pipelines/main/platforms/build_linux.powerpc.arches \
               .buildkite/pipelines/main/platforms/build_linux.yml
