@@ -27,6 +27,9 @@ common:
         # when running tests in Julia-CI/julia-buildkite,
         # but for PRs against Julia/JuliaLang BUILDKITE_PULL_REQUEST_BRANCH=master
         target_branch: "master"
+  - pr-labels_plugin: &pr-labels
+      sv-oss/github-pr-labels#v0.0.2:
+        publish-env-var: PULL_REQUEST_LABELS
 
 steps:
   - group: "Build"
@@ -50,12 +53,15 @@ steps:
               #    is released.
               version: '1.7.3'
           - *diff-filter-build
+          - *pr-labels
         commands: |
+          FORCE=$(test -n "$(echo $${PULL_REQUEST_LABELS} | grep "\\<ci-force-build\\>")" && echo 1 || echo 0)
+          BUILD=$(($${BUILDKITE_PLUGIN_DIFF_FILTER_TRIGGERED_BUILD} || $${FORCE}))
           ### Launch Linux build jobs
           # Regular:
           GROUP="Build" \
               ALLOW_FAIL="false" \
-              BUILD="$${BUILDKITE_PLUGIN_DIFF_FILTER_TRIGGERED_BUILD}" \
+              BUILD="$${BUILD}" \
               bash .buildkite/utilities/arches_pipeline_upload.sh \
               .buildkite/pipelines/main/platforms/build_linux.arches \
               .buildkite/pipelines/main/platforms/build_linux.yml
@@ -69,21 +75,21 @@ steps:
           ### Launch macOS packaging jobs
           GROUP="Build" \
               ALLOW_FAIL="false" \
-              BUILD="$${BUILDKITE_PLUGIN_DIFF_FILTER_TRIGGERED_BUILD}" \
+              BUILD="$${BUILD}" \
               bash .buildkite/utilities/arches_pipeline_upload.sh \
               .buildkite/pipelines/main/platforms/build_macos.arches \
               .buildkite/pipelines/main/platforms/build_macos.yml
           ### Launch FreeBSD build jobs:
           GROUP="Build" \
               ALLOW_FAIL="false" \
-              BUILD="$${BUILDKITE_PLUGIN_DIFF_FILTER_TRIGGERED_BUILD}" \
+              BUILD="$${BUILD}" \
               bash .buildkite/utilities/arches_pipeline_upload.sh \
               .buildkite/pipelines/main/platforms/build_freebsd.arches \
               .buildkite/pipelines/main/platforms/build_freebsd.yml
           ### Launch Windows build jobs:
           GROUP="Build" \
               ALLOW_FAIL="false" \
-              BUILD="$${BUILDKITE_PLUGIN_DIFF_FILTER_TRIGGERED_BUILD}" \
+              BUILD="$${BUILD}" \
               bash .buildkite/utilities/arches_pipeline_upload.sh \
               .buildkite/pipelines/main/platforms/build_windows.arches \
               .buildkite/pipelines/main/platforms/build_windows.yml
@@ -102,10 +108,13 @@ steps:
               version: "./.buildkite-external-version"
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
           - *diff-filter-build
+          - *pr-labels
         commands: |
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/doctest.yml
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/pdf_docs/build_pdf_docs.yml
-          if [[ $${BUILDKITE_PLUGIN_DIFF_FILTER_TRIGGERED_BUILD} == 1 ]]; then
+          FORCE=$(test -n "$(echo $${PULL_REQUEST_LABELS} | grep "\\<ci-force-build\\>")" && echo 1 || echo 0)
+          BUILD=$(($${BUILDKITE_PLUGIN_DIFF_FILTER_TRIGGERED_BUILD} || $${FORCE}))
+          if [[ $${BUILD} == 1 ]]; then
             buildkite-agent pipeline upload .buildkite/pipelines/main/misc/analyzegc.yml
             buildkite-agent pipeline upload .buildkite/pipelines/main/misc/embedding.yml
             buildkite-agent pipeline upload .buildkite/pipelines/main/misc/trimming.yml
@@ -130,9 +139,12 @@ steps:
               version: "./.buildkite-external-version"
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
           - *diff-filter-build
+          - *pr-labels
         commands: |
           export ALLOW_FAIL="false"
-          if [[ $${BUILDKITE_PLUGIN_DIFF_FILTER_TRIGGERED_BUILD} == 1 ]]; then
+          FORCE=$(test -n "$(echo $${PULL_REQUEST_LABELS} | grep "\\<ci-force-build\\>")" && echo 1 || echo 0)
+          BUILD=$(($${BUILDKITE_PLUGIN_DIFF_FILTER_TRIGGERED_BUILD} || $${FORCE}))
+          if [[ $${BUILD} == 1 ]]; then
             buildkite-agent pipeline upload .buildkite/pipelines/main/misc/gcext.yml
             buildkite-agent pipeline upload .buildkite/pipelines/main/misc/test_revise.yml
 
@@ -175,9 +187,12 @@ steps:
               version: "./.buildkite-external-version"
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
           - *diff-filter-build
+          - *pr-labels
         commands: |
           export ALLOW_FAIL="true"
-          if [[ $${BUILDKITE_PLUGIN_DIFF_FILTER_TRIGGERED_BUILD} == 1 ]]; then
+          FORCE=$(test -n "$(echo $${PULL_REQUEST_LABELS} | grep "\\<ci-force-build\\>")" && echo 1 || echo 0)
+          BUILD=$(($${BUILDKITE_PLUGIN_DIFF_FILTER_TRIGGERED_BUILD} || $${FORCE}))
+          if [[ $${BUILD} == 1 ]]; then
             # Launch Linux allowed-to-fail build jobs
             GROUP="Allow Fail" \
                 bash .buildkite/utilities/arches_pipeline_upload.sh \
@@ -209,9 +224,12 @@ steps:
               #    is released.
               version: '1.7.3'
           - *diff-filter-build
+          - *pr-labels
         commands: |
           export ALLOW_FAIL="true"
-          if [[ $${BUILDKITE_PLUGIN_DIFF_FILTER_TRIGGERED_BUILD} == 1 ]]; then
+          FORCE=$(test -n "$(echo $${PULL_REQUEST_LABELS} | grep "\\<ci-force-build\\>")" && echo 1 || echo 0)
+          BUILD=$(($${BUILDKITE_PLUGIN_DIFF_FILTER_TRIGGERED_BUILD} || $${FORCE}))
+          if [[ $${BUILD} == 1 ]]; then
             ### Launch Linux allowed-to-fail test jobs.
             # Regular:
             GROUP="Allow Fail" \

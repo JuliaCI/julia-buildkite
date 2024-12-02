@@ -27,6 +27,9 @@ common:
         # when running tests in Julia-CI/julia-buildkite,
         # but for PRs against Julia/JuliaLang BUILDKITE_PULL_REQUEST_BRANCH=master
         target_branch: "master"
+  - pr-labels_plugin: &pr-labels
+      sv-oss/github-pr-labels#v0.0.2:
+        publish-env-var: PULL_REQUEST_LABELS
 
 steps:
   - group: "Source Build"
@@ -37,8 +40,11 @@ steps:
               version: "./.buildkite-external-version"
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
           - *diff-filter-build
+          - *pr-labels
         commands: |
-          if [[ $${BUILDKITE_PLUGIN_DIFF_FILTER_TRIGGERED_BUILD} == 1 ]]; then
+          FORCE=$(test -n "$(echo $${PULL_REQUEST_LABELS} | grep "\\<ci-force-build\\>")" && echo 1 || echo 0)
+          BUILD=$(($${BUILDKITE_PLUGIN_DIFF_FILTER_TRIGGERED_BUILD} || $${FORCE}))
+          if [[ $${BUILD} == 1 ]]; then
             GROUP="Source Build" \
                 ALLOW_FAIL="false" \
                 bash .buildkite/utilities/arches_pipeline_upload.sh \
@@ -57,7 +63,9 @@ steps:
               version: "./.buildkite-external-version"
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
         commands: |
-          if [[ $${BUILDKITE_PLUGIN_DIFF_FILTER_TRIGGERED_BUILD} == 1 ]]; then
+          FORCE=$(test -n "$(echo $${PULL_REQUEST_LABELS} | grep "\\<ci-force-build\\>")" && echo 1 || echo 0)
+          BUILD=$(($${BUILDKITE_PLUGIN_DIFF_FILTER_TRIGGERED_BUILD} || ${FORCE}))
+          if [[ ${BUILD} == 1 ]]; then
             GROUP="Source Tests (Allow Fail)" \
                 ALLOW_FAIL="true" \
                 bash .buildkite/utilities/arches_pipeline_upload.sh \
@@ -75,8 +83,12 @@ steps:
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
+          - *diff-filter-build
+          - *pr-labels
         commands: |
-          if [[ $${BUILDKITE_PLUGIN_DIFF_FILTER_TRIGGERED_BUILD} == 1 ]]; then
+          FORCE=$(test -n "$(echo $${PULL_REQUEST_LABELS} | grep "\\<ci-force-build\\>")" && echo 1 || echo 0)
+          BUILD=$(($${BUILDKITE_PLUGIN_DIFF_FILTER_TRIGGERED_BUILD} || $${FORCE}))
+          if [[ $${BUILD} == 1 ]]; then
             GROUP="no_GPL" \
                 ALLOW_FAIL="false" \
                 bash .buildkite/utilities/arches_pipeline_upload.sh \
