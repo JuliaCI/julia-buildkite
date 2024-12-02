@@ -1,5 +1,21 @@
 # This file launches upload jobs that wait upon previous jobs, then upload their artifacts to S3
 
+common:
+  - diff-filter-build_plugin: &diff-filter-build
+      https://github.com/fatteneder/diff-filter-buildkite-plugin#main:
+        name: "build"
+        ignore:
+          - "*.md"
+          - "*.json"
+          - "CITATION.*"
+          - ".gitignore"
+          - ".clangd"
+          - ".mailmap"
+        # TODO: Need this option because BUILDKITE_PULL_REQUEST_BRANCH=main
+        # when running tests in Julia-CI/julia-buildkite,
+        # but for PRs against Julia/JuliaLang BUILDKITE_PULL_REQUEST_BRANCH=master
+        target_branch: "master"
+
 steps:
   - group: "Upload (no GPL)"
     steps:
@@ -12,16 +28,18 @@ steps:
           # Explicitly pass along the cryptic token to child pipelines
           export BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET
 
-          # Launch `upload_*` jobs to store tarballs into S3 once tests are done
-          bash .buildkite/utilities/arches_pipeline_upload.sh \
-              .buildkite/pipelines/scheduled/platforms/upload_linux.no_gpl.arches \
-              .buildkite/pipelines/scheduled/platforms/upload_linux.no_gpl.yml
-          bash .buildkite/utilities/arches_pipeline_upload.sh \
-              .buildkite/pipelines/scheduled/platforms/upload_macos.no_gpl.arches \
-              .buildkite/pipelines/scheduled/platforms/upload_macos.no_gpl.yml
-          bash .buildkite/utilities/arches_pipeline_upload.sh \
-              .buildkite/pipelines/scheduled/platforms/upload_windows.no_gpl.arches \
-              .buildkite/pipelines/scheduled/platforms/upload_windows.no_gpl.yml
+          if [[ $${BUILDKITE_PLUGIN_DIFF_FILTER_TRIGGERED_BUILD} == 1 ]]; then
+            # Launch `upload_*` jobs to store tarballs into S3 once tests are done
+            bash .buildkite/utilities/arches_pipeline_upload.sh \
+                .buildkite/pipelines/scheduled/platforms/upload_linux.no_gpl.arches \
+                .buildkite/pipelines/scheduled/platforms/upload_linux.no_gpl.yml
+            bash .buildkite/utilities/arches_pipeline_upload.sh \
+                .buildkite/pipelines/scheduled/platforms/upload_macos.no_gpl.arches \
+                .buildkite/pipelines/scheduled/platforms/upload_macos.no_gpl.yml
+            bash .buildkite/utilities/arches_pipeline_upload.sh \
+                .buildkite/pipelines/scheduled/platforms/upload_windows.no_gpl.arches \
+                .buildkite/pipelines/scheduled/platforms/upload_windows.no_gpl.yml
+          fi
 
           # Don't share this with buildkite's env display
           unset BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET
