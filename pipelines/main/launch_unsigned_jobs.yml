@@ -27,17 +27,6 @@ common:
         # when running tests in Julia-CI/julia-buildkite,
         # but for PRs against Julia/JuliaLang BUILDKITE_PULL_REQUEST_BRANCH=master
         target_branch: "master"
-  - diff-filter-doc_plugin: &diff-filter-doc
-      https://github.com/fatteneder/diff-filter-buildkite-plugin#main:
-        name: "doc"
-        match:
-          - "doc/*"
-          - "HISTORY.md"
-          - "NEWS.md"
-        # TODO: Need this option because BUILDKITE_PULL_REQUEST_BRANCH=main
-        # when running tests in Julia-CI/julia-buildkite,
-        # but for PRs against Julia/JuliaLang BUILDKITE_PULL_REQUEST_BRANCH=master
-        target_branch: "master"
 
 steps:
   - group: "Build"
@@ -62,39 +51,42 @@ steps:
               version: '1.10.6'
           - *diff-filter-build
         commands: |
-          if [[ $${BUILDKITE_PLUGIN_DIFF_FILTER_TRIGGERED_BUILD} == 1 ]]; then
-            ### Launch Linux build jobs
-            # Regular:
-            GROUP="Build" \
-                ALLOW_FAIL="false" \
-                bash .buildkite/utilities/arches_pipeline_upload.sh \
-                .buildkite/pipelines/main/platforms/build_linux.arches \
-                .buildkite/pipelines/main/platforms/build_linux.yml
-            # PowerPC (only for Julia prior to 1.12):
-            GROUP="Build" \
-                ALLOW_FAIL="false" \
-                julia .buildkite/pipelines/main/platforms/launch_powerpc.jl \
-                .buildkite/pipelines/main/platforms/build_linux.powerpc.arches \
-                .buildkite/pipelines/main/platforms/build_linux.yml
-            ### Launch macOS packaging jobs
-            GROUP="Build" \
-                ALLOW_FAIL="false" \
-                bash .buildkite/utilities/arches_pipeline_upload.sh \
-                .buildkite/pipelines/main/platforms/build_macos.arches \
-                .buildkite/pipelines/main/platforms/build_macos.yml
-            ### Launch FreeBSD build jobs:
-            GROUP="Build" \
-                ALLOW_FAIL="false" \
-                bash .buildkite/utilities/arches_pipeline_upload.sh \
-                .buildkite/pipelines/main/platforms/build_freebsd.arches \
-                .buildkite/pipelines/main/platforms/build_freebsd.yml
-            ### Launch Windows build jobs:
-            GROUP="Build" \
-                ALLOW_FAIL="false" \
-                bash .buildkite/utilities/arches_pipeline_upload.sh \
-                .buildkite/pipelines/main/platforms/build_windows.arches \
-                .buildkite/pipelines/main/platforms/build_windows.yml
-          fi
+          ### Launch Linux build jobs
+          # Regular:
+          GROUP="Build" \
+              ALLOW_FAIL="false" \
+              BUILD="$${BUILDKITE_PLUGIN_DIFF_FILTER_TRIGGERED_BUILD}" \
+              bash .buildkite/utilities/arches_pipeline_upload.sh \
+              .buildkite/pipelines/main/platforms/build_linux.arches \
+              .buildkite/pipelines/main/platforms/build_linux.yml
+          # PowerPC (only for Julia prior to 1.12):
+          GROUP="Build" \
+              ALLOW_FAIL="false" \
+              BUILD="$${BUILDKITE_PLUGIN_DIFF_FILTER_TRIGGERED_BUILD}" \
+              julia .buildkite/pipelines/main/platforms/launch_powerpc.jl \
+              .buildkite/pipelines/main/platforms/build_linux.powerpc.arches \
+              .buildkite/pipelines/main/platforms/build_linux.yml
+          ### Launch macOS packaging jobs
+          GROUP="Build" \
+              ALLOW_FAIL="false" \
+              BUILD="$${BUILDKITE_PLUGIN_DIFF_FILTER_TRIGGERED_BUILD}" \
+              bash .buildkite/utilities/arches_pipeline_upload.sh \
+              .buildkite/pipelines/main/platforms/build_macos.arches \
+              .buildkite/pipelines/main/platforms/build_macos.yml
+          ### Launch FreeBSD build jobs:
+          GROUP="Build" \
+              ALLOW_FAIL="false" \
+              BUILD="$${BUILDKITE_PLUGIN_DIFF_FILTER_TRIGGERED_BUILD}" \
+              bash .buildkite/utilities/arches_pipeline_upload.sh \
+              .buildkite/pipelines/main/platforms/build_freebsd.arches \
+              .buildkite/pipelines/main/platforms/build_freebsd.yml
+          ### Launch Windows build jobs:
+          GROUP="Build" \
+              ALLOW_FAIL="false" \
+              BUILD="$${BUILDKITE_PLUGIN_DIFF_FILTER_TRIGGERED_BUILD}" \
+              bash .buildkite/utilities/arches_pipeline_upload.sh \
+              .buildkite/pipelines/main/platforms/build_windows.arches \
+              .buildkite/pipelines/main/platforms/build_windows.yml
         agents:
           queue: "julia"
           os: "linux"
@@ -110,13 +102,9 @@ steps:
               version: "./.buildkite-external-version"
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
           - *diff-filter-build
-          - *diff-filter-doc
         commands: |
-          if [[ $${BUILDKITE_PLUGIN_DIFF_FILTER_TRIGGERED_BUILD} == 1 ||
-                $${BUILDKITE_PLUGIN_DIFF_FILTER_TRIGGERED_DOC} == 1   ]]; then
-            buildkite-agent pipeline upload .buildkite/pipelines/main/misc/doctest.yml
-            buildkite-agent pipeline upload .buildkite/pipelines/main/misc/pdf_docs/build_pdf_docs.yml
-          fi
+          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/doctest.yml
+          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/pdf_docs/build_pdf_docs.yml
           if [[ $${BUILDKITE_PLUGIN_DIFF_FILTER_TRIGGERED_BUILD} == 1 ]]; then
             buildkite-agent pipeline upload .buildkite/pipelines/main/misc/analyzegc.yml
             buildkite-agent pipeline upload .buildkite/pipelines/main/misc/embedding.yml

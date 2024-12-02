@@ -10,7 +10,10 @@ steps:
           - docker#v3.13.0:
               image: "juliapackaging/package-windows-${DOCKER_ARCH?}:${DOCKER_TAG?}"
               always-pull: true
-              command: ["bash", ".buildkite/utilities/build_julia.sh"]
+              commands: |
+                if [[ ${BUILD?} == 1 ]]; then
+                  bash .buildkite/utilities/build_julia.sh
+                fi
               propagate-environment: true
               volumes:
                 # Mount buildkite-agent as well
