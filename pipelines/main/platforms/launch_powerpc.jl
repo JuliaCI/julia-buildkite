@@ -15,7 +15,7 @@ const arches_file = ARGS[1]
 # .buildkite/pipelines/main/platforms/build_linux.yml
 const yaml_pipeline_file = ARGS[2]
 
-const cmd = Cmd(`bash ".buildkite/utilities/arches_pipeline_upload.sh" "$(arches_file)" "$(yaml_pipeline_file)"`, env=copy(ENV))
+const cmd = `bash ".buildkite/utilities/arches_pipeline_upload.sh" "$(arches_file)" "$(yaml_pipeline_file)"`
 
 const parsed_julia_version = parse_version_file()
 const should_include_powerpc_builds = parsed_julia_version < v"1.12-"
