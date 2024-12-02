@@ -55,7 +55,8 @@ steps:
           - *pr-labels
         commands: |
           FORCE=$(test -n "$(echo $${PULL_REQUEST_LABELS} | grep -E "\bci-force-build\b")" && echo 1 || echo 0)
-          BUILD=$(($${TRIGGER_BUILD} || $${FORCE}))
+          MERGED=$(test "$${BUILDKITE_PULL_REQUEST}" = "false" && echo 1 || echo 0)
+          BUILD=$(($${TRIGGER_BUILD} || $${FORCE} || $${MERGED}))
           ### Launch Linux build jobs
           # Regular:
           GROUP="Build" \
@@ -112,7 +113,8 @@ steps:
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/doctest.yml
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/pdf_docs/build_pdf_docs.yml
           FORCE=$(test -n "$(echo $${PULL_REQUEST_LABELS} | grep -E "\bci-force-build\b")" && echo 1 || echo 0)
-          BUILD=$(($${TRIGGER_BUILD} || $${FORCE}))
+          MERGED=$(test "$${BUILDKITE_PULL_REQUEST}" = "false" && echo 1 || echo 0)
+          BUILD=$(($${TRIGGER_BUILD} || $${FORCE} || $${MERGED}))
           if [[ $${BUILD} == 1 ]]; then
             buildkite-agent pipeline upload .buildkite/pipelines/main/misc/analyzegc.yml
             buildkite-agent pipeline upload .buildkite/pipelines/main/misc/embedding.yml
@@ -142,7 +144,8 @@ steps:
         commands: |
           export ALLOW_FAIL="false"
           FORCE=$(test -n "$(echo $${PULL_REQUEST_LABELS} | grep -E "\bci-force-build\b")" && echo 1 || echo 0)
-          BUILD=$(($${TRIGGER_BUILD} || $${FORCE}))
+          MERGED=$(test "$${BUILDKITE_PULL_REQUEST}" = "false" && echo 1 || echo 0)
+          BUILD=$(($${TRIGGER_BUILD} || $${FORCE} || $${MERGED}))
           if [[ $${BUILD} == 1 ]]; then
             buildkite-agent pipeline upload .buildkite/pipelines/main/misc/gcext.yml
             buildkite-agent pipeline upload .buildkite/pipelines/main/misc/test_revise.yml
@@ -190,7 +193,8 @@ steps:
         commands: |
           export ALLOW_FAIL="true"
           FORCE=$(test -n "$(echo $${PULL_REQUEST_LABELS} | grep -E "\bci-force-build\b")" && echo 1 || echo 0)
-          BUILD=$(($${TRIGGER_BUILD} || $${FORCE}))
+          MERGED=$(test "$${BUILDKITE_PULL_REQUEST}" = "false" && echo 1 || echo 0)
+          BUILD=$(($${TRIGGER_BUILD} || $${FORCE} || $${MERGED}))
           # Launch Linux allowed-to-fail build jobs
           GROUP="Allow Fail" \
               BUILD="$${BUILD}" \
@@ -227,7 +231,8 @@ steps:
         commands: |
           export ALLOW_FAIL="true"
           FORCE=$(test -n "$(echo $${PULL_REQUEST_LABELS} | grep -E "\bci-force-build\b")" && echo 1 || echo 0)
-          BUILD=$(($${TRIGGER_BUILD} || $${FORCE}))
+          MERGED=$(test "$${BUILDKITE_PULL_REQUEST}" = "false" && echo 1 || echo 0)
+          BUILD=$(($${TRIGGER_BUILD} || $${FORCE} || $${MERGED}))
           if [[ $${BUILD} == 1 ]]; then
             ### Launch Linux allowed-to-fail test jobs.
             # Regular:

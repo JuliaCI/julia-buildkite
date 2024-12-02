@@ -42,7 +42,8 @@ steps:
           - *pr-labels
         commands: |
           FORCE=$(test -n "$(echo $${PULL_REQUEST_LABELS} | grep -E "\bci-force-build\b")" && echo 1 || echo 0)
-          BUILD=$(($${TRIGGER_BUILD} || $${FORCE}))
+          MERGED=$(test "$${BUILDKITE_PULL_REQUEST}" = "false" && echo 1 || echo 0)
+          BUILD=$(($${TRIGGER_BUILD} || $${FORCE} || $${MERGED}))
           GROUP="Source Build" \
               ALLOW_FAIL="false" \
               BUILD="$${BUILD}" \
@@ -62,7 +63,8 @@ steps:
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
         commands: |
           FORCE=$(test -n "$(echo $${PULL_REQUEST_LABELS} | grep -E "\bci-force-build\b")" && echo 1 || echo 0)
-          BUILD=$(($${TRIGGER_BUILD} || $${FORCE}))
+          MERGED=$(test "$${BUILDKITE_PULL_REQUEST}" = "false" && echo 1 || echo 0)
+          BUILD=$(($${TRIGGER_BUILD} || $${FORCE} || $${MERGED}))
           if [[ $${BUILD} == 1 ]]; then
             GROUP="Source Tests (Allow Fail)" \
                 ALLOW_FAIL="true" \
@@ -85,7 +87,8 @@ steps:
           - *pr-labels
         commands: |
           FORCE=$(test -n "$(echo $${PULL_REQUEST_LABELS} | grep -E "\bci-force-build\b")" && echo 1 || echo 0)
-          BUILD=$(($${TRIGGER_BUILD} || $${FORCE}))
+          MERGED=$(test "$${BUILDKITE_PULL_REQUEST}" = "false" && echo 1 || echo 0)
+          BUILD=$(($${TRIGGER_BUILD} || $${FORCE} || $${MERGED}))
           GROUP="no_GPL" \
               ALLOW_FAIL="false" \
               BUILD="$${BUILD}" \
