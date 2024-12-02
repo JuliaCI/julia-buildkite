@@ -15,7 +15,7 @@
 common:
   - diff-filter-build_plugin: &diff-filter-build
       https://github.com/fatteneder/diff-filter-buildkite-plugin#main:
-        name: "build"
+        name: "TRIGGER_BUILD"
         ignore:
           - "*.md"
           - "*.json"
@@ -56,7 +56,7 @@ steps:
           - *pr-labels
         commands: |
           FORCE=$(test -n "$(echo $${PULL_REQUEST_LABELS} | grep "\\<ci-force-build\\>")" && echo 1 || echo 0)
-          BUILD=$(($${BUILDKITE_PLUGIN_DIFF_FILTER_TRIGGERED_BUILD} || $${FORCE}))
+          BUILD=$(($${TRIGGER_BUILD} || $${FORCE}))
           ### Launch Linux build jobs
           # Regular:
           GROUP="Build" \
@@ -113,7 +113,7 @@ steps:
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/doctest.yml
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/pdf_docs/build_pdf_docs.yml
           FORCE=$(test -n "$(echo $${PULL_REQUEST_LABELS} | grep "\\<ci-force-build\\>")" && echo 1 || echo 0)
-          BUILD=$(($${BUILDKITE_PLUGIN_DIFF_FILTER_TRIGGERED_BUILD} || $${FORCE}))
+          BUILD=$(($${TRIGGER_BUILD} || $${FORCE}))
           if [[ $${BUILD} == 1 ]]; then
             buildkite-agent pipeline upload .buildkite/pipelines/main/misc/analyzegc.yml
             buildkite-agent pipeline upload .buildkite/pipelines/main/misc/embedding.yml
@@ -142,7 +142,7 @@ steps:
         commands: |
           export ALLOW_FAIL="false"
           FORCE=$(test -n "$(echo $${PULL_REQUEST_LABELS} | grep "\\<ci-force-build\\>")" && echo 1 || echo 0)
-          BUILD=$(($${BUILDKITE_PLUGIN_DIFF_FILTER_TRIGGERED_BUILD} || $${FORCE}))
+          BUILD=$(($${TRIGGER_BUILD} || $${FORCE}))
           if [[ $${BUILD} == 1 ]]; then
             buildkite-agent pipeline upload .buildkite/pipelines/main/misc/gcext.yml
             buildkite-agent pipeline upload .buildkite/pipelines/main/misc/test_revise.yml
@@ -188,7 +188,7 @@ steps:
         commands: |
           export ALLOW_FAIL="true"
           FORCE=$(test -n "$(echo $${PULL_REQUEST_LABELS} | grep "\\<ci-force-build\\>")" && echo 1 || echo 0)
-          BUILD=$(($${BUILDKITE_PLUGIN_DIFF_FILTER_TRIGGERED_BUILD} || $${FORCE}))
+          BUILD=$(($${TRIGGER_BUILD} || $${FORCE}))
           if [[ $${BUILD} == 1 ]]; then
             # Launch Linux allowed-to-fail build jobs
             GROUP="Allow Fail" \
@@ -224,7 +224,7 @@ steps:
         commands: |
           export ALLOW_FAIL="true"
           FORCE=$(test -n "$(echo $${PULL_REQUEST_LABELS} | grep "\\<ci-force-build\\>")" && echo 1 || echo 0)
-          BUILD=$(($${BUILDKITE_PLUGIN_DIFF_FILTER_TRIGGERED_BUILD} || $${FORCE}))
+          BUILD=$(($${TRIGGER_BUILD} || $${FORCE}))
           if [[ $${BUILD} == 1 ]]; then
             ### Launch Linux allowed-to-fail test jobs.
             # Regular:

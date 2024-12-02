@@ -15,7 +15,7 @@
 common:
   - diff-filter-build_plugin: &diff-filter-build
       https://github.com/fatteneder/diff-filter-buildkite-plugin#main:
-        name: "build"
+        name: "TRIGGER_BUILD"
         ignore:
           - "*.md"
           - "*.json"
@@ -43,7 +43,7 @@ steps:
           - *pr-labels
         commands: |
           FORCE=$(test -n "$(echo $${PULL_REQUEST_LABELS} | grep "\\<ci-force-build\\>")" && echo 1 || echo 0)
-          BUILD=$(($${BUILDKITE_PLUGIN_DIFF_FILTER_TRIGGERED_BUILD} || $${FORCE}))
+          BUILD=$(($${TRIGGER_BUILD} || $${FORCE}))
           if [[ $${BUILD} == 1 ]]; then
             GROUP="Source Build" \
                 ALLOW_FAIL="false" \
@@ -63,7 +63,7 @@ steps:
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
         commands: |
           FORCE=$(test -n "$(echo $${PULL_REQUEST_LABELS} | grep "\\<ci-force-build\\>")" && echo 1 || echo 0)
-          BUILD=$(($${BUILDKITE_PLUGIN_DIFF_FILTER_TRIGGERED_BUILD} || ${FORCE}))
+          BUILD=$(($${TRIGGER_BUILD} || $${FORCE}))
           if [[ ${BUILD} == 1 ]]; then
             GROUP="Source Tests (Allow Fail)" \
                 ALLOW_FAIL="true" \
@@ -85,7 +85,7 @@ steps:
           - *pr-labels
         commands: |
           FORCE=$(test -n "$(echo $${PULL_REQUEST_LABELS} | grep "\\<ci-force-build\\>")" && echo 1 || echo 0)
-          BUILD=$(($${BUILDKITE_PLUGIN_DIFF_FILTER_TRIGGERED_BUILD} || $${FORCE}))
+          BUILD=$(($${TRIGGER_BUILD} || $${FORCE}))
           if [[ $${BUILD} == 1 ]]; then
             GROUP="no_GPL" \
                 ALLOW_FAIL="false" \
