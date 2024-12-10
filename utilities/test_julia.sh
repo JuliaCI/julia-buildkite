@@ -75,9 +75,12 @@ if [[ "${USE_RR-}" == "rr" ]] || [[ "${USE_RR-}" == "rr-net" ]]; then
     export NCORES_FOR_TESTS="parse(Int, ENV[\"JULIA_RRCAPTURE_NUM_CORES\"])"
     export JULIA_NUM_THREADS=1
 
+    # Do not run Pkg tests on rr
+    TESTS_TO_SKIP+=( Pkg )
+    
     # rr: all tests EXCEPT the network-related tests
     # rr-net: ONLY the network-related tests
-    NETWORK_RELATED_TESTS=( Artifacts Downloads download LazyArtifacts LibGit2/online Pkg )
+    NETWORK_RELATED_TESTS=( Artifacts Downloads download LazyArtifacts LibGit2/online)
     if [[ "${USE_RR-}" == "rr" ]]; then
         TESTS_TO_SKIP+=( ${NETWORK_RELATED_TESTS[@]} )
     elif [[ "${USE_RR-}" == "rr-net" ]]; then
