@@ -206,3 +206,4 @@ steps:
         agents:
           queue: "julia"
           os: "linux"
+          arch: "x86_64"
