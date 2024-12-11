@@ -87,7 +87,7 @@ echo "--- Show build stats"
 ${MAKE} "${MFLAGS[@]}" build-stats
 
 echo "--- Create build artifacts"
-${MAKE} "${MFLAGS[@]}" binary-dist
+${MAKE} debug "${MFLAGS[@]}" binary-dist
 
 # Rename the build artifact in case we want to name it differently, as is the case on `musl`.
 if [[ "${JULIA_BINARYDIST_FILENAME}.tar.gz" != "${UPLOAD_FILENAME}.tar.gz" ]]; then
