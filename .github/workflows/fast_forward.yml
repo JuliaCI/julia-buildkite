@@ -8,6 +8,13 @@ on:
       following_branch:
         description: ''
         required: true
+concurrency:
+  # Skip intermediate builds: all builds except for builds on the `main` branch
+  # Cancel intermediate builds: only pull request builds
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.ref != 'refs/heads/master' || github.run_number }}
+  cancel-in-progress: ${{ startsWith(github.ref, 'refs/pull/') }}
+permissions:
+  contents: write
 jobs:
   fast_forward:
     runs-on: ubuntu-latest
