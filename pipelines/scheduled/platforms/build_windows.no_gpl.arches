@@ -1,5 +1,5 @@
 # OS       TRIPLET                    ARCH       DOCKER_ARCH    MAKE_FLAGS      TIMEOUT     DOCKER_TAG
-windows    x86_64-w64-mingw32nogpl    x86_64     x86_64         USE_GPL_LIBS=0  .           v5.44
+windows    x86_64-w64-mingw32nogpl    x86_64     x86_64         USE_GPL_LIBS=0  .           v7.10
 # TODO: fix gcc warning, and add flags `JL_CFLAGS=-Werror,JL_CXXFLAGS=-Werror` to MAKE_FLAGS
 
 # These special lines allow us to embed default values for the columns above.
