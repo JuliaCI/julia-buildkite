@@ -62,7 +62,8 @@ for FLAG in "${MFLAGS[@]}"; do
 done
 
 echo "--- Build Julia"
-${MAKE} "${MFLAGS[@]}"
+echo "Note: The log stream is filtered. [julia] replaces pwd $(pwd)"
+${MAKE} "${MFLAGS[@]}" 2>&1 | sed "s|$(pwd)|[julia]|g"
 
 
 echo "--- Check that the working directory is clean"
