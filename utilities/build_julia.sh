@@ -62,7 +62,8 @@ for FLAG in "${MFLAGS[@]}"; do
 done
 
 echo "--- Build Julia"
-${MAKE} "${MFLAGS[@]}"
+echo "Note: The log stream is filtered. [buildroot] replaces pwd $(pwd)"
+${MAKE} "${MFLAGS[@]}" 2>&1 | sed "s|$(pwd)|[buildroot]|g"
 
 
 echo "--- Check that the working directory is clean"
@@ -84,7 +85,8 @@ ${JULIA_EXE} -e "import Test; Test.@test Sys.ARCH == :${ARCH:?}"
 ${JULIA_EXE} -e "import Test; Test.@test Sys.WORD_SIZE == ${EXPECTED_WORD_SIZE:?}"
 
 echo "--- Show build stats"
-${MAKE} "${MFLAGS[@]}" build-stats
+echo "Note: The log stream is filtered. [buildroot] replaces pwd $(pwd)"
+${MAKE} "${MFLAGS[@]}" build-stats 2>&1 | sed "s|$(pwd)|[buildroot]|g"
 
 echo "--- Create build artifacts"
 ${MAKE} "${MFLAGS[@]}" binary-dist
