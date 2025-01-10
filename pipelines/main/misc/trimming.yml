@@ -21,6 +21,8 @@ steps:
               workspaces:
                 # Include `/cache/repos` so that our `git` version introspection works.
                 - "/cache/repos:/cache/repos"
+        if: | # We only run the `trimming` job on Julia 1.12 and later.
+          (pipeline.slug != "julia-release-1-dot-10") && (pipeline.slug != "julia-release-1-dot-11")
         commands: |
           # Download pre-built julia, extract into `usr/`
           buildkite-agent artifact download --step "build_x86_64-linux-gnu" 'julia-*-linux-x86_64.tar.gz' .
