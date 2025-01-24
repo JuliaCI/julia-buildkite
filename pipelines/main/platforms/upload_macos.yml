@@ -6,8 +6,6 @@ steps:
         depends_on:
           # Wait for the builder to finish
           - "build_${TRIPLET?}"
-          # Wait for the tester to finish
-          - "test_${TRIPLET?}"
         # Prevent multiple pipelines from uploading to S3 simultaneously
         # It is okay for two different triplets to upload simultaneously
         concurrency: 1
