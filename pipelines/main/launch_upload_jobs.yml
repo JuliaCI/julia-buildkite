@@ -22,7 +22,7 @@ steps:
           # Explicitly pass along the cryptic token to child pipelines
           export BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET
           export ALLOW_FAIL="false"
-
+          export ALLOW_TEST_FAILURES=$(([[ "${BUILDKITE_BRANCH?}" == release-* ]] || [[ "${BUILDKITE_TAG:-}" == v* ]]) && echo "false" || echo "true")
           ##### Launch `upload_*` jobs to store tarballs into S3 once tests are done
           ### Linux:
           # Regular Linux upload jobs:
