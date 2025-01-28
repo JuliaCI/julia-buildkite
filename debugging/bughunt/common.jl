@@ -75,7 +75,7 @@ function BughuntBuildInfo(job::BuildkiteJob; prefer_build_rootfs::Bool = true)
     env["MAKE_FLAGS"] = get(env, "MAKE_FLAGS", "")
 
     triplet = env["TRIPLET"]
-    platform = parse(Platform, replace(triplet, "gnuassert" => "gnu", "gnuprofiling" => "gnu"))
+    platform = parse(Platform, replace(triplet, "gnuassert" => "gnu", "gnuprofiling" => "gnu", "gnummtk" => "gnu"))
     if !Sandbox.natively_runnable(platform)
         throw(ArgumentError("Cannot natively run triplet '$(triplet)'!"))
     end
