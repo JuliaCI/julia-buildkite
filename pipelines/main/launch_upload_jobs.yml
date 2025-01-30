@@ -82,6 +82,7 @@ steps:
           export BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET
 
           export ALLOW_FAIL="true"
+          export ALLOW_TEST_FAILURES=$(([[ "${BUILDKITE_BRANCH?}" == release-* ]] || [[ "${BUILDKITE_TAG:-}" == v* ]]) && echo "false" || echo "true")
 
           # Launch Linux allowed-to-fail upload jobs
           GROUP="Allow Fail (Upload)" \
