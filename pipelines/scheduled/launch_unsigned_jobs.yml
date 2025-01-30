@@ -29,6 +29,7 @@ steps:
         agents:
           queue: "julia"
           os: "linux"
+          arch: "x86_64" # prevent from running on PiBots
   - group: "Source Tests (Allow Fail)"
     steps:
       - label: "Launch from-source test jobs"
@@ -45,6 +46,7 @@ steps:
         agents:
           queue: "julia"
           os: "linux"
+          arch: "x86_64" # prevent from running on PiBots
   - group: "no_GPL"
     steps:
       - label: "Launch no_GPL jobs"
@@ -70,3 +72,5 @@ steps:
               .buildkite/pipelines/main/platforms/build_windows.yml
         agents:
           queue: "julia"
+          os: "linux"
+          arch: "x86_64" # prevent from running on PiBots
