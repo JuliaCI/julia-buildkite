@@ -21,7 +21,7 @@ case "${TRIPLET}" in
         OS="linuxprofiling"
         ;;
     *-gnummtk) # Using MMTk Immix as the default GC (`MMTK_PLAN=Immix`)
-        OS="linux"
+        OS="linuxmmtk"
         ;;
     *-gnusrcassert) # both "from source" and assert
         OS="linuxsrcassert"
