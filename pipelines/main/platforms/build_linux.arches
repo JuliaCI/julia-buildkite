@@ -4,6 +4,7 @@ package_linux          x86_64-linux-gnu               x86_64         x86_64     
 package_linux          x86_64-linux-gnuassert         x86_64         x86_64         FORCE_ASSERTIONS=1,LLVM_ASSERTIONS=1,JL_CFLAGS=-Werror,JL_CXXFLAGS=-Werror              .             v6.00         4dcde853eb5baaa0a8f087b633eaf955dc94b5dc
 package_linux          x86_64-linux-gnuprofiling      x86_64         x86_64         WITH_TRACY=1,WITH_ITTAPI=1,WITH_TIMING_COUNTS=1,JL_CFLAGS=-Werror,JL_CXXFLAGS=-Werror   .             v6.00         4dcde853eb5baaa0a8f087b633eaf955dc94b5dc
 package_linux          aarch64-linux-gnu              aarch64        aarch64        JL_CFLAGS=-Werror,JL_CXXFLAGS=-Werror                                                   .             v6.00         e32c05f36d0a5bb0f94a17d99647f0b3352a8256
+package_linux          x86_64-linux-gnummtk          x86_64         x86_64         JL_CFLAGS=-Werror,JL_CXXFLAGS=-Werror,MMTK_PLAN=Immix,MMTK_MOVING=0                                .             v6.00         4dcde853eb5baaa0a8f087b633eaf955dc94b5dc
 # package_musl           x86_64-linux-musl              x86_64         x86_64         JL_CFLAGS=-Werror,JL_CXXFLAGS=-Werror                                                   .             v6.00         948ca1e496231e4c280c236a3e9bb01c95c2cda5
 
 # These special lines allow us to embed default values for the columns above.
