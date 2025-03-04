@@ -2,6 +2,7 @@
 tester_linux           aarch64-linux-gnu                aarch64        aarch64        165        .        v6.00         4efb2a7f62f668ef08633579bfbfe1e5e4b2969b
 # tester_linux         armv7l-linux-gnueabihf           armv7l         armv7l         .          .        ----          ----------------------------------------
 tester_musl            x86_64-linux-musl                x86_64         x86_64         .          .        v6.00         6eaef301e981bbcdbc054c5b6d4f33c7eaedb64a
+tester_linux           x86_64-linux-gnummtk      x86_64         x86_64         .          .          v6.00         770c0240be788cfeb9654e1980ea929d3ed98d1f
 
 # These special lines allow us to embed default values for the columns above.
 # Any column without a default mapping here will simply substitute a `.` to the empty string
