@@ -135,6 +135,7 @@ steps:
               bash .buildkite/utilities/arches_pipeline_upload.sh \
               .buildkite/pipelines/main/platforms/test_windows.arches \
               .buildkite/pipelines/main/platforms/test_windows.yml
+          echo "+++"
         agents:
           queue: "julia"
           os: "linux"
