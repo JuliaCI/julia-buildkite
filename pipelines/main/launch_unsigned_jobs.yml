@@ -104,7 +104,6 @@ steps:
               version: "./.buildkite-external-version"
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
         commands: |
-          echo "--- Launch test jobs"
           export ALLOW_FAIL="false"
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/gcext.yml
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/test_revise.yml
@@ -135,7 +134,7 @@ steps:
               bash .buildkite/utilities/arches_pipeline_upload.sh \
               .buildkite/pipelines/main/platforms/test_windows.arches \
               .buildkite/pipelines/main/platforms/test_windows.yml
-          echo "+++"
+          echo "+++ Finished launching test jobs"
         agents:
           queue: "julia"
           os: "linux"
