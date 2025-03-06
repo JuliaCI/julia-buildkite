@@ -23,12 +23,29 @@ steps:
         timeout_in_minutes: ${TIMEOUT?}
         soft_fail: true
         commands: |
+          echo "--- Uploading test results"
           buildkite-agent artifact download --step "test_${TRIPLET?}" "results*.json" . || true
+
+          # Buildkite expects these results to be uploaded from the job they were associated with
+          # and don't provide a way to specify the the job id in the `test-collector` plugin,
+          # so overwrite BUILDKITE_JOB_ID with the job id from the results file.
+          echo "--- Setting buildkite job id"
+          json_file=$(find . -name "results*.json" | head -n 1)
+          if [ -z "$json_file" ]; then
+              echo "No results*.json file found."
+              exit 0
+          fi
+          # Extract the first occurrence of "job_id" from the file
+          job_id=$(jq -r '.[0].tags.job_id' "$json_file")
+          if [ -z "$job_id" ] || [ "$job_id" == "null" ]; then
+              echo "No job_id found in the JSON file."
+              exit 0
+          fi
+          export BUILDKITE_JOB_ID="$job_id"
+          echo "--- BUILDKITE_JOB_ID set to the id of the test run"
         agents:
           queue: "julia"
         env:
           # Receive cryptic token from parent job
           BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET: ${BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET?}
           TRIPLET: "${TRIPLET?}"
-
-
