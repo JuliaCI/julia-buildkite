@@ -27,23 +27,22 @@ steps:
           buildkite-agent artifact download --step "test_${TRIPLET?}" "results*.json" . || true
 
           # Buildkite expects these results to be uploaded from the job they were associated with
-          # and don't provide a way to specify the the job id in the `test-collector` plugin,
+          # and don't provide a way to specify the job id in the `test-collector` plugin,
           # so overwrite BUILDKITE_JOB_ID with the job id from the results file.
           echo "--- Set buildkite job id to that of the test job"
-          pwd
-          ls -l .
-          json_file=$(find . -name "results*.json" -print -quit)
-          if [ -z "$json_file" ]; then
+          json_file=$$(find . -name "results*.json" -print -quit)
+          if [ -z "$$json_file" ]; then
               echo "No results*.json file found."
               exit 0
           fi
           # Extract the first occurrence of "job_id" from the file
-          job_id=$(jq -r '.[0].tags.job_id' "$json_file")
-          if [ -z "$job_id" ] || [ "$job_id" == "null" ]; then
+          job_id=$$(jq -r '.[0].tags.job_id' "$$json_file")
+          if [ -z "$$job_id" ] || [ "$$job_id" == "null" ]; then
               echo "No job_id found in the JSON file."
               exit 0
           fi
-          export BUILDKITE_JOB_ID="$job_id"
+          export BUILDKITE_JOB_ID="$$job_id"
+          echo "Buildkite job id set to $$job_id"
         agents:
           queue: "julia"
         env:
