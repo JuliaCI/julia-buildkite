@@ -23,14 +23,16 @@ steps:
         timeout_in_minutes: ${TIMEOUT?}
         soft_fail: true
         commands: |
-          echo "--- Uploading test results"
+          echo "--- Download test results from test job"
           buildkite-agent artifact download --step "test_${TRIPLET?}" "results*.json" . || true
 
           # Buildkite expects these results to be uploaded from the job they were associated with
           # and don't provide a way to specify the the job id in the `test-collector` plugin,
           # so overwrite BUILDKITE_JOB_ID with the job id from the results file.
-          echo "--- Setting buildkite job id"
-          json_file=$(find . -name "results*.json" | head -n 1)
+          echo "--- Set buildkite job id to that of the test job"
+          pwd
+          ls -l .
+          json_file=$(find . -name "results*.json" -print -quit)
           if [ -z "$json_file" ]; then
               echo "No results*.json file found."
               exit 0
@@ -42,7 +44,6 @@ steps:
               exit 0
           fi
           export BUILDKITE_JOB_ID="$job_id"
-          echo "--- BUILDKITE_JOB_ID set to the id of the test run"
         agents:
           queue: "julia"
         env:
