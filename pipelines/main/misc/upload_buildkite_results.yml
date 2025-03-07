@@ -18,7 +18,7 @@ steps:
                 - BUILDKITE_ANALYTICS_TOKEN="U2FsdGVkX18BUSpNWNimRUOAh2ku0ugS7x3RRy1CfJBCxTLWArJpa1PXKoILfI7q"
           # grab the test job id and set the `job-id` argument for the test-collector plugin
           - staticfloat/metahook:
-              environment: |
+              pre-command: |
                 echo BUILDKITE_PLUGIN_TEST_COLLECTOR_JOB_ID="$$(buildkite-agent meta-data get BUILDKITE_TEST_JOB_ID_${TRIPLET?})" >> "$BUILDKITE_ENV_FILE"
                 echo "BUILDKITE_PLUGIN_TEST_COLLECTOR_JOB_ID=$${BUILDKITE_PLUGIN_TEST_COLLECTOR_JOB_ID}"
           # use version that we can set `job-id` for
