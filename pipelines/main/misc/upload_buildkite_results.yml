@@ -20,6 +20,7 @@ steps:
           - staticfloat/metahook:
               post-checkout: |
                 export BUILDKITE_PLUGIN_TEST_COLLECTOR_JOB_ID="$$(buildkite-agent meta-data get BUILDKITE_TEST_JOB_ID_${TRIPLET?})"
+                echo "BUILDKITE_PLUGIN_TEST_COLLECTOR_JOB_ID=$${BUILDKITE_PLUGIN_TEST_COLLECTOR_JOB_ID}"
           # use version that we can set `job-id` for
           # https://github.com/buildkite-plugins/test-collector-buildkite-plugin/pull/84
           - github.com/IanButterworth/test-collector-buildkite-plugin#78286e72dec5cd59cc1ab7d19a2398a999cd155b:
