@@ -30,8 +30,8 @@ steps:
         timeout_in_minutes: ${TIMEOUT?}
         soft_fail: true
         commands: |
-          echo "BUILDKITE_PLUGIN_TEST_COLLECTOR_JOB_ID=$$(buildkite-agent meta-data get BUILDKITE_TEST_JOB_ID_${TRIPLET?})"
           echo "--- Download test results from test job"
+          echo "BUILDKITE_PLUGIN_TEST_COLLECTOR_JOB_ID=$$(buildkite-agent meta-data get BUILDKITE_TEST_JOB_ID_${TRIPLET?})"
           buildkite-agent artifact download --step "test_${TRIPLET?}" "results*.json" . || true
         agents:
           queue: "julia"
