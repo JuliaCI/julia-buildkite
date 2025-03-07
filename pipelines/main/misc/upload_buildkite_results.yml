@@ -1,8 +1,8 @@
 steps:
   - group: "Upload"
     steps:
-      - label: "upload test results ${TRIPLET?}"
-        key:   "upload_results_${TRIPLET?}"
+      - label: "set test job id ${TRIPLET?}"
+        key:   "set_test_job_id_${TRIPLET?}"
         depends_on:
           # Wait for the builder to finish
           - step: "build_${TRIPLET?}"
@@ -16,10 +16,6 @@ steps:
           - staticfloat/cryptic#v2:
               variables:
                 - BUILDKITE_ANALYTICS_TOKEN="U2FsdGVkX18BUSpNWNimRUOAh2ku0ugS7x3RRy1CfJBCxTLWArJpa1PXKoILfI7q"
-          - test-collector#v1.10.1:
-              files: "results*.json"
-              format: "json"
-              missing-error: 0
         timeout_in_minutes: ${TIMEOUT?}
         soft_fail: true
         commands: |
@@ -41,11 +37,38 @@ steps:
               echo "No job_id found in the JSON file."
               exit 0
           fi
-          export BUILDKITE_JOB_ID="$$job_id"
-          echo "Buildkite job id set to $$job_id"
+          buildkite-agent meta-data set "BUILDKITE_TARGET_JOB_ID" "$$job_id"
         agents:
           queue: "julia"
         env:
           # Receive cryptic token from parent job
           BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET: ${BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET?}
           TRIPLET: "${TRIPLET?}"
+
+      - label: "upload test results ${TRIPLET?}"
+        key:   "upload_results_${TRIPLET?}"
+        depends_on:
+          - step: "set_test_job_id_${TRIPLET?}"
+        plugins:
+          - JuliaCI/external-buildkite#v1:
+              version: "./.buildkite-external-version"
+              repo_url: "https://github.com/JuliaCI/julia-buildkite"
+          - staticfloat/cryptic#v2:
+              variables:
+                - BUILDKITE_ANALYTICS_TOKEN="U2FsdGVkX18BUSpNWNimRUOAh2ku0ugS7x3RRy1CfJBCxTLWArJpa1PXKoILfI7q"
+          - test-collector#v1.10.1:
+              files: "results*.json"
+              format: "json"
+              missing-error: 0
+        timeout_in_minutes: ${TIMEOUT?}
+        soft_fail: true
+        commands: |
+          echo "--- Download test results from test job"
+          buildkite-agent artifact download --step "test_${TRIPLET?}" "results*.json" . || true
+        agents:
+          queue: "julia"
+        env:
+          # Receive cryptic token from parent job
+          BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET: ${BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET?}
+          TRIPLET: "${TRIPLET?}"
+          BUILDKITE_JOB_ID: "$$(buildkite-agent meta-data get BUILDKITE_TARGET_JOB_ID)"
