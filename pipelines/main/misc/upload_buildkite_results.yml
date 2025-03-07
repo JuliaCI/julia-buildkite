@@ -16,11 +16,13 @@ steps:
           - staticfloat/cryptic#v2:
               variables:
                 - BUILDKITE_ANALYTICS_TOKEN="U2FsdGVkX18BUSpNWNimRUOAh2ku0ugS7x3RRy1CfJBCxTLWArJpa1PXKoILfI7q"
-          - github.com/IanButterworth/test-collector-buildkite-plugin#ib/job_id:
+          # use version that we can set job-id for
+          # https://github.com/buildkite-plugins/test-collector-buildkite-plugin/pull/84
+          - github.com/IanButterworth/test-collector-buildkite-plugin#78286e72dec5cd59cc1ab7d19a2398a999cd155b:
               files: "results*.json"
               format: "json"
               missing-error: 0
-              job-id: "$$(buildkite-agent meta-data get BUILDKITE_TEST_JOB_ID_${TRIPLET?})"
+              job-id: "$(buildkite-agent meta-data get BUILDKITE_TEST_JOB_ID_${TRIPLET?})"
         timeout_in_minutes: ${TIMEOUT?}
         soft_fail: true
         commands: |
