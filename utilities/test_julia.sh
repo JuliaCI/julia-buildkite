@@ -11,8 +11,10 @@ set -euo pipefail
 source .buildkite/utilities/build_envs.sh
 
 echo "-- Debug"
-buildkite-agent meta-data set BUILDKITE_TEST_JOB_ID_${TRIPLET?} "${BUILDKITE_JOB_ID?}"
-echo "set BUILDKITE_TEST_JOB_ID_${TRIPLET?} to \"$$(buildkite-agent meta-data get BUILDKITE_TEST_JOB_ID_${TRIPLET?})\""
+buildkite-agent meta-data set BUILDKITE_TEST_JOB_ID_${TRIPLET} "${BUILDKITE_JOB_ID}"
+echo "set BUILDKITE_TEST_JOB_ID_${TRIPLET} to \"$(buildkite-agent meta-data get BUILDKITE_TEST_JOB_ID_${TRIPLET})\""
+touch results_1.json
+buildkite-agent artifact upload results*.json
 exit 0
 
 echo "--- Print kernel version"

@@ -18,18 +18,19 @@ steps:
                 - BUILDKITE_ANALYTICS_TOKEN="U2FsdGVkX18BUSpNWNimRUOAh2ku0ugS7x3RRy1CfJBCxTLWArJpa1PXKoILfI7q"
           # grab the test job id and set the `job-id` argument for the test-collector plugin
           - staticfloat/metahook:
-              post-checkout: |
+              post-command: |
                 export BUILDKITE_PLUGIN_TEST_COLLECTOR_JOB_ID="$$(buildkite-agent meta-data get BUILDKITE_TEST_JOB_ID_${TRIPLET?})"
                 echo "BUILDKITE_PLUGIN_TEST_COLLECTOR_JOB_ID=$${BUILDKITE_PLUGIN_TEST_COLLECTOR_JOB_ID}"
           # use version that we can set `job-id` for
           # https://github.com/buildkite-plugins/test-collector-buildkite-plugin/pull/84
-          - github.com/IanButterworth/test-collector-buildkite-plugin#78286e72dec5cd59cc1ab7d19a2398a999cd155b:
+          - github.com/IanButterworth/test-collector-buildkite-plugin#9e4ac814b7343f5239b660df2c13061e61596a3a:
               files: "results*.json"
               format: "json"
               missing-error: 0
         timeout_in_minutes: ${TIMEOUT?}
         soft_fail: true
         commands: |
+          echo "BUILDKITE_PLUGIN_TEST_COLLECTOR_JOB_ID="$$(buildkite-agent meta-data get BUILDKITE_TEST_JOB_ID_${TRIPLET?})"
           echo "--- Download test results from test job"
           buildkite-agent artifact download --step "test_${TRIPLET?}" "results*.json" . || true
         agents:
