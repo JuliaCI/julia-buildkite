@@ -28,10 +28,8 @@ steps:
                 # Write to environment file
                 echo "BUILDKITE_PLUGIN_TEST_COLLECTOR_JOB_ID=\"$$(buildkite-agent meta-data get BUILDKITE_TEST_JOB_ID_${TRIPLET?})\"" >> "$$BUILDKITE_ENV_FILE"
                 echo "1"
-                echo "BUILDKITE_PLUGIN_TEST_COLLECTOR_JOB_ID=$$BUILDKITE_PLUGIN_TEST_COLLECTOR_JOB_ID"
-                echo "2"
                 source "$$BUILDKITE_ENV_FILE"
-                echo "3"
+                echo "2"
                 echo "BUILDKITE_PLUGIN_TEST_COLLECTOR_JOB_ID=$$BUILDKITE_PLUGIN_TEST_COLLECTOR_JOB_ID"
 
                 # Debug: Verify env file contents
