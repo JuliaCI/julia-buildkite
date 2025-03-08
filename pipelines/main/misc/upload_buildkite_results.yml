@@ -26,7 +26,7 @@ steps:
                 echo "Meta-data value: $$(buildkite-agent meta-data get BUILDKITE_TEST_JOB_ID_${TRIPLET?})"
 
                 # Write to environment file
-                echo "BUILDKITE_PLUGIN_TEST_COLLECTOR_JOB_ID=$$(buildkite-agent meta-data get BUILDKITE_TEST_JOB_ID_${TRIPLET?})" >> "$$BUILDKITE_ENV_FILE"
+                echo "BUILDKITE_PLUGIN_TEST_COLLECTOR_JOB_ID=\"$$(buildkite-agent meta-data get BUILDKITE_TEST_JOB_ID_${TRIPLET?})\"" >> "$$BUILDKITE_ENV_FILE"
                 echo "1"
                 sed -E 's/(.*(SECRET|TOKEN|PASSWORD|API_KEY|PRIVATE_KEY|CREDENTIALS).*?)=.*/\1=REDACTED/' "$$BUILDKITE_ENV_FILE"
                 echo "2"
