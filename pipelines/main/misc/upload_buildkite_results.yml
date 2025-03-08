@@ -30,7 +30,9 @@ steps:
                 echo "1"
                 cat "$$BUILDKITE_ENV_FILE"
                 echo "2"
+                set +u
                 source "$$BUILDKITE_ENV_FILE"
+                set -u
                 echo "3"
                 echo "BUILDKITE_PLUGIN_TEST_COLLECTOR_JOB_ID=$$BUILDKITE_PLUGIN_TEST_COLLECTOR_JOB_ID"
 
