@@ -19,7 +19,7 @@ steps:
           # grab the test job id and set the `job-id` argument for the test-collector plugin
           - staticfloat/metahook:
               pre-command: |
-                echo BUILDKITE_PLUGIN_TEST_COLLECTOR_JOB_ID="$$(buildkite-agent meta-data get BUILDKITE_TEST_JOB_ID_${TRIPLET?})" >> "$$BUILDKITE_ENV_FILE"
+                echo BUILDKITE_PLUGIN_TEST_COLLECTOR_JOB_ID="$$(buildkite-agent meta-data get BUILDKITE_TEST_JOB_ID_${TRIPLET?})" >> $$BUILDKITE_ENV_FILE
           # use version that we can set `job-id` for
           # https://github.com/buildkite-plugins/test-collector-buildkite-plugin/pull/84
           - github.com/IanButterworth/test-collector-buildkite-plugin#9e4ac814b7343f5239b660df2c13061e61596a3a:
