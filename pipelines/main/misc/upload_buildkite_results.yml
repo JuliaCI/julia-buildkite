@@ -22,7 +22,6 @@ steps:
               files: "results*.json"
               format: "json"
               missing-error: 0
-              debug: true
         timeout_in_minutes: ${TIMEOUT?}
         soft_fail: true
         commands: |
