@@ -20,16 +20,16 @@ steps:
           - staticfloat/metahook:
               environment: |
                 # Debug: Check if metadata exists
-                buildkite-agent meta-data exists BUILDKITE_TEST_JOB_ID && echo "Metadata exists" || echo "Metadata missing"
+                buildkite-agent meta-data exists BUILDKITE_TEST_JOB_ID_${TRIPLET?} && echo "Metadata exists" || echo "Metadata missing"
 
                 # Debug: Print metadata value
-                echo "Meta-data value: $(buildkite-agent meta-data get BUILDKITE_TEST_JOB_ID)"
+                echo "Meta-data value: $$(buildkite-agent meta-data get BUILDKITE_TEST_JOB_ID_${TRIPLET?})"
 
                 # Write to environment file
                 echo BUILDKITE_PLUGIN_TEST_COLLECTOR_JOB_ID="$$(buildkite-agent meta-data get BUILDKITE_TEST_JOB_ID_${TRIPLET?})" >> "$$BUILDKITE_ENV_FILE"
 
                 # Debug: Verify env file contents
-                sed -E 's/(.*(SECRET|TOKEN|PASSWORD|API_KEY|PRIVATE_KEY|CREDENTIALS).*?)=.*/\1=REDACTED/' "$BUILDKITE_ENV_FILE"
+                sed -E 's/(.*(SECRET|TOKEN|PASSWORD|API_KEY|PRIVATE_KEY|CREDENTIALS).*?)=.*/\1=REDACTED/' "$$BUILDKITE_ENV_FILE"
 
           # use version that we can set `job-id` for
           # https://github.com/buildkite-plugins/test-collector-buildkite-plugin/pull/84
@@ -43,7 +43,7 @@ steps:
         commands: |
           echo "--- Download test results from test job"
           # Debug: Verify env file contents
-          sed -E 's/(.*(SECRET|TOKEN|PASSWORD|API_KEY|PRIVATE_KEY|CREDENTIALS).*?)=.*/\1=REDACTED/' "$BUILDKITE_ENV_FILE"
+          sed -E 's/(.*(SECRET|TOKEN|PASSWORD|API_KEY|PRIVATE_KEY|CREDENTIALS).*?)=.*/\1=REDACTED/' "$$BUILDKITE_ENV_FILE"
 
           echo "BUILDKITE_PLUGIN_TEST_COLLECTOR_JOB_ID=$$BUILDKITE_PLUGIN_TEST_COLLECTOR_JOB_ID"
           buildkite-agent artifact download --step "test_${TRIPLET?}" "results*.json" . || true
