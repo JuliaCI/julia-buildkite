@@ -16,14 +16,34 @@ steps:
           - staticfloat/cryptic#v2:
               variables:
                 - BUILDKITE_ANALYTICS_TOKEN="U2FsdGVkX18BUSpNWNimRUOAh2ku0ugS7x3RRy1CfJBCxTLWArJpa1PXKoILfI7q"
-          - test-collector#v1.10.1:
-              files: "results*.json"
-              format: "json"
-              missing-error: 0
         timeout_in_minutes: ${TIMEOUT?}
         soft_fail: true
         commands: |
+          echo "--- Downloading test results from test step"
           buildkite-agent artifact download --step "test_${TRIPLET?}" "results*.json" . || true
+
+          echo "--- Uploading test results and assigning them to the test run"
+          export JOB_ID="$$(buildkite-agent meta-data get BUILDKITE_TEST_JOB_ID_${TRIPLET?} || echo "unknown")"
+
+          shopt -s nullglob  # Ensure empty glob does not return a literal string
+          for file in results*.json; do
+            echo "Uploading $$file..."
+            # We can't use the test-collector plugin because it doesn't provide a way to set a custom `job_id`
+            curl \
+              -X POST \
+              -H "Authorization: Token token=\"$$BUILDKITE_ANALYTICS_TOKEN\"" \
+              -F "data=\"@$$file\"" \
+              -F "format=\"json\"" \
+              -F "run_env[CI]=\"buildkite\"" \
+              -F "run_env[key]=\"$$BUILDKITE_BUILD_ID\"" \
+              -F "run_env[url]=\"$$BUILDKITE_BUILD_URL\"" \
+              -F "run_env[branch]=\"$$BUILDKITE_BRANCH\"" \
+              -F "run_env[commit_sha]=\"$$BUILDKITE_COMMIT\"" \
+              -F "run_env[number]=\"$$BUILDKITE_BUILD_NUMBER\"" \
+              -F "run_env[job_id]=\"$$JOB_ID\"" \
+              -F "run_env[message]=\"$$BUILDKITE_MESSAGE\"" \
+              https://analytics-api.buildkite.com/v1/uploads
+          done
         agents:
           queue: "julia"
         env:
