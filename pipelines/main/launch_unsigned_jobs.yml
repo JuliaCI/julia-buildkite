@@ -28,11 +28,11 @@ steps:
               # 1. We pin the `JuliaCI/julia` plugin to a full commit hash.
               #    This is intentional. We want to make sure that this script doesn't suddenly
               #    break when a new version of the plugin is released.
-              # 2. We specify the Julia version up to patch, e.g. '1.10.6'.
-              #    This is intentional. We don't do e.g. '1.10', because we want to make sure
+              # 2. We specify the Julia version up to patch, e.g. '1.7.3'.
+              #    This is intentional. We don't do e.g. '1.7', because we want to make sure
               #    that this script doesn't suddenly break when a new patch release of Julia
               #    is released.
-              version: '1.10.6'
+              version: '1.7.3'
         commands: |
           ### Launch Linux build jobs.
           # Regular:
@@ -170,11 +170,11 @@ steps:
               # 1. We pin the `JuliaCI/julia` plugin to a full commit hash.
               #    This is intentional. We want to make sure that this script doesn't suddenly
               #    break when a new version of the plugin is released.
-              # 2. We specify the Julia version up to patch, e.g. '1.10.6'.
-              #    This is intentional. We don't do e.g. '1.10', because we want to make sure
+              # 2. We specify the Julia version up to patch, e.g. '1.7.3'.
+              #    This is intentional. We don't do e.g. '1.7', because we want to make sure
               #    that this script doesn't suddenly break when a new patch release of Julia
               #    is released.
-              version: '1.10.6'
+              version: '1.7.3'
         commands: |
           export ALLOW_FAIL="true"
 
