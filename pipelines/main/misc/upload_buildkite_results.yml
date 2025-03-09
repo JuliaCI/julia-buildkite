@@ -23,7 +23,7 @@ steps:
           buildkite-agent artifact download --step "test_${TRIPLET?}" "results*.json" . || true
 
           echo "--- Uploading test results and assigning them to the test run"
-          export JOB_ID="$$(buildkite-agent meta-data get BUILDKITE_TEST_JOB_ID_${TRIPLET?} || echo "unknown")"
+          export JOB_ID="$$(buildkite-agent meta-data get BUILDKITE_TEST_JOB_ID_test_${TRIPLET?} || echo "unknown")"
 
           shopt -s nullglob  # Ensure empty glob does not return a literal string
           for file in results*.json; do
