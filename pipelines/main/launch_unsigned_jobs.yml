@@ -68,7 +68,7 @@ steps:
         agents:
           queue: "julia"
           os: "linux"
-          arch: "x86_64"
+          arch: "x86_64" # prevent from running on PiBots
   - group: "Check"
     notify:
       - github_commit_status:
@@ -93,6 +93,7 @@ steps:
         agents:
           queue: "julia"
           os: "linux"
+          arch: "x86_64" # prevent from running on PiBots
   - group: "Test"
     notify:
       - github_commit_status:
@@ -138,6 +139,7 @@ steps:
         agents:
           queue: "julia"
           os: "linux"
+          arch: "x86_64" # prevent from running on PiBots
   - group: "Allow Fail"
     steps:
       - label: "Launch allowed-to-fail build jobs"
@@ -160,6 +162,7 @@ steps:
         agents:
           queue: "julia"
           os: "linux"
+          arch: "x86_64" # prevent from running on PiBots
       - label: "Launch allowed-to-fail test jobs"
         plugins:
           - JuliaCI/external-buildkite#v1:
@@ -207,4 +210,4 @@ steps:
         agents:
           queue: "julia"
           os: "linux"
-          arch: "x86_64"
+          arch: "x86_64" # prevent from running on PiBots
