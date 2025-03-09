@@ -161,8 +161,8 @@ fi
 
 echo "--- Upload results.json report"
 # store the test job id so that the upload job can assign the results to the right job id
-buildkite-agent meta-data set BUILDKITE_TEST_JOB_ID_${TRIPLET} "${BUILDKITE_JOB_ID}"
-echo "meta-data BUILDKITE_TEST_JOB_ID_${TRIPLET} has been set to \"$(buildkite-agent meta-data get BUILDKITE_TEST_JOB_ID_${TRIPLET})\""
+buildkite-agent meta-data set BUILDKITE_TEST_JOB_ID_${BUILDKITE_STEP_KEY} "${BUILDKITE_JOB_ID}"
+echo "meta-data BUILDKITE_TEST_JOB_ID_${BUILDKITE_STEP_KEY} has been set to \"$(buildkite-agent meta-data get BUILDKITE_TEST_JOB_ID_${TRIPLET})\""
 if compgen -G "${JULIA_INSTALL_DIR}/share/julia/test/results*.json"; then
     (cd "${JULIA_INSTALL_DIR}/share/julia/test"; buildkite-agent artifact upload results*.json)
 else
