@@ -77,7 +77,7 @@ if [[ "${USE_RR-}" == "rr" ]] || [[ "${USE_RR-}" == "rr-net" ]]; then
 
     # Do not run Pkg tests on rr
     TESTS_TO_SKIP+=( Pkg )
-
+    
     # rr: all tests EXCEPT the network-related tests
     # rr-net: ONLY the network-related tests
     NETWORK_RELATED_TESTS=( Artifacts Downloads download LazyArtifacts LibGit2/online)
@@ -160,9 +160,6 @@ else
 fi
 
 echo "--- Upload results.json report"
-# store the test job id so that the upload job can assign the results to the right job id
-buildkite-agent meta-data set BUILDKITE_TEST_JOB_ID_${TRIPLET} "${BUILDKITE_JOB_ID}"
-echo "meta-data BUILDKITE_TEST_JOB_ID_${TRIPLET} has been set to \"$(buildkite-agent meta-data get BUILDKITE_TEST_JOB_ID_${TRIPLET})\""
 if compgen -G "${JULIA_INSTALL_DIR}/share/julia/test/results*.json"; then
     (cd "${JULIA_INSTALL_DIR}/share/julia/test"; buildkite-agent artifact upload results*.json)
 else

@@ -16,19 +16,14 @@ steps:
           - staticfloat/cryptic#v2:
               variables:
                 - BUILDKITE_ANALYTICS_TOKEN="U2FsdGVkX18BUSpNWNimRUOAh2ku0ugS7x3RRy1CfJBCxTLWArJpa1PXKoILfI7q"
-          # use version that we can set `job-id` for
-          # https://github.com/buildkite-plugins/test-collector-buildkite-plugin/pull/84
-          - github.com/IanButterworth/test-collector-buildkite-plugin#d363181dc5bfad6e9c56de7bcca3fec53a0faf82:
+          - test-collector#v1.10.1:
               files: "results*.json"
               format: "json"
               missing-error: 0
         timeout_in_minutes: ${TIMEOUT?}
         soft_fail: true
         commands: |
-          echo "--- Download test results from test job"
           buildkite-agent artifact download --step "test_${TRIPLET?}" "results*.json" . || true
-          echo "--- Set job-id for test-collector pre-exit hook"
-          echo "BUILDKITE_PLUGIN_TEST_COLLECTOR_JOB_ID=\"$$(buildkite-agent meta-data get BUILDKITE_TEST_JOB_ID_${TRIPLET?})\"" >> "$$BUILDKITE_ENV_FILE"
         agents:
           queue: "julia"
         env:
