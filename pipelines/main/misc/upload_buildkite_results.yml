@@ -35,7 +35,7 @@ steps:
               --show-error \
               --max-time "${TIMEOUT?}" \
               -H "Authorization: Token token=\"$$BUILDKITE_ANALYTICS_TOKEN\"" \
-              -F "data=\"@$$file\"" \
+              -F "data=@\"$$file\"" \
               -F "format=json" \
               -F "run_env[CI]=buildkite" \
               -F "run_env[key]=\"$$BUILDKITE_BUILD_ID\"" \
