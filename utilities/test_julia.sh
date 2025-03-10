@@ -164,7 +164,7 @@ echo "--- Upload results.json report"
 buildkite-agent meta-data set BUILDKITE_TEST_JOB_ID_${BUILDKITE_STEP_KEY} "${BUILDKITE_JOB_ID}"
 echo "meta-data BUILDKITE_TEST_JOB_ID_${BUILDKITE_STEP_KEY} has been set to \"$(buildkite-agent meta-data get BUILDKITE_TEST_JOB_ID_${BUILDKITE_STEP_KEY})\""
 if compgen -G "${JULIA_INSTALL_DIR}/share/julia/test/results*.json"; then
-    (cd "${JULIA_INSTALL_DIR}/share/julia/test"; buildkite-agent artifact upload results*.json)
+    (cd "${JULIA_INSTALL_DIR}/share/julia/test"; buildkite-agent artifact upload "results*.json")
 else
     echo "no JSON results files found"
 fi
