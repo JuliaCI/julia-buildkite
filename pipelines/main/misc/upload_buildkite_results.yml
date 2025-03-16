@@ -20,7 +20,7 @@ steps:
         soft_fail: true
         commands: |
           echo "--- Downloading test results from test step"
-          buildkite-agent artifact download --step "test_${TRIPLET?}" "results*.json" . || true
+          buildkite-agent artifact download --step "test_${TRIPLET?}" "results.tar.gz" . && tar -xzf results.tar.gz || true
 
           echo "--- Uploading test results and assigning them to the test run"
           export JOB_ID="$$(buildkite-agent meta-data get BUILDKITE_TEST_JOB_ID_test_${TRIPLET?} || echo "unknown")"
