@@ -46,7 +46,7 @@ steps:
               -F "run_env[job_id]=\"$$JOB_ID\"" \
               -F "run_env[message]=\“$$BUILDKITE_MESSAGE\"" \
               https://analytics-api.buildkite.com/v1/uploads
-            echo "\n"
+            echo ""
           done
         agents:
           queue: "julia"
