@@ -20,10 +20,11 @@ steps:
         soft_fail: true
         commands: |
           echo "--- Downloading test results from test step"
-          buildkite-agent artifact download --step "test_${TRIPLET?}" "results*.json" . || true
+          buildkite-agent artifact download --step "test_${TRIPLET?}" "results.tar.gz" . && tar -xzf results.tar.gz || true
 
           echo "--- Uploading test results and assigning them to the test run"
           export JOB_ID="$$(buildkite-agent meta-data get BUILDKITE_TEST_JOB_ID_test_${TRIPLET?} || echo "unknown")"
+          echo "Test job ID: $$JOB_ID"
 
           shopt -s nullglob  # Ensure empty glob does not return a literal string
           for file in results*.json; do
@@ -44,9 +45,11 @@ steps:
               -F "run_env[commit_sha]=\"$$BUILDKITE_COMMIT\"" \
               -F "run_env[number]=\"$$BUILDKITE_BUILD_NUMBER\"" \
               -F "run_env[job_id]=\"$$JOB_ID\"" \
-              -F "run_env[message]=\"$$(printf “%q” “$$BUILDKITE_MESSAGE”)\"" \
+              -F "run_env[message]=\“$$BUILDKITE_MESSAGE\"" \
+              -F "tags[job_group]=\"$$BUILDKITE_GROUP_LABEL\"" \
+              -F "tags[job_label]=\"$$BUILDKITE_LABEL\"" \
               https://analytics-api.buildkite.com/v1/uploads
-            echo "\n"
+            echo ""
           done
         agents:
           queue: "julia"
