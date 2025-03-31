@@ -46,8 +46,6 @@ steps:
               -F "run_env[number]=\"$$BUILDKITE_BUILD_NUMBER\"" \
               -F "run_env[job_id]=\"$$JOB_ID\"" \
               -F "run_env[message]=\“$$BUILDKITE_MESSAGE\"" \
-              -F "tags[job_group]=\"$$BUILDKITE_GROUP_LABEL\"" \
-              -F "tags[job_label]=\"$$BUILDKITE_LABEL\"" \
               https://analytics-api.buildkite.com/v1/uploads
             echo ""
           done
