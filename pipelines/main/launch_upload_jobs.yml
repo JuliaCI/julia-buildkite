@@ -51,10 +51,11 @@ steps:
               .buildkite/pipelines/main/platforms/upload_windows.arches \
               .buildkite/pipelines/main/platforms/upload_windows.yml
 
+          ### Upload test results.json files to buildkite
           for OS in linux macos freebsd windows; do \
               GROUP="Upload" \
                 bash .buildkite/utilities/arches_pipeline_upload.sh \
-                .buildkite/pipelines/main/platforms/upload_$${OS}.arches \
+                .buildkite/pipelines/main/platforms/test_$${OS}.arches \
                 .buildkite/pipelines/main/misc/upload_buildkite_results.yml
           done
 
