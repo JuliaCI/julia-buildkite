@@ -1,13 +1,13 @@
 steps:
   - group: "Upload"
     steps:
-      - label: "upload test results ${TRIPLET?}"
-        key:   "upload_results_${TRIPLET?}"
+      - label: "upload test results ${TRIPLET?}${USE_RR-}${i686_LABEL-}"
+        key:   "upload_results_${TRIPLET?}${USE_RR-}${i686_LABEL-}"
         depends_on:
           # Wait for the builder to finish
           - step: "build_${TRIPLET?}"
           # Wait for the tester to finish
-          - step: "test_${TRIPLET?}"
+          - step: "test_${TRIPLET?}${USE_RR-}${i686_LABEL-}"
             allow_failure: true
         plugins:
           - JuliaCI/external-buildkite#v1:
@@ -20,10 +20,10 @@ steps:
         soft_fail: true
         commands: |
           echo "--- Downloading test results from test step"
-          buildkite-agent artifact download --step "test_${TRIPLET?}" "results.tar.gz" . && tar -xzf results.tar.gz || true
+          buildkite-agent artifact download --step "test_${TRIPLET?}${USE_RR-}${i686_LABEL-}" "results.tar.gz" . && tar -xzf results.tar.gz || true
 
           echo "--- Uploading test results and assigning them to the test run"
-          export JOB_ID="$$(buildkite-agent meta-data get BUILDKITE_TEST_JOB_ID_test_${TRIPLET?} || echo "unknown")"
+          export JOB_ID="$$(buildkite-agent meta-data get BUILDKITE_TEST_JOB_ID_test_${TRIPLET?}${USE_RR-}${i686_LABEL-} || echo "unknown")"
           echo "Test job ID: $$JOB_ID"
 
           shopt -s nullglob  # Ensure empty glob does not return a literal string
