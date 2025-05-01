@@ -61,6 +61,9 @@ for FLAG in "${MFLAGS[@]}"; do
     echo " -> ${FLAG}"
 done
 
+# Temporarily fix to us-east because the MIT pkgserver is down
+export JULIA_PKG_SERVER="https://us-east.pkg.julialang.org"
+
 echo "--- Build Julia"
 echo "Note: The log stream is filtered. [buildroot] replaces pwd $(pwd)"
 ${MAKE} "${MFLAGS[@]}" 2>&1 | sed "s|$(pwd)|[buildroot]|g"
