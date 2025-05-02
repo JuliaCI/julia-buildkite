@@ -46,9 +46,7 @@ echo "--- Set some environment variables"
 export OPENBLAS_NUM_THREADS="${JULIA_CPU_THREADS}"
 export JULIA_TEST_IS_BASE_CI="true"
 unset JULIA_DEPOT_PATH
-# Temporarily fix to us-east because the MIT pkgserver is down
-# unset JULIA_PKG_SERVER
-export JULIA_PKG_SERVER="https://us-east.pkg.julialang.org"
+unset JULIA_PKG_SERVER
 
 # Make sure that temp files and temp directories are created in a location that is
 # backed by real storage, and not by a tmpfs, as some tests don't like that on Linux
