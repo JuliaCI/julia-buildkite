@@ -5,7 +5,7 @@ steps:
         key:   "coverage"
         # Comment out the following `if:` statement for testing.
         # Please remember to uncomment it before merging the PR.
-        if: pipeline.slug == "julia-master-scheduled"
+        # if: pipeline.slug == "julia-master-scheduled"
         plugins:
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"
@@ -45,6 +45,10 @@ steps:
           mkdir -p lcov_files
           mv *.info lcov_files
           ls lcov_files
+
+          echo "--- Upload lcov files"
+          tar -zcf lcov_files.tar.gz lcov_files/
+          buildkite-agent artifact upload lcov_files.tar.gz
 
           echo "--- Process and upload coverage information"
           ./julia .buildkite/pipelines/scheduled/coverage/upload_coverage.jl
