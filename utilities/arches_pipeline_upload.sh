@@ -21,7 +21,7 @@ if [[ ! -f "${YAML_FILE}" ]] ; then
 fi
 
 SCRIPT_DIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
-"${BASH}" "${SCRIPT_DIR}/arches_env.sh" "${ARCHES_FILE}" | while read env_map; do
+"${BASH}" "${SCRIPT_DIR}/arches_env.sh" "${ARCHES_FILE}" | while read -r env_map; do
     # Export the environment mappings, then launch the yaml file
     eval "export ${env_map}"
     buildkite-agent pipeline upload "${YAML_FILE}"

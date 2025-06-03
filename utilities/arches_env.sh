@@ -36,7 +36,7 @@ for idx in "${!default_mapping_lines[@]}"; do
     defaults_map["${key}"]="${value}"
 done
 
-cat "${ARCHES_FILE}" | while read line; do
+while read -r line; do
     # Remove whitespace from the beginning and end of each line
     line="$(tr -s ' ' <<<"${line}")"
 
@@ -77,4 +77,4 @@ cat "${ARCHES_FILE}" | while read line; do
         echo -n "${name}=\"${value}\" "
     done
     echo
-done
+done <"${ARCHES_FILE}"
