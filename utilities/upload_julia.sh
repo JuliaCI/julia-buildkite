@@ -15,6 +15,7 @@ buildkite-agent artifact download "${UPLOAD_FILENAME}.tar.gz" .
 
 # These are the extensions that we will always upload
 UPLOAD_EXTENSIONS=( "tar.gz" )
+THIS_DIR="$(dirname "${BASH_SOURCE[0]}")"
 
 # Only codesign if we are not on a pull request build.
 # Pull request builds only upload unsigned tarballs.
@@ -72,8 +73,9 @@ if [[ "${BUILDKITE_PULL_REQUEST}" == "false" ]]; then
         rm -f dist-extras/is.exe
 
         echo "--- [windows] make exe"
-        codesign_script="$(pwd)/.buildkite/utilities/windows/codesign.sh"
-        iss_file="$(pwd)/.buildkite/utilities/windows/build-installer.iss"
+        codesign_script="$THIS_DIR/windows/codesign.sh"
+        iss_file="$THIS_DIR/windows/build-installer.iss"
+
         MSYS2_ARG_CONV_EXCL='*' ./dist-extras/inno/iscc.exe \
             /DAppVersion="${JULIA_VERSION}" \
             /DSourceDir="$(cygpath -w "$(pwd)/${JULIA_INSTALL_DIR}")" \
@@ -144,7 +146,7 @@ PIDS=()
 # We'll do these in parallel, then wait on the background jobs
 for SECONDARY_TARGET in "${UPLOAD_TARGETS[@]:1}"; do
     for EXT in "${UPLOAD_EXTENSIONS[@]}"; do
-        aws s3 cp --acl public-read "s3://${UPLOAD_TARGETS[0]}.${EXT}" "s3://${SECONDARY_TARGET}.${EXT}" &
+        AWS_CONFIG_FILE="$THIS_DIR/aws_config" aws --profile s3copy s3 cp --acl public-read "s3://${UPLOAD_TARGETS[0]}.${EXT}" "s3://${SECONDARY_TARGET}.${EXT}" --debug &
         PIDS+=( "$!" )
     done
 done
