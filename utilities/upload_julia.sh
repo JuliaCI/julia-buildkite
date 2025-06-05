@@ -7,6 +7,7 @@
 set -euo pipefail
 
 # First, get things like `SHORT_COMMIT`, `JULIA_CPU_TARGET`, `UPLOAD_TARGETS`, etc...
+# shellcheck source=SCRIPTDIR/build_envs.sh
 source .buildkite/utilities/build_envs.sh
 
 echo "--- Download ${UPLOAD_FILENAME}.tar.gz to ."
@@ -40,7 +41,7 @@ if [[ "${BUILDKITE_PULL_REQUEST}" == "false" ]]; then
             "${JULIA_INSTALL_DIR}"
 
         echo "--- [mac] Update checksums for stdlib cachefiles"
-        ${JULIA_INSTALL_DIR}/bin/julia .buildkite/utilities/update_stdlib_pkgimage_checksums.jl
+        "${JULIA_INSTALL_DIR}/bin/julia" .buildkite/utilities/update_stdlib_pkgimage_checksums.jl
 
         # Immediately re-compress that tarball for upload
         echo "--- [mac] Re-compress codesigned tarball"
@@ -72,10 +73,9 @@ if [[ "${BUILDKITE_PULL_REQUEST}" == "false" ]]; then
 
         echo "--- [windows] make exe"
         codesign_script="$(pwd)/.buildkite/utilities/windows/codesign.sh"
-        certificate="$(pwd)/.buildkite/secrets/windows_codesigning.pfx"
         iss_file="$(pwd)/.buildkite/utilities/windows/build-installer.iss"
         MSYS2_ARG_CONV_EXCL='*' ./dist-extras/inno/iscc.exe \
-            /DAppVersion=${JULIA_VERSION} \
+            /DAppVersion="${JULIA_VERSION}" \
             /DSourceDir="$(cygpath -w "$(pwd)/${JULIA_INSTALL_DIR}")" \
             /DRepoDir="$(cygpath -w "$(pwd)")" \
             /F"${UPLOAD_FILENAME}" \
@@ -92,7 +92,7 @@ if [[ "${BUILDKITE_PULL_REQUEST}" == "false" ]]; then
         "${codesign_script}" "${JULIA_INSTALL_DIR}"
 
         echo "--- [windows] Update checksums for stdlib cachefiles"
-        ${JULIA_INSTALL_DIR}/bin/julia .buildkite/utilities/update_stdlib_pkgimage_checksums.jl
+        "${JULIA_INSTALL_DIR}/bin/julia" .buildkite/utilities/update_stdlib_pkgimage_checksums.jl
 
         # Immediately re-compress that tarball for upload
         echo "--- [windows] Re-compress codesigned tarball"
@@ -116,7 +116,7 @@ fi
 # this (in combination with `set -e` above) ends execution if
 # any of the backgrounded tasks failed.
 wait_pids() {
-    for PID in $*; do
+    for PID in "$@"; do
         wait "${PID}"
     done
 }
@@ -142,7 +142,7 @@ wait_pids "${PIDS[@]}"
 echo "--- Copy to secondary upload targets"
 PIDS=()
 # We'll do these in parallel, then wait on the background jobs
-for SECONDARY_TARGET in ${UPLOAD_TARGETS[@]:1}; do
+for SECONDARY_TARGET in "${UPLOAD_TARGETS[@]:1}"; do
     for EXT in "${UPLOAD_EXTENSIONS[@]}"; do
         aws s3 cp --acl public-read "s3://${UPLOAD_TARGETS[0]}.${EXT}" "s3://${SECONDARY_TARGET}.${EXT}" &
         PIDS+=( "$!" )
@@ -152,7 +152,7 @@ wait_pids "${PIDS[@]}"
 
 # Report to the user some URLs that they can use to download this from
 echo "+++ Uploaded to targets"
-for UPLOAD_TARGET in ${UPLOAD_TARGETS[@]}; do
+for UPLOAD_TARGET in "${UPLOAD_TARGETS[@]}"; do
     for EXT in "${UPLOAD_EXTENSIONS[@]}"; do
         echo " -> s3://${UPLOAD_TARGET}.${EXT}"
     done

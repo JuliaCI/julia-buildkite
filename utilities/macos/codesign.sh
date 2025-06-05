@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/usr/bin/env bash
 # This file is a part of Julia. License is MIT: https://julialang.org/license
 
 set -euo pipefail
@@ -58,13 +58,13 @@ while [ "$#" -gt 1 ]; do
 done
 
 # Verify keychain arg
-KEYCHAIN_ARGS=""
+KEYCHAIN_ARGS=()
 if [ -n "${KEYCHAIN_PATH:-}" ]; then
     # Expand KEYCHAIN_PATH, in case it contains `~`,
     # also ensuring that it is an absolute path.
     KEYCHAIN_PATH="$(abspath "${KEYCHAIN_PATH}")"
     if [ -f "${KEYCHAIN_PATH}" ]; then
-        KEYCHAIN_ARGS="--keychain ${KEYCHAIN_PATH}"
+        KEYCHAIN_ARGS+=("--keychain" "${KEYCHAIN_PATH}")
 
         # Ensure that the given keychain has already been added to our search list and is unlocked
         if ! security show-keychain-info "${KEYCHAIN_PATH}" >/dev/null 2>/dev/null; then
@@ -79,9 +79,9 @@ fi
 
 # Verify that we can load the given identity
 if [ "${CODESIGN_IDENTITY}" != "-" ]; then
-    if ! security find-identity -p codesigning ${KEYCHAIN_PATH:-} 2>&1 | grep "${CODESIGN_IDENTITY}" >/dev/null; then
+    if ! security find-identity -p codesigning "${KEYCHAIN_PATH:-}" 2>&1 | grep "${CODESIGN_IDENTITY}" >/dev/null; then
         echo "security find-identity found no matching identity for '${CODESIGN_IDENTITY}':"
-        security find-identity -p codesigning ${KEYCHAIN_PATH:-}
+        security find-identity -p codesigning "${KEYCHAIN_PATH:-}"
         exit 1
     fi
 fi
@@ -93,8 +93,8 @@ do_codesign() {
     # and replacing any previous signatures that may exist.
     codesign --sign "${CODESIGN_IDENTITY}" \
              --option=runtime \
-             --entitlements $(dirname "${0}")/Entitlements.plist \
-             ${KEYCHAIN_ARGS} \
+             --entitlements "$(dirname "${0}")/Entitlements.plist" \
+             "${KEYCHAIN_ARGS[@]}" \
              --timestamp \
              --force \
              "${1}"

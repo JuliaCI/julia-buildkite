@@ -2,7 +2,8 @@
 
 # Extract information from our triplet
 # Here is an example of a triplet: `x86_64-linux-gnu`
-export ARCH="$(cut -d- -f1 <<<"${TRIPLET}")"
+ARCH="$(cut -d- -f1 <<<"${TRIPLET}")"
+export ARCH
 case "${TRIPLET}" in
     # Linux
     *-gnu)
