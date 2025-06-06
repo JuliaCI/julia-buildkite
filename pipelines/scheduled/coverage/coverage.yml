@@ -46,6 +46,10 @@ steps:
           mv *.info lcov_files
           ls lcov_files
 
+          echo "--- Upload lcov files"
+          tar -zcf lcov_files.tar.gz lcov_files/
+          buildkite-agent artifact upload lcov_files.tar.gz
+
           echo "--- Process and upload coverage information"
           ./julia .buildkite/pipelines/scheduled/coverage/upload_coverage.jl
         agents:
