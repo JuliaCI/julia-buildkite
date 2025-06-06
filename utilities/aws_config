@@ -1,0 +1,3 @@
+[profile s3copy]
+s3=
+    multipart_threshold=5GB
