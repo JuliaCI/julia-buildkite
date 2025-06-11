@@ -7,7 +7,9 @@
 set -euo pipefail
 
 # First, get things like `SHORT_COMMIT`, `JULIA_CPU_TARGET`, `UPLOAD_TARGETS`, etc...
+# shellcheck source=SCRIPTDIR/build_envs.sh
 source .buildkite/utilities/build_envs.sh
+# shellcheck source=SCRIPTDIR/word.sh
 source .buildkite/utilities/word.sh
 
 echo "--- Print software versions"
@@ -54,7 +56,8 @@ fi
 MFLAGS+=( "JULIA_CPU_TARGET=${JULIA_CPU_TARGET}" )
 
 # Finish off with any extra make flags from the `.arches` file
-MFLAGS+=( $(tr "," " " <<<"${MAKE_FLAGS}") )
+IFS=',' read -ra ARCHES_FLAGS <<<"${MAKE_FLAGS}"
+MFLAGS+=( "${ARCHES_FLAGS[@]}" )
 
 echo "Make Options:"
 for FLAG in "${MFLAGS[@]}"; do

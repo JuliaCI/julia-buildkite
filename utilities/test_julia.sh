@@ -8,6 +8,7 @@
 set -euo pipefail
 
 # First, get things like `SHORT_COMMIT`, `JULIA_CPU_TARGET`, `UPLOAD_TARGETS`, etc...
+# shellcheck source=SCRIPTDIR/build_envs.sh
 source .buildkite/utilities/build_envs.sh
 
 echo "--- Print kernel version"
@@ -33,7 +34,7 @@ if [[ "${OS}" == "macos" ]]; then
     echo "--- [mac] Codesigning"
     .buildkite/utilities/macos/codesign.sh "${JULIA_INSTALL_DIR}"
     echo "--- [mac] Update checksums for stdlib cachefiles after codesigning"
-    JULIA_DEBUG=all ${JULIA_INSTALL_DIR}/bin/julia .buildkite/utilities/update_stdlib_pkgimage_checksums.jl
+    JULIA_DEBUG=all "${JULIA_INSTALL_DIR}/bin/julia" .buildkite/utilities/update_stdlib_pkgimage_checksums.jl
 fi
 
 
@@ -51,8 +52,9 @@ unset JULIA_PKG_SERVER
 # Make sure that temp files and temp directories are created in a location that is
 # backed by real storage, and not by a tmpfs, as some tests don't like that on Linux
 if [[ "${OS}" == "linux" ]]; then
-    export TMPDIR="$(pwd)/tmp"
-    mkdir -p ${TMPDIR}
+    TMPDIR="$(pwd)/tmp"
+    export TMPDIR
+    mkdir -p "${TMPDIR}"
 fi
 
 #Always set the max rss so that if tests add large global variables (which they do) we don't make the GC's life too hard
@@ -80,12 +82,12 @@ if [[ "${USE_RR-}" == "rr" ]] || [[ "${USE_RR-}" == "rr-net" ]]; then
 
     # rr: all tests EXCEPT the network-related tests
     # rr-net: ONLY the network-related tests
-    NETWORK_RELATED_TESTS=( Artifacts Downloads download LazyArtifacts LibGit2/online)
+    NETWORK_RELATED_TESTS=( Artifacts Downloads download LazyArtifacts LibGit2/online )
     if [[ "${USE_RR-}" == "rr" ]]; then
-        TESTS_TO_SKIP+=( ${NETWORK_RELATED_TESTS[@]} )
+        TESTS_TO_SKIP+=( "${NETWORK_RELATED_TESTS[@]}" )
     elif [[ "${USE_RR-}" == "rr-net" ]]; then
         # Overwrite TESTS_TO_RUN, to get rid of default `"all"`
-        TESTS_TO_RUN=( ${NETWORK_RELATED_TESTS[@]} )
+        TESTS_TO_RUN=( "${NETWORK_RELATED_TESTS[@]}" )
     fi
 elif [[ "${USE_RR-}" == "" ]]; then
     # Run inside of a timeout
@@ -122,9 +124,9 @@ fi
 # Build our `TESTS` string
 # `--ci` asserts that networking is available
 if [[ "${#TESTS_TO_SKIP[@]}" -gt 0 ]]; then
-    export TESTS="${TESTS_TO_RUN[@]} --ci --skip ${TESTS_TO_SKIP[@]}"
+    export TESTS="${TESTS_TO_RUN[*]} --ci --skip ${TESTS_TO_SKIP[*]}"
 else
-    export TESTS="${TESTS_TO_RUN[@]} --ci"
+    export TESTS="${TESTS_TO_RUN[*]} --ci"
 fi
 
 # Auto-set timeout to buildkite timeout minus 45m for most users
@@ -161,8 +163,8 @@ fi
 
 echo "--- Upload results.json report"
 # store the test job id so that the upload job can assign the results to the right job id
-buildkite-agent meta-data set BUILDKITE_TEST_JOB_ID_${BUILDKITE_STEP_KEY} "${BUILDKITE_JOB_ID}"
-echo "meta-data BUILDKITE_TEST_JOB_ID_${BUILDKITE_STEP_KEY} has been set to \"$(buildkite-agent meta-data get BUILDKITE_TEST_JOB_ID_${BUILDKITE_STEP_KEY})\""
+buildkite-agent meta-data set "BUILDKITE_TEST_JOB_ID_${BUILDKITE_STEP_KEY}" "${BUILDKITE_JOB_ID}"
+echo "meta-data BUILDKITE_TEST_JOB_ID_${BUILDKITE_STEP_KEY} has been set to \"$(buildkite-agent meta-data get "BUILDKITE_TEST_JOB_ID_${BUILDKITE_STEP_KEY}")\""
 if compgen -G "${JULIA_INSTALL_DIR}/share/julia/test/results*.json"; then
     (cd "${JULIA_INSTALL_DIR}/share/julia/test"; tar -czf results.tar.gz results*.json && buildkite-agent artifact upload "results.tar.gz")
 else
