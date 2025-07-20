@@ -17,7 +17,7 @@ steps:
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
-          - staticfloat/cryptic#v2:
+          - JuliaCI/cryptic-buildkite-plugin#ib/fixes:
               variables:
                 - AWS_ACCESS_KEY_ID="U2FsdGVkX184v87+NPs3j9r/JoIuOrYt4/Z4wnRdklnY17NP8C8AMZvWYLJfT9t1"
                 - AWS_SECRET_ACCESS_KEY="U2FsdGVkX1+qptnxR/Mo5jZdH8OQfflRPiQBEhjgZIiTpn8KNCJYh/Cb8xxaUWazlcM9ceOlo0InDubL+J8zdg=="
