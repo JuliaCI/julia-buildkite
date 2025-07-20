@@ -9,10 +9,6 @@ steps:
           # Wait for the tester to finish
           - step: "test_${TRIPLET?}${USE_RR-}${i686_LABEL-}"
             allow_failure: true
-        manual:
-          # Allow manual triggering so test job retries can be uploaded
-          allowed: true
-          reason: "Upload test results manually or retry after test step completion"
         plugins:
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"
@@ -31,7 +27,7 @@ steps:
             echo "  - The test step failed and produced no results"
             echo "  - This upload job was triggered manually before test completion"
             echo "You can re-run this job manually once test results are available."
-            exit 0
+            exit 1
           fi
 
           echo "--- Uploading test results and assigning them to the test run"
