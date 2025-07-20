@@ -9,6 +9,7 @@ steps:
           # Wait for the tester to finish
           - step: "test_${TRIPLET?}${USE_RR-}${i686_LABEL-}"
             allow_failure: true
+        manual: true # Allow manual triggering so test job retries can be uploaded
         plugins:
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"
@@ -20,7 +21,15 @@ steps:
         soft_fail: true
         commands: |
           echo "--- Downloading test results from test step"
-          buildkite-agent artifact download --step "test_${TRIPLET?}${USE_RR-}${i686_LABEL-}" "results.tar.gz" . && tar -xzf results.tar.gz || true
+          if ! buildkite-agent artifact download --step "test_${TRIPLET?}${USE_RR-}${i686_LABEL-}" "results.tar.gz" . || ! tar -xzf results.tar.gz; then
+            echo "No test results found from test_${TRIPLET?}${USE_RR-}${i686_LABEL-}"
+            echo "This could mean:"
+            echo "  - The test step hasn't completed successfully yet"
+            echo "  - The test step failed and produced no results"
+            echo "  - This upload job was triggered manually before test completion"
+            echo "You can re-run this job manually once test results are available."
+            exit 0
+          fi
 
           echo "--- Uploading test results and assigning them to the test run"
           export JOB_ID="$$(buildkite-agent meta-data get BUILDKITE_TEST_JOB_ID_test_${TRIPLET?}${USE_RR-}${i686_LABEL-} || echo "unknown")"
