@@ -13,7 +13,7 @@ steps:
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
-          - JuliaCI/cryptic-buildkite-plugin#ib/fixes:
+          - JuliaCI/cryptic#ib/fixes:
               variables:
                 - BUILDKITE_ANALYTICS_TOKEN="U2FsdGVkX18BUSpNWNimRUOAh2ku0ugS7x3RRy1CfJBCxTLWArJpa1PXKoILfI7q"
         timeout_in_minutes: ${TIMEOUT?}

@@ -32,7 +32,7 @@ steps:
               workspaces:
                 # Include `/cache/repos` so that our `git` version introspection works.
                 - "/cache/repos:/cache/repos"
-          - JuliaCI/cryptic-buildkite-plugin#ib/fixes:
+          - JuliaCI/cryptic#ib/fixes:
               files:
                 - .buildkite/secrets/ssh_docs_deploy
           - staticfloat/ssh-agent#v1:

@@ -12,7 +12,7 @@ If you are a maintainer, and you want to re-sign all of the signatures, here are
 git clone git@github.com:JuliaCI/julia-buildkite.git
 cd julia-buildkite
 git checkout YOURINITIALS/YOUR-BRANCH-NAME
-git clone https://github.com/JuliaCI/cryptic-buildkite-plugin.git
+git clone https://github.com/JuliaCI/cryptic.git
 mv /path/to/my/repository/private/key ./cryptic_repo_keys/repo_key
 make sign_treehashes
 git push origin YOURINITIALS/YOUR-BRANCH-NAME
@@ -24,7 +24,7 @@ git push origin YOURINITIALS/YOUR-BRANCH-NAME
 git clone git@github.com:JuliaCI/julia-buildkite.git
 cd julia-buildkite
 git checkout YOURINITIALS/YOUR-BRANCH-NAME
-git clone https://github.com/JuliaCI/cryptic-buildkite-plugin.git
+git clone https://github.com/JuliaCI/cryptic.git
 cd cryptic-buildkite-plugin
 git checkout main
 cd ..

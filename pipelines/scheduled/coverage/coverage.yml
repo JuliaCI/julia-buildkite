@@ -19,7 +19,7 @@ steps:
               rootfs_treehash: "4dcde853eb5baaa0a8f087b633eaf955dc94b5dc"
               uid: 1000
               gid: 1000
-          - JuliaCI/cryptic-buildkite-plugin#ib/fixes:
+          - JuliaCI/cryptic#ib/fixes:
               variables:
                 - CODECOV_TOKEN="U2FsdGVkX19l0fhdBabbuiEdysyEabkJLRHfxm7CNRkuGbnwPV365sxxC7Czs/CVcws0N1oB4pVwALRRMe36oA=="
                 - COVERALLS_TOKEN="U2FsdGVkX19zopI0hMNzzi2UUOvNVFD8Y0iisFnO/ryVxU7Tit8ZEaeN+gxodRx4CosUUh192F1+q3dTMWRIvw=="
