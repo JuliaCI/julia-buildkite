@@ -20,7 +20,7 @@ steps:
         soft_fail: true
         commands: |
           echo "--- Downloading test results from test step"
-          if ! buildkite-agent artifact download --step "test_${TRIPLET?}${USE_RR-}${i686_LABEL-}" "results.tar.gz" . || ! tar -xzf results.tar.gz; then
+          if ! buildkite-agent artifact download --step "test_${TRIPLET?}${USE_RR-}${i686_LABEL-}" "results.tar.gz" .; then
             echo "No test results found from test_${TRIPLET?}${USE_RR-}${i686_LABEL-}"
             echo "This could mean:"
             echo "  - The test step hasn't completed successfully yet"
@@ -28,6 +28,15 @@ steps:
             echo "  - This upload job was triggered manually before test completion"
             echo "You can re-run this job manually once test results are available."
             exit 1
+          fi
+          
+          # Extract with relaxed permissions handling
+          if ! tar -xzf results.tar.gz --no-same-owner 2>/dev/null; then
+            echo "Failed to extract results.tar.gz, trying alternative extraction..."
+            if ! tar -xzf results.tar.gz --no-same-permissions --no-same-owner 2>/dev/null; then
+              echo "Could not extract results archive"
+              exit 1
+            fi
           fi
 
           echo "--- Uploading test results and assigning them to the test run"
