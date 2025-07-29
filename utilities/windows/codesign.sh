@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/usr/bin/env bash
 # This file is a part of Julia. License is MIT: https://julialang.org/license
 
 set -euo pipefail
@@ -7,7 +7,7 @@ SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
 DLIB_DEFAULT_PATH='C:\Program Files\TrustedSigning\bin\x64\Azure.CodeSigning.Dlib.dll'
 DLIB_PATH="${DLIB_DEFAULT_PATH}"
-METADATA_JSON_PATH="$(cygpath -w ${SCRIPT_DIR}/codesign_metadata.json)"
+METADATA_JSON_PATH="$(cygpath -w "${SCRIPT_DIR}/codesign_metadata.json")"
 
 usage() {
     echo "Usage: $0 [--dlib-path=<path>] <target>"
@@ -70,8 +70,8 @@ SERVERS=(
 NUM_RETRIES=3
 
 function do_codesign() {
-    for retry in $(seq 1 ${NUM_RETRIES}); do
-        for SERVER in ${SERVERS[@]}; do
+    for _ in $(seq 1 ${NUM_RETRIES}); do
+        for SERVER in "${SERVERS[@]}"; do
             if MSYS2_ARG_CONV_EXCL='*' signtool sign /q /fd SHA256 /tr "${SERVER}" /td SHA256 /dlib "${DLIB_PATH}" /dmdf "${METADATA_JSON_PATH}" "$1"; then
                 return 0
             fi
