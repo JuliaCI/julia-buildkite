@@ -170,5 +170,6 @@ if compgen -G "${JULIA_INSTALL_DIR}/share/julia/test/results*.json"; then
 else
     echo "no JSON results files found"
 fi
+echo "--- Done"
 
 exit $exitVal
