@@ -13,7 +13,7 @@ steps:
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
-          - staticfloat/cryptic#v2:
+          - JuliaCI/cryptic#v2:
               variables:
                 - BUILDKITE_ANALYTICS_TOKEN="U2FsdGVkX18BUSpNWNimRUOAh2ku0ugS7x3RRy1CfJBCxTLWArJpa1PXKoILfI7q"
         timeout_in_minutes: ${TIMEOUT?}
@@ -29,7 +29,7 @@ steps:
             echo "You can re-run this job manually once test results are available."
             exit 1
           fi
-          
+
           # Extract with relaxed permissions handling
           if ! tar -xzf results.tar.gz --no-same-owner 2>/dev/null; then
             echo "Failed to extract results.tar.gz, trying alternative extraction..."
