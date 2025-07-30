@@ -10,7 +10,7 @@ To replace the certificate you will need first a MacOS machine and to emit a new
 certificate.
 
 1. To replace an expired Apple certificate, clone `julia-buildkite` repo and
-   clone https://github.com/staticfloat/cryptic-buildkite-plugin in its root.
+   clone https://github.com/JuliaCI/cryptic-buildkite-plugin in its root.
    You will also need to have the private `agent.key`, and point towards it
    by defining the `AGENT_PRIVATE_KEY_PATH` environment variable.
 2. You can decrypt by running `make decrypt`.
