@@ -20,6 +20,7 @@ steps:
                     - .buildkite/utilities/build_envs.sh
                     - .buildkite/utilities/extract_triplet.sh
                     - .buildkite/utilities/upload_julia.sh
+                    - .buildkite/utilities/aws_config
                     - .buildkite/utilities/sign_tarball.sh
                     - .buildkite/utilities/macos/build_dmg.sh
                     - .buildkite/utilities/macos/codesign.sh
