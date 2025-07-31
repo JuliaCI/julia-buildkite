@@ -146,7 +146,7 @@ PIDS=()
 # We'll do these in parallel, then wait on the background jobs
 for SECONDARY_TARGET in "${UPLOAD_TARGETS[@]:1}"; do
     for EXT in "${UPLOAD_EXTENSIONS[@]}"; do
-        AWS_CONFIG_FILE="$THIS_DIR/aws_config" aws --profile s3copy s3 cp --acl public-read "s3://${UPLOAD_TARGETS[0]}.${EXT}" "s3://${SECONDARY_TARGET}.${EXT}" --debug &
+        AWS_CONFIG_FILE="$THIS_DIR/aws_config" AWS_PROFILE="s3copy" aws s3 cp --acl public-read "s3://${UPLOAD_TARGETS[0]}.${EXT}" "s3://${SECONDARY_TARGET}.${EXT}" --debug &
         PIDS+=( "$!" )
     done
 done
