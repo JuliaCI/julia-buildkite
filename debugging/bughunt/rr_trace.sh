@@ -32,7 +32,7 @@ function fixup_trace_path() {
 }
 
 function any_failures_in_ps() {
-    [[ $("${RR}" ps "$(fixup_trace_path "${1}")" | awk "{sum+=\$3} END {print sum;}") > 0 ]]
+    [[ $("${RR}" ps "$(fixup_trace_path "${1}")" | awk "{sum+=\$3} END {print sum;}") -gt 0 ]]
 }
 
 function grep_ps() {
@@ -42,12 +42,18 @@ function grep_ps() {
 }
 
 
+# `ls` but using `find` to make shellcheck happy
+# (https://www.shellcheck.net/wiki/SC2012)
+lsfind() {
+    find "${1}" ! -name "$(basename "${1}")" -prune -exec basename {} \;
+}
+
 if [[ "$1" == "list" ]]; then
-    for trace in $(ls ${SCRIPT_DIR}/rr_traces | sort -V); do
+    for trace in $(lsfind "${SCRIPT_DIR}/rr_traces" | sort -V); do
         if any_failures_in_ps "${trace}"; then
             echo_red "$(basename "${trace}")"
         else
-            echo "$(basename "${trace}")"
+            basename "${trace}"
         fi
     done
     exit 0
@@ -60,12 +66,12 @@ if [[ "$1" == "grep" ]]; then
     fi
     shift 1
 
-    for trace in $(ls ${SCRIPT_DIR}/rr_traces | sort -V); do
+    for trace in $(lsfind "${SCRIPT_DIR}/rr_traces" | sort -V); do
         if grep_ps "${trace}" "$@"; then
             if any_failures_in_ps "${trace}"; then
                 echo_red "$(basename "${trace}")"
             else
-                echo "$(basename "${trace}")"
+                basename "${trace}"
             fi
         fi
     done
@@ -77,7 +83,7 @@ if [[ "$1" == "ps" ]]; then
         echo "Usage: ${SCRIPT} ps <trace>" >&2
         exit 1
     fi
-    TRACE_PATH="$(fixup_trace_path ${2})"
+    TRACE_PATH="$(fixup_trace_path "${2}")"
     shift 2
     exec "${RR}" ps "${TRACE_PATH}" "$@"
 fi
@@ -87,11 +93,11 @@ if [[ "$1" == "replay" ]]; then
         echo "Usage: ${SCRIPT} replay <trace>" >&2
         exit 1
     fi
-    TRACE_PATH="$(fixup_trace_path ${2})"
+    TRACE_PATH="$(fixup_trace_path "${2}")"
     shift 2
     exec "${RR}" replay -x /build/.gdbinit.src --serve-files "${TRACE_PATH}" "$@"
 fi
 
-echo "Unknown command: $@"
+echo "Unknown command: $*"
 print_usage
 exit 1

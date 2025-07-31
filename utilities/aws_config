@@ -1,0 +1,4 @@
+[profile s3copy]
+credential_source=Environment
+s3=
+    multipart_threshold=5GB

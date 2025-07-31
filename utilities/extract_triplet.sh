@@ -2,7 +2,8 @@
 
 # Extract information from our triplet
 # Here is an example of a triplet: `x86_64-linux-gnu`
-export ARCH="$(cut -d- -f1 <<<"${TRIPLET}")"
+ARCH="$(cut -d- -f1 <<<"${TRIPLET}")"
+export ARCH
 case "${TRIPLET}" in
     # Linux
     *-gnu)
@@ -19,6 +20,9 @@ case "${TRIPLET}" in
         ;;
     *-gnuprofiling) # profiling-enabled builds (`WITH_TRACY=1` and `WITH_ITTAPI=1` and `WITH_TIMING_COUNTS=1`)
         OS="linuxprofiling"
+        ;;
+    *-gnummtk) # Using MMTk Immix as the default GC (`MMTK_PLAN=Immix`)
+        OS="linuxmmtk"
         ;;
     *-gnusrcassert) # both "from source" and assert
         OS="linuxsrcassert"

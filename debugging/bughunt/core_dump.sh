@@ -6,7 +6,7 @@ COREFILE="$(corefile)"
 
 # Read in all directories under `src/` and `base/` in the julia checkout;
 # we'll add these as source search paths in `gdb`
-readarray -t -d '' JULIA_SRC_DIRS < <(find /build/julia.git/src /build/julia.git/base -type d -print0)
+# readarray -t -d '' JULIA_SRC_DIRS < <(find /build/julia.git/src /build/julia.git/base -type d -print0)
 
 # Try `gdb` first, as it is less likely to freeze on us for some reason
 if [[ -n "$(which gdb)" ]]; then
