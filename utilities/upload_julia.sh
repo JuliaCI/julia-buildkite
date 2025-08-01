@@ -15,6 +15,9 @@ buildkite-agent artifact download "${UPLOAD_FILENAME}.tar.gz" .
 
 # These are the extensions that we will always upload
 UPLOAD_EXTENSIONS=( "tar.gz" )
+# Directory containing this script (relative path from current working directory)
+# Note: When used in contexts where absolute paths are required (e.g., for external tools),
+# prepend with $(pwd) to create an absolute path
 THIS_DIR="$(dirname "${BASH_SOURCE[0]}")"
 
 # Only codesign if we are not on a pull request build.
@@ -73,7 +76,7 @@ if [[ "${BUILDKITE_PULL_REQUEST}" == "false" ]]; then
         rm -f dist-extras/is.exe
 
         echo "--- [windows] make exe"
-        codesign_script="$THIS_DIR/windows/codesign.sh"
+        codesign_script="$(pwd)/$THIS_DIR/windows/codesign.sh"
         iss_file="$THIS_DIR/windows/build-installer.iss"
 
         MSYS2_ARG_CONV_EXCL='*' ./dist-extras/inno/iscc.exe \
