@@ -15,7 +15,7 @@ buildkite-agent artifact download "${UPLOAD_FILENAME}.tar.gz" .
 
 # These are the extensions that we will always upload
 UPLOAD_EXTENSIONS=( "tar.gz" )
-THIS_DIR="$(dirname "${BASH_SOURCE[0]}")"
+THIS_DIR="$(realpath "$(dirname "${BASH_SOURCE[0]}")")"
 
 # Only codesign if we are not on a pull request build.
 # Pull request builds only upload unsigned tarballs.
