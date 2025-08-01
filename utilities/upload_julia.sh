@@ -123,6 +123,11 @@ wait_pids() {
     done
 }
 
+# Tell the AWS CLI not to contact the metadata service - we're probably not running
+# on AWS anyway, so trying would just waste time. But even if we are, it's not needed,
+# we provide credentials explicitly.
+export AWS_EC2_METADATA_DISABLED=true
+
 # First, upload our signed products to buildkite, for easy downloading
 echo "--- Upload products to buildkite"
 PIDS=()
