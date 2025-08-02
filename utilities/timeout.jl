@@ -17,6 +17,14 @@
 
 include(joinpath(@__DIR__, "proc_utils.jl"))
 
+# Check if --term option is passed
+use_sigterm = false
+args_to_pass = ARGS
+if length(ARGS) > 0 && ARGS[1] == "--term"
+    use_sigterm = true
+    args_to_pass = ARGS[2:end]
+end
+
 # Parse a time period such as "2h30m"
 function parse_time_period(period::AbstractString)
     unit_to_seconds = Dict(
@@ -48,7 +56,7 @@ kill_timeout = parse_time_period(get(ENV, "JL_KILL_TIMEOUT", "30m"))
 verbose_logs_dir = mktempdir()
 env2 = copy(ENV)
 env2["JULIA_TEST_VERBOSE_LOGS_DIR"] = verbose_logs_dir
-cmd = setenv(`$(ARGS)`, env2)
+cmd = setenv(`$(args_to_pass)`, env2)
 
 # Start our child process
 proc = run(cmd, (stdin, stdout, stderr); wait=false)
@@ -60,9 +68,86 @@ timer_task = @async begin
 
     # If the process is still running, ask it nicely to terminate
     if isopen(proc)
-        println(stderr, "\n\nProcess failed to exit within $(term_timeout)s, requesting termination and coredump (SIGQUIT) of PID $(proc_pid).")
-        kill(proc, Base.SIGQUIT)
-        println(stderr, "\n\nSent SIGQUIT to PID $(proc_pid).")
+        if use_sigterm
+            println(stderr, "\n\nProcess failed to exit within $(term_timeout)s, requesting termination (SIGTERM) of PID $(proc_pid).")
+            kill(proc, Base.SIGTERM)
+            println(stderr, "\n\nSent SIGTERM to PID $(proc_pid).")
+        else
+            println(stderr, "\n\nProcess failed to exit within $(term_timeout)s, requesting termination and coredump (SIGQUIT) of PID $(proc_pid).")
+            
+            # On Linux, recursively find and signal all descendant processes
+            if Sys.islinux()
+                # Function to recursively find all descendant PIDs
+                function get_all_descendants(pid)
+                    descendants = Int[]
+                    
+                    # Check all task subdirectories (including the main thread)
+                    task_dir = "/proc/$(pid)/task"
+                    if isdir(task_dir)
+                        for task in readdir(task_dir)
+                            children_file = joinpath(task_dir, task, "children")
+                            if isfile(children_file)
+                                try
+                                    children_str = read(children_file, String)
+                                    if !isempty(strip(children_str))
+                                        child_pids = parse.(Int, split(strip(children_str)))
+                                        for child in child_pids
+                                            if !(child in descendants)
+                                                # Recursively get descendants of this child
+                                                child_descendants = get_all_descendants(child)
+                                                append!(descendants, child_descendants)
+                                                push!(descendants, child)
+                                            end
+                                        end
+                                    end
+                                catch e
+                                    # Process/thread might have exited, ignore
+                                end
+                            end
+                        end
+                    end
+                    
+                    return unique(descendants)
+                end
+                
+                # Get all descendant PIDs
+                all_pids = get_all_descendants(proc_pid)
+                push!(all_pids, proc_pid)  # Add the root process at the end
+                
+                # Filter to only include actual processes (not threads)
+                # In Linux, a process has PID == TGID, while threads have PID != TGID
+                process_pids = filter(all_pids) do pid
+                    try
+                        status = read("/proc/$(pid)/status", String)
+                        # Extract Tgid from status file
+                        m = match(r"Tgid:\s*(\d+)", status)
+                        if m !== nothing
+                            tgid = parse(Int, m.captures[1])
+                            return pid == tgid  # True for processes, false for threads
+                        end
+                        return true  # If we can't determine, assume it's a process
+                    catch
+                        # Process might have exited
+                        return false
+                    end
+                end
+                
+                # Send SIGQUIT to all processes (leaf processes first, root last)
+                println(stderr, "\n\nSending SIGQUIT to $(length(process_pids)) processes...")
+                for pid in process_pids
+                    try
+                        ccall(:kill, Cint, (Cint, Cint), pid, Base.SIGQUIT)
+                        println(stderr, "Sent SIGQUIT to PID $(pid).")
+                    catch e
+                        # Process might have already exited
+                    end
+                end
+            else
+                # For non-Linux systems, just send SIGQUIT to the main process
+                kill(proc, Base.SIGQUIT)
+                println(stderr, "\n\nSent SIGQUIT to PID $(proc_pid).")
+            end
+        end
 
         # If the process doesn't stop after a further `kill_timeout`, force-kill it
         sleep(kill_timeout)
