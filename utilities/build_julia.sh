@@ -31,9 +31,9 @@ echo "--- Collect make options"
 MFLAGS=()
 
 # If we have the option, let's use `--output-sync`
-if ${MAKE} --help | grep output-sync >/dev/null 2>/dev/null; then
-    MFLAGS+=( "--output-sync" )
-fi
+#if ${MAKE} --help | grep output-sync >/dev/null 2>/dev/null; then
+#    MFLAGS+=( "--output-sync" )
+#fi
 
 # Always use this much parallelism
 MFLAGS+=( "-j${JULIA_CPU_THREADS}")
