@@ -29,6 +29,7 @@ steps:
           os: "linux"
           arch: "${ARCH?}"
         env:
+          JULIA_SHELL: "/bin/bash"
           # Receive some environment mappings from our templating engine
           TRIPLET: "${TRIPLET?}"
           MAKE_FLAGS: "${MAKE_FLAGS?}"
