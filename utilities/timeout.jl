@@ -40,19 +40,39 @@ function parse_time_period(period::AbstractString)
     return total_secs
 end
 
+parse_bool(str) = str == "true" ? true :
+                  str == "false" ? false :
+                  errror("Expected `true` or `false`, got `$str`")
 
 # Parse our timeouts
 term_timeout = parse_time_period(get(ENV, "JL_TERM_TIMEOUT", "2h"))
 kill_timeout = parse_time_period(get(ENV, "JL_KILL_TIMEOUT", "30m"))
+do_term = parse_bool(get(ENV, "JL_TERM_SIGTERM", "false"))
+do_detach = parse_bool(get(ENV, "JL_TERM_DETACH", "false"))
 
+if Sys.iswindows() && do_detach
+    error("JL_TERM_DETACH is not available on windows")
+end
+
+# Setup logs dir
 verbose_logs_dir = mktempdir()
 env2 = copy(ENV)
 env2["JULIA_TEST_VERBOSE_LOGS_DIR"] = verbose_logs_dir
 cmd = setenv(`$(ARGS)`, env2)
 
-# Start our child process
+# Prepare detach
+if do_detach
+    # TODO: Should this setpgid only rather than a full setsid?
+    cmd = detach(cmd)
+end
+
 proc = run(cmd, (stdin, stdout, stderr); wait=false)
-proc_pid = try getpid(proc) catch; "<unknown>" end
+proc_pid = try getpid(proc) catch e;
+    global do_detach = false
+    "<unknown>"
+end
+
+kill_proc_or_pgid(sig) = do_detach ? ccall(:kill, Cint, (Cpid_t, Cint), -proc_pid, sig) : kill(proc, sig)
 
 # Start a watchdog task
 timer_task = @async begin
@@ -60,16 +80,18 @@ timer_task = @async begin
 
     # If the process is still running, ask it nicely to terminate
     if isopen(proc)
-        println(stderr, "\n\nProcess failed to exit within $(term_timeout)s, requesting termination and coredump (SIGQUIT) of PID $(proc_pid).")
-        kill(proc, Base.SIGQUIT)
-        println(stderr, "\n\nSent SIGQUIT to PID $(proc_pid).")
+        pid_or_pgid = do_detach ? "PGID" : "PID"
+        signame = do_term ? "(SIGTERM)" : "and coredump (SIGQUIT)"
+        println(stderr, "\n\nProcess failed to exit within $(term_timeout)s, requesting termination $signame of $pid_or_pgid $(proc_pid).")
+        kill_proc_or_pgid(do_term ? Base.SIGTERM : Base.SIGQUIT)
+        println(stderr, "\n\nSent termination signal to $pid_or_pgid $(proc_pid).")
 
         # If the process doesn't stop after a further `kill_timeout`, force-kill it
         sleep(kill_timeout)
         if isopen(proc)
-            println(stderr, "\n\nProcess failed to cleanup within $(kill_timeout)s, force-killing (SIGKILL) PID $(proc_pid)!")
-            kill(proc, Base.SIGKILL)
-            println(stderr, "\n\nSent SIGKILL to PID $(proc_pid).")
+            println(stderr, "\n\nProcess failed to cleanup within $(kill_timeout)s, force-killing (SIGKILL) $pid_or_pgid $(proc_pid)!")
+            kill_proc_or_pgid(Base.SIGKILL)
+            println(stderr, "\n\nSent SIGKILL to $pid_or_pgid $(proc_pid).")
             exit(1)
         end
     end

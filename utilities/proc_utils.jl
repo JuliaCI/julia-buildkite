@@ -30,3 +30,4 @@ function get_bool_from_env(name::AbstractString, default_value::Bool)
 end
 
 const is_buildkite = get_bool_from_env("BUILDKITE", false)
+const Cpid_t = Int32

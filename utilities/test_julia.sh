@@ -49,6 +49,12 @@ export JULIA_TEST_IS_BASE_CI="true"
 unset JULIA_DEPOT_PATH
 unset JULIA_PKG_SERVER
 
+if [[ "${OS}" != "windows" ]]; then
+    # Tell timeout.jl to detach the process group, so we get core dumps from
+    # each process.
+    export JL_TERM_DETACH="true"
+fi
+
 # Make sure that temp files and temp directories are created in a location that is
 # backed by real storage, and not by a tmpfs, as some tests don't like that on Linux
 if [[ "${OS}" == "linux" ]]; then
