@@ -92,7 +92,7 @@ echo "Note: The log stream is filtered. [buildroot] replaces pwd $(pwd)"
 ${MAKE} "${MFLAGS[@]}" build-stats 2>&1 | sed "s|$(pwd)|[buildroot]|g"
 
 echo "--- Create build artifacts"
-${MAKE} "${MFLAGS[@]}" binary-dist
+${MAKE} debug "${MFLAGS[@]}" binary-dist
 
 # Rename the build artifact in case we want to name it differently, as is the case on `musl`.
 if [[ "${JULIA_BINARYDIST_FILENAME}.tar.gz" != "${UPLOAD_FILENAME}.tar.gz" ]]; then
