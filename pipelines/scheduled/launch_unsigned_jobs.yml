@@ -12,6 +12,24 @@
 # and only need to touch the webui configuration when we need to alter
 # something about the privileged steps.
 
+env:
+  DIFF_FILTER_TARGET_BRANCH: ""
+
+common:
+  - diff-filter-build_plugin: &diff-filter-build
+      https://github.com/fatteneder/diff-filter-buildkite-plugin#main:
+        name: "TRIGGER_BUILD"
+        ignore:
+          - "*.md"
+          - ".*"
+          - "julia.spdx.json"
+          - "CITATION.*"
+          - "typos.toml"
+        target_branch: "${DIFF_FILTER_TARGET_BRANCH?}"
+  - pr-labels_plugin: &pr-labels
+      sv-oss/github-pr-labels#v0.0.2:
+        publish-env-var: PULL_REQUEST_LABELS
+
 steps:
   - group: "Source Build"
     steps:
@@ -20,9 +38,15 @@ steps:
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
+          - *diff-filter-build
+          - *pr-labels
         commands: |
+          FORCE=$(test -n "$(echo $${PULL_REQUEST_LABELS} | grep -E "\bci-force-build\b")" && echo 1 || echo 0)
+          MERGED=$(test "$${BUILDKITE_PULL_REQUEST}" = "false" && echo 1 || echo 0)
+          BUILD=$(($${TRIGGER_BUILD} || $${FORCE} || $${MERGED}))
           GROUP="Source Build" \
               ALLOW_FAIL="false" \
+              BUILD="$${BUILD}" \
               bash .buildkite/utilities/arches_pipeline_upload.sh \
               .buildkite/pipelines/scheduled/platforms/build_linux.schedule.arches \
               .buildkite/pipelines/main/platforms/build_linux.yml
@@ -38,11 +62,16 @@ steps:
               version: "./.buildkite-external-version"
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
         commands: |
-          GROUP="Source Tests (Allow Fail)" \
-              ALLOW_FAIL="true" \
-              bash .buildkite/utilities/arches_pipeline_upload.sh \
-              .buildkite/pipelines/scheduled/platforms/test_linux.schedule.arches \
-              .buildkite/pipelines/main/platforms/test_linux.yml
+          FORCE=$(test -n "$(echo $${PULL_REQUEST_LABELS} | grep -E "\bci-force-build\b")" && echo 1 || echo 0)
+          MERGED=$(test "$${BUILDKITE_PULL_REQUEST}" = "false" && echo 1 || echo 0)
+          BUILD=$(($${TRIGGER_BUILD} || $${FORCE} || $${MERGED}))
+          if [[ $${BUILD} == 1 ]]; then
+            GROUP="Source Tests (Allow Fail)" \
+                ALLOW_FAIL="true" \
+                bash .buildkite/utilities/arches_pipeline_upload.sh \
+                .buildkite/pipelines/scheduled/platforms/test_linux.schedule.arches \
+                .buildkite/pipelines/main/platforms/test_linux.yml
+          fi
         agents:
           queue: "julia"
           os: "linux"
@@ -54,19 +83,27 @@ steps:
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
+          - *diff-filter-build
+          - *pr-labels
         commands: |
+          FORCE=$(test -n "$(echo $${PULL_REQUEST_LABELS} | grep -E "\bci-force-build\b")" && echo 1 || echo 0)
+          MERGED=$(test "$${BUILDKITE_PULL_REQUEST}" = "false" && echo 1 || echo 0)
+          BUILD=$(($${TRIGGER_BUILD} || $${FORCE} || $${MERGED}))
           GROUP="no_GPL" \
               ALLOW_FAIL="false" \
+              BUILD="$${BUILD}" \
               bash .buildkite/utilities/arches_pipeline_upload.sh \
               .buildkite/pipelines/scheduled/platforms/build_linux.no_gpl.arches \
               .buildkite/pipelines/main/platforms/build_linux.yml
           GROUP="no_GPL" \
               ALLOW_FAIL="false" \
+              BUILD="$${BUILD}" \
               bash .buildkite/utilities/arches_pipeline_upload.sh \
               .buildkite/pipelines/scheduled/platforms/build_macos.no_gpl.arches \
               .buildkite/pipelines/main/platforms/build_macos.yml
           GROUP="no_GPL" \
               ALLOW_FAIL="false" \
+              BUILD="$${BUILD}" \
               bash .buildkite/utilities/arches_pipeline_upload.sh \
               .buildkite/pipelines/scheduled/platforms/build_windows.no_gpl.arches \
               .buildkite/pipelines/main/platforms/build_windows.yml
