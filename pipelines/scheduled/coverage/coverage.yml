@@ -1,8 +1,8 @@
 steps:
   - group: "Coverage"
     steps:
-      - label: ":linux: coverage"
-        key:   "coverage"
+      - label: ":linux: coverage (x86_64)"
+        key:   "coverage-linux"
         if: (pipeline.slug == "julia-buildkite-scheduled") || (pipeline.slug == "julia-master-scheduled")
         plugins:
           - JuliaCI/external-buildkite#v1:
@@ -57,5 +57,111 @@ steps:
           os: "linux"
           arch: "x86_64"
         env:
+          # Receive cryptic token from parent job
+          BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET: ${BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET?}
+
+      - label: ":macos: coverage (aarch64)"
+        key:   "coverage-macos-aarch64"
+        if: (pipeline.slug == "julia-buildkite-scheduled") || (pipeline.slug == "julia-master-scheduled")
+        plugins:
+          - JuliaCI/external-buildkite#v1:
+              version: "./.buildkite-external-version"
+              repo_url: "https://github.com/JuliaCI/julia-buildkite"
+          - JuliaCI/julia#v1:
+              # Drop default "registries" directory, so it is not persisted from execution to execution
+              persist_depot_dirs: packages,artifacts,compiled
+              version: '1'
+          - JuliaCI/cryptic#v2:
+              variables:
+                - CODECOV_TOKEN="U2FsdGVkX19l0fhdBabbuiEdysyEabkJLRHfxm7CNRkuGbnwPV365sxxC7Czs/CVcws0N1oB4pVwALRRMe36oA=="
+                - COVERALLS_TOKEN="U2FsdGVkX19zopI0hMNzzi2UUOvNVFD8Y0iisFnO/ryVxU7Tit8ZEaeN+gxodRx4CosUUh192F1+q3dTMWRIvw=="
+        timeout_in_minutes: 720
+        commands: |
+          echo "--- Build Julia from source"
+          make -j$${JULIA_NUM_THREADS} JULIA_SYSIMG_BUILD_FLAGS="--code-coverage=all"
+
+          echo "--- Print Julia version info"
+          ./julia -e 'using InteractiveUtils; InteractiveUtils.versioninfo()'
+          ./julia -e '@info "" Sys.CPU_THREADS'
+          # this is necessary to make sure that the LibGit2 tests passes
+          git config --global init.defaultBranch master
+
+          echo "--- Run Julia tests in parallel with code coverage enabled"
+          export JULIA_NUM_THREADS=1
+          export JULIA_WORKER_TIMEOUT=1200 # 1200 seconds = 20 minutes
+          ./julia -e 'import Distributed; @info "" Distributed.worker_timeout()'
+          ./julia .buildkite/pipelines/scheduled/coverage/run_tests_parallel.jl
+
+          echo "--- Move the lcov files into the `./lcov_files` directory"
+          ls *.info
+          mkdir -p lcov_files
+          mv *.info lcov_files
+          ls lcov_files
+
+          echo "--- Upload lcov files"
+          tar -zcf lcov_files.tar.gz lcov_files/
+          buildkite-agent artifact upload lcov_files.tar.gz
+
+          echo "--- Process and upload coverage information"
+          ./julia .buildkite/pipelines/scheduled/coverage/upload_coverage.jl
+        agents:
+          queue: "julia"
+          os: "macos"
+          arch: "aarch64"
+        env:
+          JULIA_SHELL: "/bin/bash"
+          # Receive cryptic token from parent job
+          BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET: ${BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET?}
+
+      - label: ":windows: coverage (x86_64)"
+        key:   "coverage-windows-x86_64"
+        if: (pipeline.slug == "julia-buildkite-scheduled") || (pipeline.slug == "julia-master-scheduled")
+        plugins:
+          - JuliaCI/external-buildkite#v1:
+              version: "./.buildkite-external-version"
+              repo_url: "https://github.com/JuliaCI/julia-buildkite"
+          - JuliaCI/julia#v1:
+              # Drop default "registries" directory, so it is not persisted from execution to execution
+              persist_depot_dirs: packages,artifacts,compiled
+              version: '1'
+          - JuliaCI/cryptic#v2:
+              variables:
+                - CODECOV_TOKEN="U2FsdGVkX19l0fhdBabbuiEdysyEabkJLRHfxm7CNRkuGbnwPV365sxxC7Czs/CVcws0N1oB4pVwALRRMe36oA=="
+                - COVERALLS_TOKEN="U2FsdGVkX19zopI0hMNzzi2UUOvNVFD8Y0iisFnO/ryVxU7Tit8ZEaeN+gxodRx4CosUUh192F1+q3dTMWRIvw=="
+        timeout_in_minutes: 720
+        commands: |
+          echo "--- Build Julia from source"
+          make -j$${JULIA_NUM_THREADS} JULIA_SYSIMG_BUILD_FLAGS="--code-coverage=all"
+
+          echo "--- Print Julia version info"
+          ./julia -e 'using InteractiveUtils; InteractiveUtils.versioninfo()'
+          ./julia -e '@info "" Sys.CPU_THREADS'
+          # this is necessary to make sure that the LibGit2 tests passes
+          git config --global init.defaultBranch master
+
+          echo "--- Run Julia tests in parallel with code coverage enabled"
+          export JULIA_NUM_THREADS=1
+          export JULIA_WORKER_TIMEOUT=1200 # 1200 seconds = 20 minutes
+          ./julia -e 'import Distributed; @info "" Distributed.worker_timeout()'
+          ./julia .buildkite/pipelines/scheduled/coverage/run_tests_parallel.jl
+
+          echo "--- Move the lcov files into the `./lcov_files` directory"
+          ls *.info
+          mkdir -p lcov_files
+          mv *.info lcov_files
+          ls lcov_files
+
+          echo "--- Upload lcov files"
+          tar -zcf lcov_files.tar.gz lcov_files/
+          buildkite-agent artifact upload lcov_files.tar.gz
+
+          echo "--- Process and upload coverage information"
+          ./julia .buildkite/pipelines/scheduled/coverage/upload_coverage.jl
+        agents:
+          queue: "julia"
+          os: "windows"
+          arch: "x86_64"
+        env:
+          JULIA_SHELL: "/bin/bash"
           # Receive cryptic token from parent job
           BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET: ${BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET?}
