@@ -128,35 +128,41 @@ steps:
               variables:
                 - CODECOV_TOKEN="U2FsdGVkX19l0fhdBabbuiEdysyEabkJLRHfxm7CNRkuGbnwPV365sxxC7Czs/CVcws0N1oB4pVwALRRMe36oA=="
                 - COVERALLS_TOKEN="U2FsdGVkX19zopI0hMNzzi2UUOvNVFD8Y0iisFnO/ryVxU7Tit8ZEaeN+gxodRx4CosUUh192F1+q3dTMWRIvw=="
+          - docker#v3.13.0:
+              image: "juliapackaging/package-windows-x86_64:v7.10"
+              always-pull: true
+              command: |
+                bash -c "
+                echo '--- Build Julia from source' &&
+                make -j\$\${JULIA_NUM_THREADS} JULIA_SYSIMG_BUILD_FLAGS='--code-coverage=all' VERBOSE=1 &&
+                echo '--- Print Julia version info' &&
+                ./julia.exe -e 'using InteractiveUtils; InteractiveUtils.versioninfo()' &&
+                ./julia.exe -e '@info \"\" Sys.CPU_THREADS' &&
+                git config --global init.defaultBranch master &&
+                echo '--- Run Julia tests in parallel with code coverage enabled' &&
+                export JULIA_NUM_THREADS=1 &&
+                export JULIA_WORKER_TIMEOUT=1200 &&
+                ./julia.exe -e 'import Distributed; @info \"\" Distributed.worker_timeout()' &&
+                ./julia.exe .buildkite/pipelines/scheduled/coverage/run_tests_parallel.jl &&
+                echo '--- Move the lcov files into the ./lcov_files directory' &&
+                ls *.info &&
+                mkdir -p lcov_files &&
+                mv *.info lcov_files &&
+                ls lcov_files &&
+                echo '--- Upload lcov files' &&
+                tar -zcf lcov_files.tar.gz lcov_files/ &&
+                buildkite-agent artifact upload lcov_files.tar.gz &&
+                echo '--- Process and upload coverage information' &&
+                ./julia.exe .buildkite/pipelines/scheduled/coverage/upload_coverage.jl
+                "
+              propagate-environment: true
+              volumes:
+                # Mount buildkite-agent as well
+                - "C:\\buildkite-agent\\bin:C:\\buildkite-agent\\bin"
+              environment:
+                - "JULIA_CPU_THREADS"
+                - "BUILDKITE_AGENT_ACCESS_TOKEN"
         timeout_in_minutes: 720
-        commands: |
-          echo "--- Build Julia from source"
-          make -j$${JULIA_NUM_THREADS} JULIA_SYSIMG_BUILD_FLAGS="--code-coverage=all"
-
-          echo "--- Print Julia version info"
-          ./julia -e 'using InteractiveUtils; InteractiveUtils.versioninfo()'
-          ./julia -e '@info "" Sys.CPU_THREADS'
-          # this is necessary to make sure that the LibGit2 tests passes
-          git config --global init.defaultBranch master
-
-          echo "--- Run Julia tests in parallel with code coverage enabled"
-          export JULIA_NUM_THREADS=1
-          export JULIA_WORKER_TIMEOUT=1200 # 1200 seconds = 20 minutes
-          ./julia -e 'import Distributed; @info "" Distributed.worker_timeout()'
-          ./julia .buildkite/pipelines/scheduled/coverage/run_tests_parallel.jl
-
-          echo "--- Move the lcov files into the `./lcov_files` directory"
-          ls *.info
-          mkdir -p lcov_files
-          mv *.info lcov_files
-          ls lcov_files
-
-          echo "--- Upload lcov files"
-          tar -zcf lcov_files.tar.gz lcov_files/
-          buildkite-agent artifact upload lcov_files.tar.gz
-
-          echo "--- Process and upload coverage information"
-          ./julia .buildkite/pipelines/scheduled/coverage/upload_coverage.jl
         agents:
           queue: "julia"
           os: "windows"
