@@ -23,8 +23,8 @@ steps:
                 - COVERALLS_TOKEN="U2FsdGVkX19zopI0hMNzzi2UUOvNVFD8Y0iisFnO/ryVxU7Tit8ZEaeN+gxodRx4CosUUh192F1+q3dTMWRIvw=="
         timeout_in_minutes: 720
         commands: |
-          echo "--- Build Julia from source with --code-coverage=all"
-          make --output-sync -j$${JULIA_NUM_THREADS} JULIA_SYSIMG_BUILD_FLAGS="--code-coverage=all"
+          echo "--- Build Julia from source"
+          make --output-sync -j$${JULIA_NUM_THREADS}
 
           echo "--- Print Julia version info"
           ./julia -e 'using InteractiveUtils; InteractiveUtils.versioninfo()'
@@ -77,8 +77,8 @@ steps:
                 - COVERALLS_TOKEN="U2FsdGVkX19zopI0hMNzzi2UUOvNVFD8Y0iisFnO/ryVxU7Tit8ZEaeN+gxodRx4CosUUh192F1+q3dTMWRIvw=="
         timeout_in_minutes: 720
         commands: |
-          echo "--- Build Julia from source with --code-coverage=all"
-          make -j$${JULIA_NUM_THREADS} JULIA_SYSIMG_BUILD_FLAGS="--code-coverage=all"
+          echo "--- Build Julia from source"
+          make -j$${JULIA_NUM_THREADS}
 
           echo "--- Print Julia version info"
           ./julia -e 'using InteractiveUtils; InteractiveUtils.versioninfo()'
@@ -132,8 +132,8 @@ steps:
               image: "juliapackaging/package-windows-x86_64:v7.10"
               always-pull: true
               command: ["bash", "-c", "
-                echo '--- Build Julia from source with --code-coverage=all' &&
-                make -j$${JULIA_NUM_THREADS} JULIA_SYSIMG_BUILD_FLAGS='--code-coverage=all' VERBOSE=1 &&
+                echo '--- Build Julia from source' &&
+                make -j$${JULIA_NUM_THREADS} VERBOSE=1 &&
                 echo '--- Print Julia version info' &&
                 ./usr/bin/julia.exe -e 'using InteractiveUtils; InteractiveUtils.versioninfo()' &&
                 ./usr/bin/julia.exe -e '@info \"\" Sys.CPU_THREADS' &&
