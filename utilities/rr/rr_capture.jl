@@ -64,7 +64,7 @@ mktempdir(temp_parent_dir) do dir
     # version number, Pkg will always install the latest build number. If you need to
     # install a build number that is not the latest build number, you must provide the
     # commit instead of providing the version number.
-    Pkg.add(Pkg.PackageSpec(name = "rr_jll", version = "5.9.0", uuid = "e86bdf43-55f7-5ea2-9fd0-e7daa2c0f2b4"))
+    Pkg.add(Pkg.PackageSpec(name = "rr_jll", version = "5.9.0+1", uuid = "e86bdf43-55f7-5ea2-9fd0-e7daa2c0f2b4"))
     # Zstd_jll became a stdlib in Julia 1.13, so we can only use the shipped version
     if VERSION >= v"1.13.0-0"
         Pkg.add(Pkg.PackageSpec(name = "Zstd_jll", uuid = "3161d3a3-bdf6-5164-811a-617609db77b4"))
