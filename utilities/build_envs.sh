@@ -149,37 +149,39 @@ S3_BUCKET="${S3_BUCKET:-julialangnightlies}"
 S3_BUCKET_PREFIX="${S3_BUCKET_PREFIX:-bin}"
 
 # We generally upload to multiple upload targets
-UPLOAD_TARGETS=()
+CANONICAL_UPLOAD_TARGETS=() # The canonical, fully qualified, target and various julia-latest-* targets
+LEGACY_UPLOAD_TARGETS=()    # Legacy upload targets kept for compatibility with old URLs
+EPHEMERAL_UPLOAD_TARGETS=() # Pull request upload targets
 
 if [[ "${BUILDKITE_BRANCH}" == master ]] || [[ "${BUILDKITE_BRANCH}" == release-* ]] || [[ "${BUILDKITE_TAG:-}" == v* ]] || [[ "${BUILDKITE_PIPELINE_SLUG}" == "julia-buildkite" ]]; then
     # First, we have the canonical fully-specified upload target
-    UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/${ARCH?}/${MAJMIN?}/julia-${TAR_VERSION?}-${OS?}-${ARCH?}" )
+    CANONICAL_UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/${ARCH?}/${MAJMIN?}/julia-${TAR_VERSION?}-${OS?}-${ARCH?}" )
 
     # Next, we have the "majmin/latest" upload target
-    UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/${ARCH?}/${MAJMIN?}/julia-latest-${OS?}-${ARCH?}" )
+    CANONICAL_UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/${ARCH?}/${MAJMIN?}/julia-latest-${OS?}-${ARCH?}" )
 
     # The absolute latest upload target is only for if we're on the `master` branch
     if [[ "${BUILDKITE_BRANCH}" == "master" ]]; then
-        UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/${ARCH?}/julia-latest-${OS?}-${ARCH?}" )
+        CANONICAL_UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/${ARCH?}/julia-latest-${OS?}-${ARCH?}" )
     fi
 
     # Finally, for compatibility, we keep on uploading x86_64 and i686 targets to folders called `x64`
     # and `x86`, and ending in `-linux64` and `-linux32`, although I would very much like to stop doing that.
     if [[ "${ARCH}" == "x86_64" ]]; then
-        UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/x64/${MAJMIN?}/julia-${TAR_VERSION?}-${OS?}64" )
-        UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/x64/${MAJMIN?}/julia-latest-${OS?}64" )
+        LEGACY_UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/x64/${MAJMIN?}/julia-${TAR_VERSION?}-${OS?}64" )
+        LEGACY_UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/x64/${MAJMIN?}/julia-latest-${OS?}64" )
 
         # Only upload to absolute latest if we're on `master`
         if [[ "${BUILDKITE_BRANCH}" == "master" ]]; then
-            UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/x64/julia-latest-${OS?}64" )
+            LEGACY_UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/x64/julia-latest-${OS?}64" )
         fi
     elif [[ "${ARCH}" == "i686" ]]; then
-        UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/x86/${MAJMIN?}/julia-${TAR_VERSION?}-${OS?}32" )
-        UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/x86/${MAJMIN?}/julia-latest-${OS?}32" )
+        LEGACY_UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/x86/${MAJMIN?}/julia-${TAR_VERSION?}-${OS?}32" )
+        LEGACY_UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/x86/${MAJMIN?}/julia-latest-${OS?}32" )
 
         # Only upload to absolute latest if we're on `master`
         if [[ "${BUILDKITE_BRANCH}" == "master" ]]; then
-            UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/x86/julia-latest-${OS?}32" )
+            LEGACY_UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/x86/julia-latest-${OS?}32" )
         fi
     fi
 
@@ -209,21 +211,21 @@ if [[ "${BUILDKITE_BRANCH}" == master ]] || [[ "${BUILDKITE_BRANCH}" == release-
         fi
 
         # First, we have the canonical fully-specified upload target
-        UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${FOLDER_OS}/${FOLDER_ARCH}/${MAJMIN?}/julia-${TAR_VERSION?}-${SHORT_OS}${SHORT_ARCH}" )
+        LEGACY_UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${FOLDER_OS}/${FOLDER_ARCH}/${MAJMIN?}/julia-${TAR_VERSION?}-${SHORT_OS}${SHORT_ARCH}" )
 
         # Next, we have the "majmin/latest" upload target
-        UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${FOLDER_OS}/${FOLDER_ARCH}/${MAJMIN?}/julia-latest-${SHORT_OS}${SHORT_ARCH}" )
+        LEGACY_UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${FOLDER_OS}/${FOLDER_ARCH}/${MAJMIN?}/julia-latest-${SHORT_OS}${SHORT_ARCH}" )
 
         # If we're on `master` and we're uploading, we consider ourselves "absolute latest"
         if [[ "${BUILDKITE_BRANCH}" == "master" ]]; then
-            UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${FOLDER_OS}/${FOLDER_ARCH}/julia-latest-${SHORT_OS}${SHORT_ARCH}" )
+            LEGACY_UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${FOLDER_OS}/${FOLDER_ARCH}/julia-latest-${SHORT_OS}${SHORT_ARCH}" )
         fi
     fi
 fi
 
 # If we're a pull request build, upload to a special `-prXXXX` location
 if [[ "${BUILDKITE_PULL_REQUEST}" != "false" ]]; then
-    UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/${ARCH?}/julia-pr${BUILDKITE_PULL_REQUEST}-${OS?}-${ARCH?}" )
+    EPHEMERAL_UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/${ARCH?}/julia-pr${BUILDKITE_PULL_REQUEST}-${OS?}-${ARCH?}" )
 fi
 
 # This is the "main" filename that is used.  We technically don't need this for uploading,
@@ -236,8 +238,3 @@ echo "The short commit is:                     ${SHORT_COMMIT}"
 echo "Julia will be installed to:        ${JULIA_BINARY}"
 echo "Detected Julia version:            ${MAJMIN}  (${JULIA_VERSION})"
 echo "Detected build platform:           ${TRIPLET}  (${ARCH}, ${OS})"
-echo "Julia will be uploaded to:         s3://${UPLOAD_TARGETS[0]}.tar.gz"
-echo "With additional upload targets:"
-for UPLOAD_TARGET in "${UPLOAD_TARGETS[@]:1}"; do
-    echo " -> s3://${UPLOAD_TARGET}.tar.gz"
-done
