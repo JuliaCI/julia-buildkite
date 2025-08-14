@@ -25,6 +25,8 @@ steps:
               variables:
                 - AWS_ACCESS_KEY_ID="U2FsdGVkX184v87+NPs3j9r/JoIuOrYt4/Z4wnRdklnY17NP8C8AMZvWYLJfT9t1"
                 - AWS_SECRET_ACCESS_KEY="U2FsdGVkX1+qptnxR/Mo5jZdH8OQfflRPiQBEhjgZIiTpn8KNCJYh/Cb8xxaUWazlcM9ceOlo0InDubL+J8zdg=="
+                - R2_ACCESS_KEY_ID="U2FsdGVkX18HwnN9t7y7uYG17hD1HKNbIic0VkEXKK7fl583LSCVug1ZHFj4/ZzE7FKILpuk0ISnM4rZ7yaQcg=="
+                - R2_SECRET_ACCESS_KEY="U2FsdGVkX19gMi8SkWCcvn5/mIJNRduyyiRRX6IlYge8PowwT+vD+OIg1acIZhag8FnZn2y+tzj+4kk/3qkm/E6hMAcc8hia5rhch7fEeCpak5F/KiV5CLBEXI8s+aHx"
                 - AZURE_TENANT_ID="U2FsdGVkX1+c2HbeSTq1c0fEep5riO3+PSQCiovdRT5akVpyy5hC311cXUCUB+A7ivIezAdJ7oz3dt19t60iuw=="
                 - AZURE_CLIENT_ID="U2FsdGVkX195QeT0ywNdXSa2ctMb9DFXyFVo0zG0/GtZUw95PTycqSZ+qEwXZbRZhGxXjGMVzcP2XZ0f/OuNnQ=="
                 - AZURE_CLIENT_SECRET="U2FsdGVkX1/905nz82Iy5toukRXEO8QS2etwfFCocofgnpBB62wJRDrWClPCNEX6ICo0jQzgoSbwDr2+C1ETSA=="
