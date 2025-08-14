@@ -1,12 +1,10 @@
-empty!(Base.DEPOT_PATH)
-push!(Base.DEPOT_PATH, mktempdir(; cleanup = true))
+Base.DEPOT_PATH[1] = mktempdir(; cleanup = true)
 
 import Pkg
 import Logging
 import TOML
 
 Pkg.add(; name = "Coverage", uuid = "a2441757-f6aa-5fb2-8edb-039e3f45d037", version = "1")
-Pkg.precompile()
 
 import Coverage
 
