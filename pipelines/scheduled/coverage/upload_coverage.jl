@@ -129,7 +129,9 @@ filter!(fcs) do fc
     # Base files do not have a directory name, they are all implicitly paths
     # relative to the `base/` folder, so the only way to detect them is to
     # compare them against a list of files that exist within `base`:
-    fc.filename ∈ base_jl_files || occursin("/src/", fc.filename)
+    fc.filename ∈ base_jl_files || 
+        occursin("/src/", fc.filename) || 
+        occursin("Compiler/", fc.filename)  # Include Compiler module files
 end;
 
 # Exclude all stdlib JLLs (stdlibs of the form `stdlib/*_jll/`).
@@ -156,7 +158,10 @@ filter!(fcs) do fc
     all(x -> !startswith(fc.filename, x), external_stdlib_prefixes)
 end;
 
-filter!(fc -> (startswith(fc.filename, "base") || startswith(fc.filename, "stdlib")), fcs)
+# Include base, stdlib, and Compiler files
+filter!(fc -> (startswith(fc.filename, "base") || 
+               startswith(fc.filename, "stdlib") || 
+               startswith(fc.filename, "Compiler")), fcs)
 
 # This must be run to make sure all lines of code are hit.
 # See docstring for `Coverage.amend_coverage_from_src!``
