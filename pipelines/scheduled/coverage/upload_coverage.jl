@@ -129,13 +129,17 @@ end
 
 # Only include source code files. Exclude test files, benchmarking files, etc.
 filter!(fcs) do fc
+    # Normalize path separators for cross-platform compatibility
+    normalized_path = replace(fc.filename, '\\' => '/')
+
     # Base files do not have a directory name, they are all implicitly paths
     # relative to the `base/` folder, so the only way to detect them is to
     # compare them against a list of files that exist within `base`:
     fc.filename ∈ base_jl_files ||
-        occursin("/src/", fc.filename) ||
-        occursin("Compiler/", fc.filename)  # Include Compiler module files
-end;
+        occursin("/src/", normalized_path) ||
+        occursin("/Compiler/", normalized_path) || # Include Compiler files with full paths
+        startswith(normalized_path, "Compiler/")   # Include direct Compiler paths
+end
 
 @info "After filtering for source files: $(length(fcs))"
 
@@ -146,6 +150,16 @@ end;
 
 @info "After excluding JLLs: $(length(fcs))"
 
+# Debug: Check for Compiler files before normalization
+compiler_files_raw = filter(fcs) do fc
+    normalized_path = replace(fc.filename, '\\' => '/')
+    occursin("/Compiler/", normalized_path) || startswith(normalized_path, "Compiler/")
+end
+@info "Raw Compiler files found: $(length(compiler_files_raw))"
+if !isempty(compiler_files_raw)
+    @info "Sample raw Compiler paths: $(first(compiler_files_raw, min(3, length(compiler_files_raw))) .|> (fc -> fc.filename))"
+end
+
 fcs = Coverage.merge_coverage_counts(fcs)
 sort!(fcs; by = fc -> fc.filename);
 fcs = map(fcs) do fc
@@ -154,6 +168,19 @@ fcs = map(fcs) do fc
         new_name = "stdlib" * String(split(fc.filename, joinpath("stdlib", "v" * string(VERSION.major) * "." * string(VERSION.minor)))[end])
         return Coverage.FileCoverage(new_name, fc.source, fc.coverage)
     else
+        # Handle Compiler paths - normalize for cross-platform compatibility
+        normalized_path = replace(fc.filename, '\\' => '/')
+        if occursin("/Compiler/", normalized_path) || startswith(normalized_path, "Compiler/")
+            # Extract the Compiler portion using cross-platform approach
+            path_parts = split(normalized_path, '/')
+            compiler_idx = findfirst(x -> x == "Compiler", path_parts)
+            if compiler_idx !== nothing
+                # Reconstruct path from Compiler onwards
+                new_path_parts = path_parts[compiler_idx:end]
+                new_name = join(new_path_parts, "/")
+                return Coverage.FileCoverage(new_name, fc.source, fc.coverage)
+            end
+        end
         return fc
     end
 end
