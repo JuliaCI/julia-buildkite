@@ -104,6 +104,9 @@ end
 # Load coverage data
 fcs = Coverage.LCOV.readfolder("./lcov_files")
 
+# Debug: Log what we're starting with
+@info "Initial file count: $(length(fcs))"
+
 # This assumes we're run with a current working directory of a julia checkout
 base_jl_files = Set{String}()
 cd("base") do
@@ -129,15 +132,19 @@ filter!(fcs) do fc
     # Base files do not have a directory name, they are all implicitly paths
     # relative to the `base/` folder, so the only way to detect them is to
     # compare them against a list of files that exist within `base`:
-    fc.filename ∈ base_jl_files || 
-        occursin("/src/", fc.filename) || 
+    fc.filename ∈ base_jl_files ||
+        occursin("/src/", fc.filename) ||
         occursin("Compiler/", fc.filename)  # Include Compiler module files
 end;
+
+@info "After filtering for source files: $(length(fcs))"
 
 # Exclude all stdlib JLLs (stdlibs of the form `stdlib/*_jll/`).
 filter!(fcs) do fc
     !occursin(r"^stdlib\/[A-Za-z0-9]*?_jll\/", fc.filename)
 end;
+
+@info "After excluding JLLs: $(length(fcs))"
 
 fcs = Coverage.merge_coverage_counts(fcs)
 sort!(fcs; by = fc -> fc.filename);
@@ -158,15 +165,37 @@ filter!(fcs) do fc
     all(x -> !startswith(fc.filename, x), external_stdlib_prefixes)
 end;
 
+@info "After excluding external stdlibs: $(length(fcs))"
+
 # Include base, stdlib, and Compiler files
-filter!(fc -> (startswith(fc.filename, "base") || 
-               startswith(fc.filename, "stdlib") || 
+filter!(fc -> (startswith(fc.filename, "base") ||
+               startswith(fc.filename, "stdlib") ||
                startswith(fc.filename, "Compiler")), fcs)
+
+@info "After final filtering: $(length(fcs))"
 
 # This must be run to make sure all lines of code are hit.
 # See docstring for `Coverage.amend_coverage_from_src!``
 for fc in fcs
     Coverage.amend_coverage_from_src!(fc.coverage, fc.filename)
+end
+
+# Log detailed statistics about what we're uploading
+@info "Coverage file statistics:"
+base_files = filter(fc -> startswith(fc.filename, "base"), fcs)
+stdlib_files = filter(fc -> startswith(fc.filename, "stdlib"), fcs)
+compiler_files = filter(fc -> startswith(fc.filename, "Compiler"), fcs)
+
+@info "  Base files: $(length(base_files))"
+@info "  Stdlib files: $(length(stdlib_files))"
+@info "  Compiler files: $(length(compiler_files))"
+
+# Show sample files from each category for verification
+if !isempty(base_files)
+    @info "  Sample base files: $(first(base_files, min(3, length(base_files))) .|> (fc -> fc.filename))"
+end
+if !isempty(compiler_files)
+    @info "  Sample Compiler files: $(first(compiler_files, min(3, length(compiler_files))) .|> (fc -> fc.filename))"
 end
 
 print_coverage_summary.(fcs);
