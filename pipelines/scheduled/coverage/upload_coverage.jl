@@ -255,9 +255,9 @@ function upload_coverage(fcs)
         )
         push!(success_results, codecov_success)
         if codecov_success
-            @info "✅ Successfully uploaded to Codecov" flags=job_flags name=job_name
+            @info "Successfully uploaded to Codecov" flags=job_flags name=job_name
         else
-            @error "❌ Failed to upload to Codecov"
+            @error "Failed to upload to Codecov"
         end
     else
         @warn "CODECOV_TOKEN not found, skipping Codecov upload"
@@ -275,10 +275,10 @@ function upload_coverage(fcs)
         )
         push!(success_results, coveralls_success)
         if coveralls_success
-            @info "✅ Successfully uploaded to Coveralls (parallel mode)" job_flag=join(job_flags, "-")
-            @info "ℹ️  Remember to call finish_coveralls_parallel() after all parallel jobs complete"
+            @info "Successfully uploaded to Coveralls (parallel mode)" job_flag=join(job_flags, "-")
+            @info "Remember to call finish_coveralls_parallel() after all parallel jobs complete"
         else
-            @error "❌ Failed to upload to Coveralls"
+            @error "Failed to upload to Coveralls"
         end
     else
         @warn "COVERALLS_TOKEN not found, skipping Coveralls upload"
@@ -286,7 +286,7 @@ function upload_coverage(fcs)
 
     # Return overall success (at least one service succeeded)
     return !isempty(success_results) && any(success_results)
-end# Upload coverage
+end # Upload coverage
 upload_success = upload_coverage(fcs)
 
 if !upload_success

@@ -23,13 +23,13 @@ end
 try
     success = Coverage.finish_coveralls_parallel(token=coveralls_token)
     if success
-        @info "✅ Successfully signaled parallel job completion to Coveralls"
+        @info "Successfully signaled parallel job completion to Coveralls"
         exit(0)
     else
-        @error "❌ Failed to signal parallel completion"
+        @error "Failed to signal parallel completion"
         exit(1)
     end
 catch e
-    @error "❌ Error during parallel completion" exception=e
+    @error "Error during parallel completion" exception=e
     exit(1)
 end
