@@ -101,53 +101,7 @@ function buildkite_branch_and_commit()
     return (; branch, commit)
 end
 
-function codecov_buildkite_add_local_to_kwargs()
-    branch, commit = buildkite_branch_and_commit()
-    kwargs = Coverage.Codecov.set_defaults(
-        Dict();
-        branch,
-        commit,
-    )
-    return kwargs
-end
-
-function coveralls_buildkite_query_git_info()
-    branch, commit = buildkite_branch_and_commit()
-    remote_name  = "origin"
-    remote       = buildkite_env("BUILDKITE_REPO")
-    message      = buildkite_env("BUILDKITE_MESSAGE")
-    author_name  = buildkite_env(
-        "BUILDKITE_BUILD_AUTHOR",
-        "BUILDKITE_BUILD_CREATOR",
-        "",
-    )
-    author_email = buildkite_env(
-        "BUILDKITE_BUILD_AUTHOR_EMAIL",
-        "BUILDKITE_BUILD_CREATOR_EMAIL",
-        "",
-    )
-    remotes = [
-        Dict(
-            "name"  => remote_name,
-            "url"   => remote,
-        )
-    ]
-    head = Dict(
-        "id"                => commit,
-        "author_name"       => author_name,
-        "author_email"      => author_email,
-        "committer_name"    => author_name,
-        "committer_email"   => author_email,
-        "message"           => message,
-    )
-    git_info = Dict(
-        "branch"  => branch,
-        "remotes" => remotes,
-        "head"    => head,
-    )
-    return git_info
-end
-
+# Load coverage data
 fcs = Coverage.LCOV.readfolder("./lcov_files")
 
 # This assumes we're run with a current working directory of a julia checkout
@@ -213,24 +167,81 @@ end
 print_coverage_summary.(fcs);
 const total_cov_pct = print_coverage_summary(fcs, "Total").cov_pct
 
-let
-    git_info = coveralls_buildkite_query_git_info()
-    @info "" git_info
-    @info "" git_info["branch"]
-    @info "" git_info["head"]
+# Set up Buildkite-specific environment variables for coverage services
+function setup_buildkite_env()
+    branch, commit = buildkite_branch_and_commit()
 
-    # In order to upload to Coveralls, you need to have the `COVERALLS_TOKEN` environment variable defined.
-    Coverage.Coveralls.submit_local(fcs, git_info)
+    # Set environment variables that the coverage uploaders expect
+    ENV["CI"] = "true"
+    ENV["BUILDKITE"] = "true"
+    ENV["BUILDKITE_COMMIT"] = commit
+    ENV["BUILDKITE_BRANCH"] = branch
+
+    # For git info
+    ENV["BUILDKITE_BUILD_AUTHOR"] = buildkite_env(
+        "BUILDKITE_BUILD_AUTHOR",
+        "BUILDKITE_BUILD_CREATOR",
+        ""
+    )
+    ENV["BUILDKITE_BUILD_AUTHOR_EMAIL"] = buildkite_env(
+        "BUILDKITE_BUILD_AUTHOR_EMAIL",
+        "BUILDKITE_BUILD_CREATOR_EMAIL",
+        ""
+    )
+
+    @info "Set up Buildkite environment for coverage upload" branch commit
 end
 
-let
-    kwargs = codecov_buildkite_add_local_to_kwargs()
-    @info "" kwargs
+# Upload coverage using the modern API
+function upload_coverage(fcs)
+    setup_buildkite_env()
 
-    # In order to upload to Codecov, you need to have the `CODECOV_TOKEN` environment variable defined.
-    Coverage.Codecov.submit_generic(fcs, kwargs)
+    # Get tokens from environment
+    codecov_token = get(ENV, "CODECOV_TOKEN", nothing)
+    coveralls_token = get(ENV, "COVERALLS_TOKEN", nothing)
+
+    success_results = []
+
+    # Upload to Codecov if token is available
+    if codecov_token !== nothing
+        @info "Uploading to Codecov..."
+        codecov_success = Coverage.upload_to_codecov(fcs; token=codecov_token)
+        push!(success_results, codecov_success)
+        if codecov_success
+            @info "✅ Successfully uploaded to Codecov"
+        else
+            @error "❌ Failed to upload to Codecov"
+        end
+    else
+        @warn "CODECOV_TOKEN not found, skipping Codecov upload"
+    end
+
+    # Upload to Coveralls if token is available
+    if coveralls_token !== nothing
+        @info "Uploading to Coveralls..."
+        coveralls_success = Coverage.upload_to_coveralls(fcs; token=coveralls_token)
+        push!(success_results, coveralls_success)
+        if coveralls_success
+            @info "✅ Successfully uploaded to Coveralls"
+        else
+            @error "❌ Failed to upload to Coveralls"
+        end
+    else
+        @warn "COVERALLS_TOKEN not found, skipping Coveralls upload"
+    end
+
+    # Return overall success (at least one service succeeded)
+    return !isempty(success_results) && any(success_results)
 end
 
+# Upload coverage
+upload_success = upload_coverage(fcs)
+
+if !upload_success
+    @warn "Coverage upload failed for all services"
+end
+
+# Smoke test for coverage percentage
 const smoke_test_pct = 60
 
 if total_cov_pct < smoke_test_pct
@@ -241,3 +252,5 @@ if total_cov_pct < smoke_test_pct
     @error msg total_cov_pct
     throw(ErrorException(msg))
 end
+
+@info "Coverage upload completed" total_coverage_pct=total_cov_pct upload_success=upload_success
