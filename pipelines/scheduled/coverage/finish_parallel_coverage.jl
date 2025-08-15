@@ -20,8 +20,11 @@ if coveralls_token === nothing
 end
 
 # Signal that all parallel jobs are complete
+build_number = get(ENV, "BUILDKITE_BUILD_NUMBER", nothing)
+@info "Finishing parallel Coveralls uploads" build_number=build_number
+
 try
-    success = Coverage.finish_coveralls_parallel(token=coveralls_token)
+    success = Coverage.finish_coveralls_parallel(token=coveralls_token, build_num=build_number)
     if success
         @info "Successfully signaled parallel job completion to Coveralls"
         exit(0)

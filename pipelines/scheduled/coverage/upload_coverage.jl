@@ -244,6 +244,8 @@ function upload_coverage(fcs)
     build_id = get(ENV, "BUILDKITE_BUILD_NUMBER", nothing)
     job_name = "coverage-$(platform)"
 
+    @info "Coverage upload configuration" platform=platform job_flags=job_flags build_id=build_id job_name=job_name
+
     # Upload to Codecov if token is available
     if codecov_token !== nothing
         @info "Uploading to Codecov with parallel job support..."
@@ -271,7 +273,8 @@ function upload_coverage(fcs)
         coveralls_success = Coverage.upload_to_coveralls(fcs;
             token=coveralls_token,
             parallel=true,
-            job_flag=join(job_flags, "-")
+            job_flag=join(job_flags, "-"),
+            build_num=build_id
         )
         push!(success_results, coveralls_success)
         if coveralls_success
