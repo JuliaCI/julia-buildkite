@@ -184,9 +184,12 @@ steps:
         key: "coverage-finalize"
         if: (pipeline.slug == "julia-buildkite-scheduled") || (pipeline.slug == "julia-master-scheduled")
         depends_on:
-          - "coverage-linux"
-          - "coverage-macos-aarch64"
-          - "coverage-windows-x86_64"
+          - step: "coverage-linux"
+            allow_failure: true
+          - step: "coverage-macos-aarch64"
+            allow_failure: true
+          - step: "coverage-windows-x86_64"
+            allow_failure: true
         plugins:
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"
