@@ -179,3 +179,33 @@ steps:
           JULIA_SHELL: "/bin/bash"
           # Receive cryptic token from parent job
           BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET: ${BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET?}
+
+      - label: ":white_check_mark: Finalize parallel coverage"
+        key: "coverage-finalize"
+        if: (pipeline.slug == "julia-buildkite-scheduled") || (pipeline.slug == "julia-master-scheduled")
+        depends_on:
+          - "coverage-linux"
+          - "coverage-macos-aarch64"
+          - "coverage-windows-x86_64"
+        plugins:
+          - JuliaCI/external-buildkite#v1:
+              version: "./.buildkite-external-version"
+              repo_url: "https://github.com/JuliaCI/julia-buildkite"
+          - JuliaCI/julia#v1:
+              # Drop default "registries" directory, so it is not persisted from execution to execution
+              persist_depot_dirs: packages,artifacts,compiled
+              version: '1'
+          - JuliaCI/cryptic#v2:
+              variables:
+                - COVERALLS_TOKEN="U2FsdGVkX19zopI0hMNzzi2UUOvNVFD8Y0iisFnO/ryVxU7Tit8ZEaeN+gxodRx4CosUUh192F1+q3dTMWRIvw=="
+        timeout_in_minutes: 10
+        commands: |
+          echo "--- Signal completion of parallel coverage uploads"
+          ./julia .buildkite/pipelines/scheduled/coverage/finish_parallel_coverage.jl
+        agents:
+          queue: "julia"
+          os: "linux"
+          arch: "x86_64"
+        env:
+          # Receive cryptic token from parent job
+          BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET: ${BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET?}

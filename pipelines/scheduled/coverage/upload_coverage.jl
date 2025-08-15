@@ -226,7 +226,7 @@ function setup_buildkite_env()
     @info "Set up Buildkite environment for coverage upload" branch commit
 end
 
-# Upload coverage using the modern API
+# Upload coverage using the modern API with parallel job support
 function upload_coverage(fcs)
     setup_buildkite_env()
 
@@ -236,13 +236,26 @@ function upload_coverage(fcs)
 
     success_results = []
 
+    # Determine job characteristics for parallel uploads
+    platform = Sys.islinux() ? "linux" : Sys.isapple() ? "macos" : "windows"
+    job_flags = [platform, "coverage"]
+
+    # Use build number to group parallel uploads
+    build_id = get(ENV, "BUILDKITE_BUILD_NUMBER", nothing)
+    job_name = "coverage-$(platform)"
+
     # Upload to Codecov if token is available
     if codecov_token !== nothing
-        @info "Uploading to Codecov..."
-        codecov_success = Coverage.upload_to_codecov(fcs; token=codecov_token)
+        @info "Uploading to Codecov with parallel job support..."
+        codecov_success = Coverage.upload_to_codecov(fcs;
+            token=codecov_token,
+            flags=job_flags,
+            name=job_name,
+            build_id=build_id
+        )
         push!(success_results, codecov_success)
         if codecov_success
-            @info "✅ Successfully uploaded to Codecov"
+            @info "✅ Successfully uploaded to Codecov" flags=job_flags name=job_name
         else
             @error "❌ Failed to upload to Codecov"
         end
@@ -252,11 +265,18 @@ function upload_coverage(fcs)
 
     # Upload to Coveralls if token is available
     if coveralls_token !== nothing
-        @info "Uploading to Coveralls..."
-        coveralls_success = Coverage.upload_to_coveralls(fcs; token=coveralls_token)
+        @info "Uploading to Coveralls with parallel job support..."
+        # For Coveralls, set parallel=true so it waits for other jobs
+        # A separate job would need to call finish_coveralls_parallel() later
+        coveralls_success = Coverage.upload_to_coveralls(fcs;
+            token=coveralls_token,
+            parallel=true,
+            job_flag=join(job_flags, "-")
+        )
         push!(success_results, coveralls_success)
         if coveralls_success
-            @info "✅ Successfully uploaded to Coveralls"
+            @info "✅ Successfully uploaded to Coveralls (parallel mode)" job_flag=join(job_flags, "-")
+            @info "ℹ️  Remember to call finish_coveralls_parallel() after all parallel jobs complete"
         else
             @error "❌ Failed to upload to Coveralls"
         end
@@ -266,9 +286,7 @@ function upload_coverage(fcs)
 
     # Return overall success (at least one service succeeded)
     return !isempty(success_results) && any(success_results)
-end
-
-# Upload coverage
+end# Upload coverage
 upload_success = upload_coverage(fcs)
 
 if !upload_success

@@ -17,6 +17,7 @@ steps:
                     - .buildkite/pipelines/scheduled/coverage/coverage.yml
                     - .buildkite/pipelines/scheduled/coverage/run_tests_parallel.jl
                     - .buildkite/pipelines/scheduled/coverage/upload_coverage.jl
+                    - .buildkite/pipelines/scheduled/coverage/finish_coveralls_parallel.jl
                 # Launch the upload jobs
                 - pipeline: .buildkite/pipelines/scheduled/launch_upload_jobs.yml
                   signature_file: .buildkite/pipelines/scheduled/launch_upload_jobs.yml.signature
