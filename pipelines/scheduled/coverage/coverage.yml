@@ -211,7 +211,7 @@ steps:
         timeout_in_minutes: 10
         commands: |
           echo "--- Signal completion of parallel coverage uploads"
-          ./julia .buildkite/pipelines/scheduled/coverage/finish_parallel_coverage.jl
+          julia .buildkite/pipelines/scheduled/coverage/finish_parallel_coverage.jl
         agents:
           queue: "julia"
           os: "linux"
