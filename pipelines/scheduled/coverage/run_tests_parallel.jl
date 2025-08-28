@@ -9,9 +9,15 @@ const ncores = Sys.CPU_THREADS
 @info "" Sys.CPU_THREADS
 @info "" ncores
 
-script = """
-    Base.runtests(["all", "--skip", "Pkg"]; ncores = $(ncores))
-"""
+script = if Sys.iswindows()
+    """
+        Base.runtests(["all", "--skip", "Pkg", "Profile", "cmdlineargs"]; ncores = $(ncores))
+    """
+else
+    """
+        Base.runtests(["all", "--skip", "Pkg"]; ncores = $(ncores))
+    """
+end
 
 cmd = `$(Base.julia_cmd()) --code-coverage=lcov-%p.info -e $(script)`
 
