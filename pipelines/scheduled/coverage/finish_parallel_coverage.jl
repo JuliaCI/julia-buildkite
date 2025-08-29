@@ -6,7 +6,7 @@ Base.DEPOT_PATH[1] = mktempdir(; cleanup = true)
 import Pkg
 import Logging
 
-Pkg.add(; name = "Coverage", uuid = "a2441757-f6aa-5fb2-8edb-039e3f45d037", rev = "ib/modernize")
+Pkg.add(; name = "Coverage", uuid = "a2441757-f6aa-5fb2-8edb-039e3f45d037", version = "1")
 
 import Coverage
 
