@@ -21,22 +21,22 @@ steps:
               variables:
                 - CODECOV_TOKEN="U2FsdGVkX19l0fhdBabbuiEdysyEabkJLRHfxm7CNRkuGbnwPV365sxxC7Czs/CVcws0N1oB4pVwALRRMe36oA=="
                 - COVERALLS_TOKEN="U2FsdGVkX19zopI0hMNzzi2UUOvNVFD8Y0iisFnO/ryVxU7Tit8ZEaeN+gxodRx4CosUUh192F1+q3dTMWRIvw=="
-        timeout_in_minutes: 720
+        timeout_in_minutes: 420
         commands: |
           echo "--- Build Julia from source"
           make --output-sync -j$${JULIA_NUM_THREADS}
 
           echo "--- Print Julia version info"
-          ./julia -e 'using InteractiveUtils; InteractiveUtils.versioninfo()'
-          ./julia -e '@info "" Sys.CPU_THREADS'
+          ./julia --color=yes -e 'using InteractiveUtils; InteractiveUtils.versioninfo()'
+          ./julia --color=yes -e '@info "" Sys.CPU_THREADS'
           # this is necessary to make sure that the LibGit2 tests passes
           git config --global init.defaultBranch master
 
           echo "--- Run Julia tests in parallel with code coverage enabled"
           export JULIA_NUM_THREADS=1
           export JULIA_WORKER_TIMEOUT=1200 # 1200 seconds = 20 minutes
-          ./julia -e 'import Distributed; @info "" Distributed.worker_timeout()'
-          ./julia .buildkite/pipelines/scheduled/coverage/run_tests_parallel.jl
+          ./julia --color=yes -e 'import Distributed; @info "" Distributed.worker_timeout()'
+          ./julia --color=yes .buildkite/pipelines/scheduled/coverage/run_tests_parallel.jl
 
           echo "--- Move the lcov files into the `./lcov_files` directory"
           ls *.info
@@ -49,7 +49,7 @@ steps:
           buildkite-agent artifact upload lcov_files.tar.gz
 
           echo "--- Process and upload coverage information"
-          ./julia .buildkite/pipelines/scheduled/coverage/upload_coverage.jl
+          ./julia --color=yes .buildkite/pipelines/scheduled/coverage/upload_coverage.jl
         agents:
           queue: "julia"
           # Only run on `sandbox.jl` machines (not `docker`-isolated ones) since we need nestable sandboxing
@@ -59,6 +59,8 @@ steps:
         env:
           # Receive cryptic token from parent job
           BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET: ${BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET?}
+          # Set build number for Coveralls parallel mode
+          COVERALLS_SERVICE_NUMBER: ${BUILDKITE_BUILD_NUMBER}
 
       - label: ":macos: coverage (aarch64)"
         key:   "coverage-macos-aarch64"
@@ -75,22 +77,22 @@ steps:
               variables:
                 - CODECOV_TOKEN="U2FsdGVkX19l0fhdBabbuiEdysyEabkJLRHfxm7CNRkuGbnwPV365sxxC7Czs/CVcws0N1oB4pVwALRRMe36oA=="
                 - COVERALLS_TOKEN="U2FsdGVkX19zopI0hMNzzi2UUOvNVFD8Y0iisFnO/ryVxU7Tit8ZEaeN+gxodRx4CosUUh192F1+q3dTMWRIvw=="
-        timeout_in_minutes: 720
+        timeout_in_minutes: 420
         commands: |
           echo "--- Build Julia from source"
           make -j$${JULIA_NUM_THREADS}
 
           echo "--- Print Julia version info"
-          ./julia -e 'using InteractiveUtils; InteractiveUtils.versioninfo()'
-          ./julia -e '@info "" Sys.CPU_THREADS'
+          ./julia --color=yes -e 'using InteractiveUtils; InteractiveUtils.versioninfo()'
+          ./julia --color=yes -e '@info "" Sys.CPU_THREADS'
           # this is necessary to make sure that the LibGit2 tests passes
           git config --global init.defaultBranch master
 
           echo "--- Run Julia tests in parallel with code coverage enabled"
           export JULIA_NUM_THREADS=1
           export JULIA_WORKER_TIMEOUT=1200 # 1200 seconds = 20 minutes
-          ./julia -e 'import Distributed; @info "" Distributed.worker_timeout()'
-          ./julia .buildkite/pipelines/scheduled/coverage/run_tests_parallel.jl
+          ./julia --color=yes -e 'import Distributed; @info "" Distributed.worker_timeout()'
+          ./julia --color=yes .buildkite/pipelines/scheduled/coverage/run_tests_parallel.jl
 
           echo "--- Move the lcov files into the `./lcov_files` directory"
           ls *.info
@@ -103,7 +105,7 @@ steps:
           buildkite-agent artifact upload lcov_files.tar.gz
 
           echo "--- Process and upload coverage information"
-          ./julia .buildkite/pipelines/scheduled/coverage/upload_coverage.jl
+          ./julia --color=yes .buildkite/pipelines/scheduled/coverage/upload_coverage.jl
         agents:
           queue: "julia"
           os: "macos"
@@ -112,6 +114,8 @@ steps:
           JULIA_SHELL: "/bin/bash"
           # Receive cryptic token from parent job
           BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET: ${BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET?}
+          # Set build number for Coveralls parallel mode
+          COVERALLS_SERVICE_NUMBER: ${BUILDKITE_BUILD_NUMBER}
 
       - label: ":windows: coverage (x86_64)"
         key:   "coverage-windows-x86_64"
@@ -135,14 +139,14 @@ steps:
                 echo '--- Build Julia from source' &&
                 make -j$${JULIA_NUM_THREADS} VERBOSE=1 &&
                 echo '--- Print Julia version info' &&
-                ./usr/bin/julia.exe -e 'using InteractiveUtils; InteractiveUtils.versioninfo()' &&
-                ./usr/bin/julia.exe -e '@info \"\" Sys.CPU_THREADS' &&
+                ./usr/bin/julia.exe --color=yes -e 'using InteractiveUtils; InteractiveUtils.versioninfo()' &&
+                ./usr/bin/julia.exe --color=yes -e '@info \"\" Sys.CPU_THREADS' &&
                 git config --global init.defaultBranch master &&
                 echo '--- Run Julia tests in parallel with code coverage enabled' &&
                 export JULIA_NUM_THREADS=1 &&
                 export JULIA_WORKER_TIMEOUT=1200 &&
-                ./usr/bin/julia.exe -e 'import Distributed; @info \"\" Distributed.worker_timeout()' &&
-                ./usr/bin/julia.exe .buildkite/pipelines/scheduled/coverage/run_tests_parallel.jl &&
+                ./usr/bin/julia.exe --color=yes -e 'import Distributed; @info \"\" Distributed.worker_timeout()' &&
+                ./usr/bin/julia.exe --color=yes .buildkite/pipelines/scheduled/coverage/run_tests_parallel.jl &&
                 echo '--- Move the lcov files into the ./lcov_files directory' &&
                 ls *.info &&
                 mkdir -p lcov_files &&
@@ -152,7 +156,7 @@ steps:
                 tar -zcf lcov_files.tar.gz lcov_files/ &&
                 buildkite-agent artifact upload lcov_files.tar.gz &&
                 echo '--- Process and upload coverage information' &&
-                ./usr/bin/julia.exe .buildkite/pipelines/scheduled/coverage/upload_coverage.jl
+                ./usr/bin/julia.exe --color=yes .buildkite/pipelines/scheduled/coverage/upload_coverage.jl
                 "]
               propagate-environment: true
               volumes:
@@ -170,7 +174,8 @@ steps:
                 - "BUILDKITE_BUILD_CREATOR_EMAIL"
                 - "CODECOV_TOKEN"
                 - "COVERALLS_TOKEN"
-        timeout_in_minutes: 720
+                - "BUILDKITE_BUILD_NUMBER"
+        timeout_in_minutes: 420
         agents:
           queue: "julia"
           os: "windows"
@@ -179,3 +184,40 @@ steps:
           JULIA_SHELL: "/bin/bash"
           # Receive cryptic token from parent job
           BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET: ${BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET?}
+          # Set build number for Coveralls parallel mode
+          COVERALLS_SERVICE_NUMBER: ${BUILDKITE_BUILD_NUMBER}
+
+      - label: "Finalize parallel coverage"
+        key: "coverage-finalize"
+        if: (pipeline.slug == "julia-buildkite-scheduled") || (pipeline.slug == "julia-master-scheduled")
+        depends_on:
+          - step: "coverage-linux"
+            allow_failure: true
+          - step: "coverage-macos-aarch64"
+            allow_failure: true
+          - step: "coverage-windows-x86_64"
+            allow_failure: true
+        plugins:
+          - JuliaCI/external-buildkite#v1:
+              version: "./.buildkite-external-version"
+              repo_url: "https://github.com/JuliaCI/julia-buildkite"
+          - JuliaCI/julia#v1:
+              # Drop default "registries" directory, so it is not persisted from execution to execution
+              persist_depot_dirs: packages,artifacts,compiled
+              version: '1'
+          - JuliaCI/cryptic#v2:
+              variables:
+                - COVERALLS_TOKEN="U2FsdGVkX19zopI0hMNzzi2UUOvNVFD8Y0iisFnO/ryVxU7Tit8ZEaeN+gxodRx4CosUUh192F1+q3dTMWRIvw=="
+        timeout_in_minutes: 10
+        commands: |
+          echo "--- Signal completion of parallel coverage uploads"
+          julia --color=yes .buildkite/pipelines/scheduled/coverage/finish_parallel_coverage.jl
+        agents:
+          queue: "julia"
+          os: "linux"
+          arch: "x86_64"
+        env:
+          # Receive cryptic token from parent job
+          BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET: ${BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET?}
+          # Set build number for Coveralls parallel mode
+          COVERALLS_SERVICE_NUMBER: ${BUILDKITE_BUILD_NUMBER}
