@@ -83,8 +83,8 @@ function buildkite_env(name::String)
 end
 
 function buildkite_env(name_1::String, name_2::String, default::String)
-    value_1 = String(strip(ENV[name_1]))
-    value_2 = String(strip(ENV[name_2]))
+    value_1 = String(strip(get(ENV, name_1, "")))
+    value_2 = String(strip(get(ENV, name_2, "")))
     !isempty(value_1) && return value_1
     !isempty(value_2) && return value_2
     return default
