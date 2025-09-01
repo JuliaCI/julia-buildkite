@@ -10,7 +10,6 @@ steps:
           - docker#v3.13.0:
               image: "juliapackaging/package-windows-${DOCKER_ARCH?}:${DOCKER_TAG?}"
               always-pull: true
-              command: ["bash", ".buildkite/utilities/build_julia.sh"]
               propagate-environment: true
               volumes:
                 # Mount buildkite-agent as well
@@ -22,6 +21,7 @@ steps:
                 - "JULIA_CPU_THREADS"
                 # Have to include this for `buildkite-agent` to work:
                 - "BUILDKITE_AGENT_ACCESS_TOKEN"
+        command: "IF ${BUILD?} == 1 bash .buildkite/utilities/build_julia.sh"
         timeout_in_minutes: ${TIMEOUT?}
         soft_fail: ${ALLOW_FAIL?}
         agents:

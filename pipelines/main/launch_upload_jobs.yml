@@ -1,5 +1,23 @@
 # This file launches upload jobs that wait upon previous jobs, then upload their artifacts to S3
 
+env:
+  DIFF_FILTER_TARGET_BRANCH: ""
+
+common:
+  - diff-filter-build_plugin: &diff-filter-build
+      https://github.com/fatteneder/diff-filter-buildkite-plugin#main:
+        name: "TRIGGER_BUILD"
+        ignore:
+          - "*.md"
+          - ".*"
+          - "julia.spdx.json"
+          - "CITATION.*"
+          - "typos.toml"
+        target_branch: "${DIFF_FILTER_TARGET_BRANCH?}"
+  - pr-labels_plugin: &pr-labels
+      sv-oss/github-pr-labels#v0.0.2:
+        publish-env-var: PULL_REQUEST_LABELS
+
 steps:
   - group: "Upload"
     steps:
@@ -18,46 +36,52 @@ steps:
               #    that this script doesn't suddenly break when a new patch release of Julia
               #    is released.
               version: '1.7.3'
+          - *diff-filter-build
+          - *pr-labels
         commands: |
           # Explicitly pass along the cryptic token to child pipelines
           export BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET
           export ALLOW_FAIL="false"
-
-          ##### Launch `upload_*` jobs to store tarballs into S3 once tests are done
-          ### Linux:
-          # Regular Linux upload jobs:
-          GROUP="Upload" \
-              bash .buildkite/utilities/arches_pipeline_upload.sh \
-              .buildkite/pipelines/main/platforms/upload_linux.arches \
-              .buildkite/pipelines/main/platforms/upload_linux.yml
-          # PowerPC Linux upload jobs, which we only run for Julia prior to 1.12:
-          GROUP="Upload" \
-              julia .buildkite/pipelines/main/platforms/launch_powerpc.jl \
-              .buildkite/pipelines/main/platforms/upload_linux.powerpc.arches \
-              .buildkite/pipelines/main/platforms/upload_linux.yml
-          ### macOS:
-          GROUP="Upload" \
-              bash .buildkite/utilities/arches_pipeline_upload.sh \
-              .buildkite/pipelines/main/platforms/upload_macos.arches \
-              .buildkite/pipelines/main/platforms/upload_macos.yml
-          ### FreeBSD:
-          GROUP="Upload" \
-              bash .buildkite/utilities/arches_pipeline_upload.sh \
-              .buildkite/pipelines/main/platforms/upload_freebsd.arches \
-              .buildkite/pipelines/main/platforms/upload_freebsd.yml
-          ### Windows:
-          GROUP="Upload" \
-              bash .buildkite/utilities/arches_pipeline_upload.sh \
-              .buildkite/pipelines/main/platforms/upload_windows.arches \
-              .buildkite/pipelines/main/platforms/upload_windows.yml
+          FORCE=$(test -n "$(echo $${PULL_REQUEST_LABELS} | grep -E "\bci-force-build\b")" && echo 1 || echo 0)
+          MERGED=$(test "$${BUILDKITE_PULL_REQUEST}" = "false" && echo 1 || echo 0)
+          BUILD=$(($${TRIGGER_BUILD} || $${FORCE} || $${MERGED}))
+          if [[ $${BUILD} == 1 ]]; then
+            ##### Launch `upload_*` jobs to store tarballs into S3 once tests are done
+            ### Linux:
+            # Regular Linux upload jobs:
+            GROUP="Upload" \
+                bash .buildkite/utilities/arches_pipeline_upload.sh \
+                .buildkite/pipelines/main/platforms/upload_linux.arches \
+                .buildkite/pipelines/main/platforms/upload_linux.yml
+            # PowerPC Linux upload jobs, which we only run for Julia prior to 1.12:
+            GROUP="Upload" \
+                julia .buildkite/pipelines/main/platforms/launch_powerpc.jl \
+                .buildkite/pipelines/main/platforms/upload_linux.powerpc.arches \
+                .buildkite/pipelines/main/platforms/upload_linux.yml
+            ### macOS:
+            GROUP="Upload" \
+                bash .buildkite/utilities/arches_pipeline_upload.sh \
+                .buildkite/pipelines/main/platforms/upload_macos.arches \
+                .buildkite/pipelines/main/platforms/upload_macos.yml
+            ### FreeBSD:
+            GROUP="Upload" \
+                bash .buildkite/utilities/arches_pipeline_upload.sh \
+                .buildkite/pipelines/main/platforms/upload_freebsd.arches \
+                .buildkite/pipelines/main/platforms/upload_freebsd.yml
+            ### Windows:
+            GROUP="Upload" \
+                bash .buildkite/utilities/arches_pipeline_upload.sh \
+                .buildkite/pipelines/main/platforms/upload_windows.arches \
+                .buildkite/pipelines/main/platforms/upload_windows.yml
 
           ### Upload test results.json files to buildkite
-          for OS in linux linux.i686 macos freebsd windows; do \
-              GROUP="Upload" \
-                bash .buildkite/utilities/arches_pipeline_upload.sh \
-                .buildkite/pipelines/main/platforms/test_$${OS}.arches \
-                .buildkite/pipelines/main/misc/upload_buildkite_results.yml
-          done
+            for OS in linux macos freebsd windows; do \
+                GROUP="Upload" \
+                  bash .buildkite/utilities/arches_pipeline_upload.sh \
+                  .buildkite/pipelines/main/platforms/upload_$${OS}.arches \
+                  .buildkite/pipelines/main/misc/upload_buildkite_results.yml
+            done
+          fi
 
           # Launch doctest deploy job
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/deploy_docs.yml
@@ -79,17 +103,24 @@ steps:
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
+          - *diff-filter-build
+          - *pr-labels
         commands: |
           # Explicitly pass along the cryptic token to child pipelines
           export BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET
+          FORCE=$(test -n "$(echo $${PULL_REQUEST_LABELS} | grep -E "\bci-force-build\b")" && echo 1 || echo 0)
+          MERGED=$(test "$${BUILDKITE_PULL_REQUEST}" = "false" && echo 1 || echo 0)
+          BUILD=$(($${TRIGGER_BUILD} || $${FORCE} || $${MERGED}))
 
           export ALLOW_FAIL="true"
 
-          # Launch Linux allowed-to-fail upload jobs
-          GROUP="Allow Fail (Upload)" \
-              bash .buildkite/utilities/arches_pipeline_upload.sh \
-              .buildkite/pipelines/main/platforms/upload_linux.soft_fail.arches \
-              .buildkite/pipelines/main/platforms/upload_linux.yml
+          if [[ $${BUILD} == 1 ]]; then
+            # Launch Linux allowed-to-fail upload jobs
+            GROUP="Allow Fail (Upload)" \
+                bash .buildkite/utilities/arches_pipeline_upload.sh \
+                .buildkite/pipelines/main/platforms/upload_linux.soft_fail.arches \
+                .buildkite/pipelines/main/platforms/upload_linux.yml
+          fi
 
           # Don't share this with buildkite's env display
           unset BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET

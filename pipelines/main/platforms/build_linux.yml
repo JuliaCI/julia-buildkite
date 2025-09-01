@@ -21,7 +21,11 @@ steps:
                 - "/cache/repos:/cache/repos"
         timeout_in_minutes: ${TIMEOUT?}
         soft_fail: ${ALLOW_FAIL?}
-        commands: "bash .buildkite/utilities/build_julia.sh"
+        commands: |
+          # always build on x86_64-linux-gnu so that we can at least build docs
+          if [[ ${BUILD?} == 1 || "${TRIPLET?}" == "x86_64-linux-gnu" ]]; then
+            bash .buildkite/utilities/build_julia.sh
+          fi
         agents:
           queue: "julia"
           # Only run on `sandbox.jl` machines (not `docker`-isolated ones) since we need nestable sandboxing
