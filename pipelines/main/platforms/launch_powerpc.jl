@@ -18,7 +18,8 @@ const yaml_pipeline_file = ARGS[2]
 const cmd = `bash ".buildkite/utilities/arches_pipeline_upload.sh" "$(arches_file)" "$(yaml_pipeline_file)"`
 
 const parsed_julia_version = parse_version_file()
-const should_include_powerpc_builds = parsed_julia_version < v"1.12-"
+# const should_include_powerpc_builds = parsed_julia_version < v"1.12-" # TODO: Uncomment when finished debugging
+const should_include_powerpc_builds = true # TODO: Delete this line when finished debugging
 
 if should_include_powerpc_builds
     @info "Including PowerPC builds, because Julia is < 1.12" should_include_powerpc_builds parsed_julia_version
