@@ -137,8 +137,8 @@ filter!(fcs) do fc
     # compare them against a list of files that exist within `base`:
     fc.filename ∈ base_jl_files ||
         occursin("/src/", normalized_path) ||
-        occursin("/Compiler/", normalized_path) || # Include Compiler files with full paths
-        startswith(normalized_path, "Compiler/")   # Include direct Compiler paths
+        (occursin("/Compiler/", normalized_path) && occursin("/Compiler/src/", normalized_path)) || # Include only Compiler/src files with full paths
+        (startswith(normalized_path, "Compiler/") && occursin("Compiler/src/", normalized_path))   # Include only direct Compiler/src paths
 end
 
 @info "After filtering for source files: $(length(fcs))"
@@ -153,11 +153,12 @@ end;
 # Debug: Check for Compiler files before normalization
 compiler_files_raw = filter(fcs) do fc
     normalized_path = replace(fc.filename, '\\' => '/')
-    occursin("/Compiler/", normalized_path) || startswith(normalized_path, "Compiler/")
+    (occursin("/Compiler/", normalized_path) && occursin("/Compiler/src/", normalized_path)) ||
+    (startswith(normalized_path, "Compiler/") && occursin("Compiler/src/", normalized_path))
 end
-@info "Raw Compiler files found: $(length(compiler_files_raw))"
+@info "Raw Compiler/src files found: $(length(compiler_files_raw))"
 if !isempty(compiler_files_raw)
-    @info "Sample raw Compiler paths: $(first(compiler_files_raw, min(3, length(compiler_files_raw))) .|> (fc -> fc.filename))"
+    @info "Sample raw Compiler/src paths: $(first(compiler_files_raw, min(3, length(compiler_files_raw))) .|> (fc -> fc.filename))"
 end
 
 fcs = Coverage.merge_coverage_counts(fcs)
@@ -168,9 +169,10 @@ fcs = map(fcs) do fc
         new_name = "stdlib" * String(split(fc.filename, joinpath("stdlib", "v" * string(VERSION.major) * "." * string(VERSION.minor)))[end])
         return Coverage.FileCoverage(new_name, fc.source, fc.coverage)
     else
-        # Handle Compiler paths - normalize for cross-platform compatibility
+        # Handle Compiler paths - normalize for cross-platform compatibility, only include src
         normalized_path = replace(fc.filename, '\\' => '/')
-        if occursin("/Compiler/", normalized_path) || startswith(normalized_path, "Compiler/")
+        if (occursin("/Compiler/", normalized_path) && occursin("/Compiler/src/", normalized_path)) ||
+           (startswith(normalized_path, "Compiler/") && occursin("Compiler/src/", normalized_path))
             # Extract the Compiler portion using cross-platform approach
             path_parts = split(normalized_path, '/')
             compiler_idx = findfirst(x -> x == "Compiler", path_parts)
@@ -194,10 +196,10 @@ end;
 
 @info "After excluding external stdlibs: $(length(fcs))"
 
-# Include base, stdlib, and Compiler files
+# Include base, stdlib, and Compiler/src files only
 filter!(fc -> (startswith(fc.filename, "base") ||
                startswith(fc.filename, "stdlib") ||
-               startswith(fc.filename, "Compiler")), fcs)
+               (startswith(fc.filename, "Compiler") && occursin("Compiler/src/", fc.filename))), fcs)
 
 @info "After final filtering: $(length(fcs))"
 
@@ -211,18 +213,18 @@ end
 @info "Coverage file statistics:"
 base_files = filter(fc -> startswith(fc.filename, "base"), fcs)
 stdlib_files = filter(fc -> startswith(fc.filename, "stdlib"), fcs)
-compiler_files = filter(fc -> startswith(fc.filename, "Compiler"), fcs)
+compiler_src_files = filter(fc -> startswith(fc.filename, "Compiler") && occursin("Compiler/src/", fc.filename), fcs)
 
 @info "  Base files: $(length(base_files))"
 @info "  Stdlib files: $(length(stdlib_files))"
-@info "  Compiler files: $(length(compiler_files))"
+@info "  Compiler/src files: $(length(compiler_src_files))"
 
 # Show sample files from each category for verification
 if !isempty(base_files)
     @info "  Sample base files: $(first(base_files, min(3, length(base_files))) .|> (fc -> fc.filename))"
 end
-if !isempty(compiler_files)
-    @info "  Sample Compiler files: $(first(compiler_files, min(3, length(compiler_files))) .|> (fc -> fc.filename))"
+if !isempty(compiler_src_files)
+    @info "  Sample Compiler/src files: $(first(compiler_src_files, min(3, length(compiler_src_files))) .|> (fc -> fc.filename))"
 end
 
 print_coverage_summary.(fcs);
