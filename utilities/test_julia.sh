@@ -161,7 +161,7 @@ fi
 # Begin with "+++" => Expand test group by default
 echo "+++ Run the Julia test suite"
 # set -e; requires us using if to check the exit status
-if ${JULIA_CMD_FOR_TESTS:?} -e "Base.runtests(\"${TESTS:?}\"; ncores = ${NCORES_FOR_TESTS:?})"; then
+if ${JULIA_CMD_FOR_TESTS:?} --color=yes -e "Base.runtests(\"${TESTS:?}\"; ncores = ${NCORES_FOR_TESTS:?})"; then
   exitVal=0
 else
   exitVal=1
