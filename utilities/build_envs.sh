@@ -129,6 +129,28 @@ else
 fi
 export TAR_VERSION
 
+# Get all external stdlib names
+EXTERNAL_STDLIB_NAMES=""
+for version_file in stdlib/*.version; do
+    if [[ -f "$version_file" ]]; then
+        stdlib_name=$(basename "$version_file" .version)
+        EXTERNAL_STDLIB_NAMES="$EXTERNAL_STDLIB_NAMES $stdlib_name"
+    fi
+done
+export EXTERNAL_STDLIB_NAMES
+
+# Detect changed stdlib .version files for conditional testing
+CHANGED_STDLIB_VERSIONS=""
+if changed_stdlib_version_files=$(git diff --name-only "$(git merge-base HEAD origin/main)" | grep -E '^stdlib/.*\.version$' 2>/dev/null || true); then
+    if [[ -n "$changed_stdlib_version_files" ]]; then
+        for file in $changed_stdlib_version_files; do
+            stdlib_name=$(basename "$file" .version)
+            CHANGED_STDLIB_VERSIONS="$CHANGED_STDLIB_VERSIONS $stdlib_name"
+        done
+    fi
+fi
+export CHANGED_STDLIB_VERSIONS
+
 
 # Build the filename that we'll upload as, and get the filename that will be built
 # These are not the same in situations such as `musl`, where the build system doesn't

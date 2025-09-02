@@ -127,6 +127,29 @@ else
     exit 1
 fi
 
+# Determine which external stdlib tests to skip based on branch and version file changes
+EXTERNAL_STDLIB_SKIP_LIST=()
+
+# Check branch type
+branch="${BUILDKITE_BRANCH:-unknown}"
+if [[ "$branch" == release-* ]] || [[ "$branch" == backports-release-* ]]; then
+    echo "On important branch '$branch': running all external stdlib tests"
+else
+    # Skip all external stdlibs that aren't in CHANGED_STDLIB_VERSIONS
+    for stdlib_name in ${EXTERNAL_STDLIB_NAMES}; do
+        if [[ "${CHANGED_STDLIB_VERSIONS:-}" != *"$stdlib_name"* ]]; then
+            EXTERNAL_STDLIB_SKIP_LIST+=("$stdlib_name")
+        fi
+    done
+
+    if [[ -n "${CHANGED_STDLIB_VERSIONS:-}" ]]; then
+        echo "Skipping external stdlib tests for: ${EXTERNAL_STDLIB_SKIP_LIST[*]}"
+    fi
+fi
+
+# Add external stdlibs to skip to the main skip list
+TESTS_TO_SKIP+=("${EXTERNAL_STDLIB_SKIP_LIST[@]}")
+
 # Build our `TESTS` string
 # `--ci` asserts that networking is available
 if [[ "${#TESTS_TO_SKIP[@]}" -gt 0 ]]; then
@@ -146,6 +169,9 @@ echo "OPENBLAS_NUM_THREADS is:   ${OPENBLAS_NUM_THREADS:?}"
 echo "TESTS is:                  ${TESTS:?}"
 echo "USE_RR is:                 ${USE_RR-}"
 echo "JL_TERM_TIMEOUT is:        ${JL_TERM_TIMEOUT}"
+if [[ "${#EXTERNAL_STDLIB_SKIP_LIST[@]}" -gt 0 ]]; then
+    echo "EXTERNAL_STDLIBS_SKIPPED:  ${EXTERNAL_STDLIB_SKIP_LIST[*]}"
+fi
 
 # Show our core dump file pattern and size limit if we're going to be recording them
 if [[ -z "${USE_RR-}" ]]; then
