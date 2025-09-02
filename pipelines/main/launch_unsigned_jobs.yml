@@ -188,7 +188,7 @@ steps:
               .buildkite/pipelines/main/platforms/test_linux.soft_fail.arches \
               .buildkite/pipelines/main/platforms/test_linux.yml
           # PowerPC (only for Julia prior to 1.12):
-          GROUP="Test" \
+          GROUP="Allow Fail" \
               julia .buildkite/pipelines/main/platforms/launch_powerpc.jl \
               .buildkite/pipelines/main/platforms/test_linux.powerpc.soft_fail.arches \
               .buildkite/pipelines/main/platforms/test_linux.yml
