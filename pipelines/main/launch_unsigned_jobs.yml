@@ -84,7 +84,8 @@ steps:
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/doctest.yml
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/pdf_docs/build_pdf_docs.yml
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/embedding.yml
-          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/trimming.yml
+          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/trimming_linux.yml
+          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/trimming_windows.yml
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/llvmpasses.yml
           # buildkite-agent pipeline upload .buildkite/pipelines/main/misc/whitespace.yml # Currently runs in GitHub Actions instead of Buildkite
 
