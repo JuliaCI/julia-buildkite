@@ -21,7 +21,7 @@ steps:
               variables:
                 - CODECOV_TOKEN="U2FsdGVkX19l0fhdBabbuiEdysyEabkJLRHfxm7CNRkuGbnwPV365sxxC7Czs/CVcws0N1oB4pVwALRRMe36oA=="
                 - COVERALLS_TOKEN="U2FsdGVkX19zopI0hMNzzi2UUOvNVFD8Y0iisFnO/ryVxU7Tit8ZEaeN+gxodRx4CosUUh192F1+q3dTMWRIvw=="
-        timeout_in_minutes: 420
+        timeout_in_minutes: 360 # 6h
         commands: |
           echo "--- Build Julia from source"
           make --output-sync -j$${JULIA_NUM_THREADS}
@@ -77,7 +77,7 @@ steps:
               variables:
                 - CODECOV_TOKEN="U2FsdGVkX19l0fhdBabbuiEdysyEabkJLRHfxm7CNRkuGbnwPV365sxxC7Czs/CVcws0N1oB4pVwALRRMe36oA=="
                 - COVERALLS_TOKEN="U2FsdGVkX19zopI0hMNzzi2UUOvNVFD8Y0iisFnO/ryVxU7Tit8ZEaeN+gxodRx4CosUUh192F1+q3dTMWRIvw=="
-        timeout_in_minutes: 420
+        timeout_in_minutes: 300 # 5h
         commands: |
           echo "--- Build Julia from source"
           make -j$${JULIA_NUM_THREADS}
@@ -177,7 +177,7 @@ steps:
                 - "CODECOV_TOKEN"
                 - "COVERALLS_TOKEN"
                 - "BUILDKITE_BUILD_NUMBER"
-        timeout_in_minutes: 420
+        timeout_in_minutes: 540 # 9h
         agents:
           queue: "julia"
           os: "windows"
