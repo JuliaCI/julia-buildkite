@@ -3,7 +3,7 @@ steps:
     steps:
       - label: ":linux: coverage (x86_64)"
         key:   "coverage-linux"
-        if: (pipeline.slug == "julia-buildkite-scheduled") || (pipeline.slug == "julia-master-scheduled")
+        if: (pipeline.slug == "julia-buildkite-scheduled") || (pipeline.slug == "julia-master-scheduled") || (build.pull_request.labels includes "needs full CI")
         plugins:
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"
@@ -64,7 +64,7 @@ steps:
 
       - label: ":macos: coverage (aarch64)"
         key:   "coverage-macos-aarch64"
-        if: (pipeline.slug == "julia-buildkite-scheduled") || (pipeline.slug == "julia-master-scheduled")
+        if: (pipeline.slug == "julia-buildkite-scheduled") || (pipeline.slug == "julia-master-scheduled") || (build.pull_request.labels includes "needs full CI")
         plugins:
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"
@@ -119,7 +119,7 @@ steps:
 
       - label: ":windows: coverage (x86_64)"
         key:   "coverage-windows-x86_64"
-        if: (pipeline.slug == "julia-buildkite-scheduled") || (pipeline.slug == "julia-master-scheduled")
+        if: (pipeline.slug == "julia-buildkite-scheduled") || (pipeline.slug == "julia-master-scheduled") || (build.pull_request.labels includes "needs full CI")
         plugins:
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"
@@ -191,7 +191,7 @@ steps:
 
       - label: "Finalize parallel coverage"
         key: "coverage-finalize"
-        if: (pipeline.slug == "julia-buildkite-scheduled") || (pipeline.slug == "julia-master-scheduled")
+        if: (pipeline.slug == "julia-buildkite-scheduled") || (pipeline.slug == "julia-master-scheduled") || (build.pull_request.labels includes "needs full CI")
         depends_on:
           - step: "coverage-linux"
             allow_failure: true
