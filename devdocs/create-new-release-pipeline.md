@@ -1,6 +1,8 @@
-# New Julia releases
+# Steps to do every time Julia does a feature freeze
 
-## 1. Create the new Buildkite "pipeline" for the Julia release
+These steps need to be performed every time Julia does a feature freeze. For this document, we'll use as an example the new minor version `1.2345`.
+
+## 1. Create the new Buildkite "pipeline" named `julia-release-1.2345`
 
 1. Go to https://buildkite.com/julialang
 2. In the top-right-hand corner, click on the white "New Pipeline" button.
@@ -16,20 +18,20 @@
         - `[ALL USERS] Base Julia CI (build and read)`
         - `Base Julia CI (Slack notifications)`
 4. At the bottom of the page, click on the green "Create Pipeline" button.
-5. Go to https://buildkite.com/julialang/julia-release-1-dot-9 and click on the white "Edit steps" button.
+5. Go to https://buildkite.com/julialang/julia-release-1-dot-2345 and click on the white "Edit steps" button.
 6. Delete ALL text in the text box.
 7. Into the text box, paste the exact contents from the folllowing file: https://github.com/JuliaCI/julia-buildkite/blob/main/pipelines/main/0_webui.yml
 8. Click on the white "Save Steps" button.
-9. Go to https://buildkite.com/julialang/julia-release-1-dot-9 and click on the white "Pipeline Settings" (or just "Settings") button in the top-right-hand corner.
+9. Go to https://buildkite.com/julialang/julia-release-1-dot-2345 and click on the white "Pipeline Settings" (or just "Settings") button in the top-right-hand corner.
 10. In the left-hand side, under "Pipeline Settings", click on "General". Then, scroll down to the bottom of the page. In the "Pipeline Management" section, click on the white "Make Pipeline Public" button. If you are asked for confirmation, click on the green "Make Pipeline Public" button to confirm your decision.
-11. Go to https://buildkite.com/julialang/julia-release-1-dot-9 and click on the white "Pipeline Settings" (or just "Settings") button in the top-right-hand corner.
+11. Go to https://buildkite.com/julialang/julia-release-1-dot-2345 and click on the white "Pipeline Settings" (or just "Settings") button in the top-right-hand corner.
 12. In the left-hand side, under "Pipeline Settings", click on "Builds". Then, in the "Build Skipping" section, do the following actions:
     - Step i: Make sure that the "Skip Intermediate Builds" checkbox IS checked.
     - Step ii: Make sure that the "Cancel Intermediate Builds" checkbox IS checked.
     - Step iii: Under "Skip Intermediate Builds", in the text box, enter the following text: `!master !main !release-*`
     - Step iv: Under "Cancel Intermediate Builds", in the text box, enter the following text: `!master !main !release-*`
     - Step v: Click on the green "Save Build Skipping" button.
-13. Go to https://buildkite.com/julialang/julia-release-1-dot-9 and click on the white "Pipeline Settings" (or just "Settings") button in the top-right-hand corner.
+13. Go to https://buildkite.com/julialang/julia-release-1-dot-2345 and click on the white "Pipeline Settings" (or just "Settings") button in the top-right-hand corner.
 14. In the left-hand side, under "Pipeline Settings", click on "GitHub". Then, in the "Branch Limiting" section, do the following actions:
     - Step i: For "Branch Filter Pattern", enter the following text: `release-1.2345 v1.2345.*`
     - Step ii: Click on the green "Save Branch Limiting" button.
@@ -47,7 +49,7 @@
     - Step xi: Make sure that the checkbox for "Create a status for each job" is NOT selected.
     - Step xii: Make sure that the checkbox for "Separate statuses for pull requests" is NOT selected.
     - Step xiii: At the bottom of the page, click on the green "Save GitHub Settings" button.
-16. Go to https://buildkite.com/julialang/julia-release-1-dot-9 and click on the white "Pipeline Settings" button.
+16. Go to https://buildkite.com/julialang/julia-release-1-dot-2345 and click on the white "Pipeline Settings" button.
 17. In the left-hand side, under "Pipeline Settings", click on "Teams". Then do the following actions:
     - Step i: Next to "Base Julia CI (Slack notifications)", click on the text `Full Access` and change it to `Read Only`.
     - Step ii: Next to "[ALL USERS] Base Julia CI (build & read)", click on the text `Full Access` and change it to `Build & Read`.
@@ -55,4 +57,4 @@
 ## 2. Create the new branch in this repo (the `JuliaCI/julia-buildkite` repo), and start using it
 
 1. Create a new branch in **this repo** (the `JuliaCI/julia-buildkite` repo) named `release-julia-1.2345`.
-2. Make a PR to the `JuliaLang/julia` repo to edit the `.buildkite-external-version` file, to change the contents from `main` to `release-julia-1.2345`. Until that PR is merged, Buildkite won't actually be using the `release-julia-1.2345` branch in this repo.
+2. Make a PR to the `JuliaLang/julia` repo to edit the [`.buildkite-external-version` file](https://github.com/JuliaLang/julia/blob/master/.buildkite-external-version), to change the contents from `main` to `release-julia-1.2345`. Until that PR is merged, Buildkite won't actually be using the `release-julia-1.2345` branch in this repo.
