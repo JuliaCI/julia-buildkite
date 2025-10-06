@@ -2,7 +2,7 @@
 
 These steps need to be performed every time Julia does a feature freeze. For this document, we'll use as an example the new minor version `1.2345`.
 
-## Table of contents
+Table of contents:
 
 1. Create the new branch in this repo (the `JuliaCI/julia-buildkite` repo), and start using it
 2. Create the new Buildkite "pipeline" named `julia-release-1.2345`
