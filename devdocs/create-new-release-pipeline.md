@@ -63,5 +63,3 @@ Table of contents:
 17. In the left-hand side, under "Pipeline Settings", click on "Teams". Then do the following actions:
     - Step i: Next to "Base Julia CI (Slack notifications)", click on the text `Full Access` and change it to `Read Only`.
     - Step ii: Next to "[ALL USERS] Base Julia CI (build & read)", click on the text `Full Access` and change it to `Build & Read`.
-
-
