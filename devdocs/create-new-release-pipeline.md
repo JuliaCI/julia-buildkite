@@ -2,7 +2,17 @@
 
 These steps need to be performed every time Julia does a feature freeze. For this document, we'll use as an example the new minor version `1.2345`.
 
-## 1. Create the new Buildkite "pipeline" named `julia-release-1.2345`
+## Table of contents
+
+1. Create the new branch in this repo (the `JuliaCI/julia-buildkite` repo), and start using it
+2. Create the new Buildkite "pipeline" named `julia-release-1.2345`
+
+## 1. Create the new branch in this repo (the `JuliaCI/julia-buildkite` repo), and start using it
+
+1. Create a new branch in **this repo** (the `JuliaCI/julia-buildkite` repo) named `release-julia-1.2345`.
+2. Make a PR to the `JuliaLang/julia` repo to edit the [`.buildkite-external-version` file](https://github.com/JuliaLang/julia/blob/master/.buildkite-external-version), to change the contents from `main` to `release-julia-1.2345`. Until that PR is merged, Buildkite won't actually be using the `release-julia-1.2345` branch in this repo.
+
+## 2. Create the new Buildkite "pipeline" named `julia-release-1.2345`
 
 1. Go to https://buildkite.com/julialang
 2. In the top-right-hand corner, click on the white "New Pipeline" button.
@@ -54,7 +64,4 @@ These steps need to be performed every time Julia does a feature freeze. For thi
     - Step i: Next to "Base Julia CI (Slack notifications)", click on the text `Full Access` and change it to `Read Only`.
     - Step ii: Next to "[ALL USERS] Base Julia CI (build & read)", click on the text `Full Access` and change it to `Build & Read`.
 
-## 2. Create the new branch in this repo (the `JuliaCI/julia-buildkite` repo), and start using it
 
-1. Create a new branch in **this repo** (the `JuliaCI/julia-buildkite` repo) named `release-julia-1.2345`.
-2. Make a PR to the `JuliaLang/julia` repo to edit the [`.buildkite-external-version` file](https://github.com/JuliaLang/julia/blob/master/.buildkite-external-version), to change the contents from `main` to `release-julia-1.2345`. Until that PR is merged, Buildkite won't actually be using the `release-julia-1.2345` branch in this repo.
