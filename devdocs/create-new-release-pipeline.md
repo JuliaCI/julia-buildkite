@@ -10,7 +10,7 @@ Table of contents:
 ## 1. Create the new branch in this repo (the `JuliaCI/julia-buildkite` repo), and start using it
 
 1. Create a new branch in **this repo** (the `JuliaCI/julia-buildkite` repo) named `release-julia-1.2345`.
-2. Make a PR to the `JuliaLang/julia` repo to edit the [`.buildkite-external-version` file](https://github.com/JuliaLang/julia/blob/master/.buildkite-external-version), to change the contents from `main` to `release-julia-1.2345`. Until that PR is merged, Buildkite won't actually be using the `release-julia-1.2345` branch in this repo.
+2. Make a PR to the `JuliaLang/julia` repo to edit the [`.buildkite-external-version` file](https://github.com/JuliaLang/julia/blob/master/.buildkite-external-version), to change the contents from `main` to `release-julia-1.2345`. Make that PR against the **backports branch** (`backports-release-1.2345`) in the `JuliaLang/julia` repo. Until that PR is merged, Buildkite won't actually be using the `release-julia-1.2345` branch in this repo.
 
 ## 2. Create the new Buildkite "pipeline" named `julia-release-1.2345`
 
