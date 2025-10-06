@@ -1,7 +1,11 @@
+# New Julia releases
+
+## 1. Create the new Buildkite "pipeline" for the Julia release
+
 1. Go to https://buildkite.com/julialang
 2. In the top-right-hand corner, click on the white "New Pipeline" button.
 3. You are now on a page that says "New Pipeline". Fill in the fields as follows:
-    - Name: `julia-release-1.9`
+    - Name: `julia-release-1.2345`
     - Description: `https://github.com/JuliaLang/julia`
     - Git Repository:
         - Step i. Click on the dropdown that says "Any account", and click on `JuliaLang`.
@@ -27,12 +31,12 @@
     - Step v: Click on the green "Save Build Skipping" button.
 13. Go to https://buildkite.com/julialang/julia-release-1-dot-9 and click on the white "Pipeline Settings" (or just "Settings") button in the top-right-hand corner.
 14. In the left-hand side, under "Pipeline Settings", click on "GitHub". Then, in the "Branch Limiting" section, do the following actions:
-    - Step i: For "Branch Filter Pattern", enter the following text: `release-1.9 v1.9.*`
+    - Step i: For "Branch Filter Pattern", enter the following text: `release-1.2345 v1.2345.*`
     - Step ii: Click on the green "Save Branch Limiting" button.
 15. You are still on the "Pipeline Settings ⟶ GitHub" page. In the "GitHub Settings" section, do the following actions:
     - Step i: Make sure that the radio button for "Trigger builds after pushing code" IS selected.
     - Step ii: Make sure that the checkbox for "Filter after pushing code" IS selected.
-    - Step iii: Under "Filter builds using a conditional", enter the following text: `(build.pull_request.base_branch == null) || (build.pull_request.base_branch == "release-1.9") || (build.pull_request.base_branch == "backports-release-1.9")`
+    - Step iii: Under "Filter builds using a conditional", enter the following text: `(build.pull_request.base_branch == null) || (build.pull_request.base_branch == "release-1.2345") || (build.pull_request.base_branch == "backports-release-1.2345")`
     - Step iv: Make sure that the checkbox for "Build Pull Requests" IS selected.
     - Step v: Under "Build Pull Requests", make sure that the checkbox for "Build pull requests from third-party forked repositories" IS selected.
     - **Step vi: Under "Build pull requests from third-party forked repositories", make sure that the checkbox for "Prefix third-party fork branch names" IS selected. It's important to make sure you complete this step.**
@@ -47,3 +51,8 @@
 17. In the left-hand side, under "Pipeline Settings", click on "Teams". Then do the following actions:
     - Step i: Next to "Base Julia CI (Slack notifications)", click on the text `Full Access` and change it to `Read Only`.
     - Step ii: Next to "[ALL USERS] Base Julia CI (build & read)", click on the text `Full Access` and change it to `Build & Read`.
+
+## 2. Create the new branch in this repo (the `JuliaCI/julia-buildkite` repo), and start using it
+
+1. Create a new branch in **this repo** (the `JuliaCI/julia-buildkite` repo) named `release-julia-1.2345`.
+2. Make a PR to the `JuliaLang/julia` repo to edit the `.buildkite-external-version` file, to change the contents from `main` to `release-julia-1.2345`. Until that PR is merged, Buildkite won't actually be using the `release-julia-1.2345` branch in this repo.
