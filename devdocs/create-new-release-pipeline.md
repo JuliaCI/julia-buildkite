@@ -11,7 +11,7 @@ These steps need to be performed every time Julia does a feature freeze. For thi
     - Description: `https://github.com/JuliaLang/julia`
     - Git Repository:
         - Step i. Click on the dropdown that says "Any account", and click on `JuliaLang`.
-        - Step ii: Click on the text field that says "git@github.com:your/repo.git", and from the dropdown menu that appears, click on `JuliaLang/julia`.
+        - Step ii: Click on the text field that says `git@github.com:your/repo.git, and from the dropdown menu that appears, click on `JuliaLang/julia`.
         - Step iii: Next to "Checkout using", click on the radio button for `HTTPS`. Once you do that, the URL should automatically change to `https://github.com/JuliaLang/julia.git`
     - Auto-create webhooks: make sure that this checkbox IS checked.
     - Teams: select the following two teams:
