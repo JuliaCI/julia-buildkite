@@ -8,7 +8,7 @@ steps:
         # 2. The branch is `release-*`.
         # 3. The build is a tag build AND the tag is `v*`.
         # 4. The pipeline is `julia-buildkite`.
-        if: (build.branch == "master") || (build.branch =~ /^release-/) || (build.tag =~ /^v/) || (pipeline.slug == "julia-buildkite") || (pipeline.slug == "julia-buildkite-scheduled")
+        if: (build.branch == "master") || (build.branch =~ /^release-/) || (build.tag =~ /^v/) || (pipeline.slug == "julia-buildkite") || (pipeline.slug == "julia-buildkite-scheduled") || (build.pull_request.labels includes "needs full CI")
         depends_on:
           # Wait for the build to finish
           - "build_${TRIPLET?}"
@@ -26,7 +26,7 @@ steps:
               # Drop default "registries" directory, so it is not persisted from execution to execution
               persist_depot_dirs: packages,artifacts,compiled
               version: '1'
-          - staticfloat/sandbox#v1:
+          - staticfloat/sandbox#v2:
               rootfs_url: https://github.com/JuliaCI/rootfs-images/releases/download/v6.00/aws_uploader.x86_64.tar.gz
               rootfs_treehash: "61cb30497604eb1581b3ffd6a8058c150f4cbf8b"
               uid: 1000
@@ -34,7 +34,7 @@ steps:
               workspaces:
                 # Include `/cache/repos` so that our `git` version introspection works.
                 - "/cache/repos:/cache/repos"
-          - staticfloat/cryptic#v2:
+          - JuliaCI/cryptic#v2:
               variables:
                 - AWS_ACCESS_KEY_ID="U2FsdGVkX184v87+NPs3j9r/JoIuOrYt4/Z4wnRdklnY17NP8C8AMZvWYLJfT9t1"
                 - AWS_SECRET_ACCESS_KEY="U2FsdGVkX1+qptnxR/Mo5jZdH8OQfflRPiQBEhjgZIiTpn8KNCJYh/Cb8xxaUWazlcM9ceOlo0InDubL+J8zdg=="

@@ -9,21 +9,18 @@ const ncores = Sys.CPU_THREADS
 @info "" Sys.CPU_THREADS
 @info "" ncores
 
-script_native_yes = """
-    Base.runtests(["cmdlineargs"]; ncores = $(ncores))
-"""
-script_native_no = """
-    Base.runtests(["all", "--skip", "cmdlineargs", "Pkg"]; ncores = $(ncores))
-"""
+script = if Sys.iswindows()
+    """
+        Base.runtests(["all", "--skip", "Pkg", "Profile", "cmdlineargs"]; ncores = $(ncores))
+    """
+else
+    """
+        Base.runtests(["all", "--skip", "Pkg"]; ncores = $(ncores))
+    """
+end
 
-base_cmd       = `$(Base.julia_cmd()) --code-coverage=lcov-%p.info`
-cmd_native_yes = `$(base_cmd) --sysimage-native-code=yes -e $(script_native_yes)`
-cmd_native_no  = `$(base_cmd) --sysimage-native-code=no  -e $(script_native_no)`
+cmd = `$(Base.julia_cmd()) --code-coverage=lcov-%p.info -e $(script)`
 
-@info "Running command" cmd_native_yes
-p1 = run(pipeline(cmd_native_yes; stdin, stdout, stderr); wait = false)
-wait(p1)
-
-@info "Running command" cmd_native_no
-p2 = run(pipeline(cmd_native_no; stdin, stdout, stderr); wait = false)
-wait(p2)
+@info "Running command" cmd
+p = run(pipeline(cmd; stdin, stdout, stderr); wait = false)
+wait(p)

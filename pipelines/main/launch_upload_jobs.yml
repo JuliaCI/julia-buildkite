@@ -8,33 +8,54 @@ steps:
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
+          - JuliaCI/julia#b4d0bfa510bc399417133adae013385af5c71190: # v1.13.5
+              # A few notes:
+              # 1. We pin the `JuliaCI/julia` plugin to a full commit hash.
+              #    This is intentional. We want to make sure that this script doesn't suddenly
+              #    break when a new version of the plugin is released.
+              # 2. We specify the Julia version up to patch, e.g. '1.7.3'.
+              #    This is intentional. We don't do e.g. '1.7', because we want to make sure
+              #    that this script doesn't suddenly break when a new patch release of Julia
+              #    is released.
+              version: '1.7.3'
         commands: |
           # Explicitly pass along the cryptic token to child pipelines
           export BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET
           export ALLOW_FAIL="false"
 
-          # Launch `upload_*` jobs to store tarballs into S3 once tests are done
+          ##### Launch `upload_*` jobs to store tarballs into S3 once tests are done
+          ### Linux:
+          # Regular Linux upload jobs:
           GROUP="Upload" \
               bash .buildkite/utilities/arches_pipeline_upload.sh \
               .buildkite/pipelines/main/platforms/upload_linux.arches \
               .buildkite/pipelines/main/platforms/upload_linux.yml
+          # PowerPC Linux upload jobs, which we only run for Julia prior to 1.12:
+          GROUP="Upload" \
+              julia .buildkite/pipelines/main/platforms/launch_powerpc.jl \
+              .buildkite/pipelines/main/platforms/upload_linux.powerpc.arches \
+              .buildkite/pipelines/main/platforms/upload_linux.yml
+          ### macOS:
           GROUP="Upload" \
               bash .buildkite/utilities/arches_pipeline_upload.sh \
               .buildkite/pipelines/main/platforms/upload_macos.arches \
               .buildkite/pipelines/main/platforms/upload_macos.yml
+          ### FreeBSD:
           GROUP="Upload" \
               bash .buildkite/utilities/arches_pipeline_upload.sh \
               .buildkite/pipelines/main/platforms/upload_freebsd.arches \
               .buildkite/pipelines/main/platforms/upload_freebsd.yml
+          ### Windows:
           GROUP="Upload" \
               bash .buildkite/utilities/arches_pipeline_upload.sh \
               .buildkite/pipelines/main/platforms/upload_windows.arches \
               .buildkite/pipelines/main/platforms/upload_windows.yml
 
-          for OS in linux macos freebsd windows; do \
+          ### Upload test results.json files to buildkite
+          for OS in linux linux.i686 macos freebsd windows; do \
               GROUP="Upload" \
                 bash .buildkite/utilities/arches_pipeline_upload.sh \
-                .buildkite/pipelines/main/platforms/upload_$${OS}.arches \
+                .buildkite/pipelines/main/platforms/test_$${OS}.arches \
                 .buildkite/pipelines/main/misc/upload_buildkite_results.yml
           done
 
@@ -44,9 +65,10 @@ steps:
           # Don't share this with buildkite's env display
           unset BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET
         agents:
-          queue: "julia"
           cryptic_capable: "true"
+          queue: "julia"
           os: "linux"
+          arch: "x86_64" # prevent from running on PiBots
         env:
           # Receive cryptic token from parent job
           BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET: ${BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET?}
@@ -72,9 +94,10 @@ steps:
           # Don't share this with buildkite's env display
           unset BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET
         agents:
-          queue: "julia"
           cryptic_capable: "true"
+          queue: "julia"
           os: "linux"
+          arch: "x86_64" # prevent from running on PiBots
         env:
           # Receive cryptic token from parent job
           BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET: ${BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET?}

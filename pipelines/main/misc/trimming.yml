@@ -1,8 +1,8 @@
 steps:
-  - group: "Test"
+  - group: "Check"
     steps:
-      - label: "test revise"
-        key: "test-revise"
+      - label: "trimming"
+        key: "trimming"
         depends_on:
           - "build_x86_64-linux-gnu"
         plugins:
@@ -12,8 +12,8 @@ steps:
           - JuliaCI/julia#v1:
               # Drop default "registries" directory, so it is not persisted from execution to execution
               persist_depot_dirs: packages,artifacts,compiled
-              version: '1'
-          - staticfloat/sandbox#v2:
+              version: '1.6'
+          - staticfloat/sandbox#v1:
               rootfs_url: https://github.com/JuliaCI/rootfs-images/releases/download/v6.00/package_linux.x86_64.tar.gz
               rootfs_treehash: "4dcde853eb5baaa0a8f087b633eaf955dc94b5dc"
               uid: 1000
@@ -21,18 +21,17 @@ steps:
               workspaces:
                 # Include `/cache/repos` so that our `git` version introspection works.
                 - "/cache/repos:/cache/repos"
+        if: | # We only run the `trimming` job on Julia 1.12 and later.
+          (pipeline.slug != "julia-release-1-dot-10") && (pipeline.slug != "julia-release-1-dot-11")
         commands: |
           # Download pre-built julia, extract into `usr/`
           buildkite-agent artifact download --step "build_x86_64-linux-gnu" 'julia-*-linux-x86_64.tar.gz' .
-          mkdir -p ./usr
-          tar -C ./usr --strip-components=1 -zxf julia-*-linux-x86_64.tar.gz
-          ln -s ./usr/bin/julia ./julia
+          mkdir -p usr
+          tar -C usr --strip-components=1 -zxf julia-*-linux-x86_64.tar.gz
+          rm -f julia-*-linux-x86_64.tar.gz
 
-          echo "--- Install and test Revise"
-          unset JULIA_DEPOT_PATH
-          JULIA_PKG_PRECOMPILE_AUTO=0 ./julia -e 'using Pkg; Pkg.add(name="Revise", rev="master"); ENV["JULIA_PKG_PRECOMPILE_AUTO"]=1; Pkg.test("Revise")'
-        timeout_in_minutes: 30
-        soft_fail: ${ALLOW_FAIL?}
+          make --output-sync -j$${JULIA_CPU_THREADS:?} -C test/trimming check JULIA="$$(pwd)/usr/bin/julia" BIN="$$(pwd)/usr/bin"
+        timeout_in_minutes: 60
         agents:
           queue: "julia"
           sandbox_capable: "true"

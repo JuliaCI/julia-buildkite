@@ -7,7 +7,9 @@
 set -euo pipefail
 
 # First, get things like `SHORT_COMMIT`, `JULIA_CPU_TARGET`, `UPLOAD_TARGETS`, etc...
+# shellcheck source=SCRIPTDIR/build_envs.sh
 source .buildkite/utilities/build_envs.sh
+# shellcheck source=SCRIPTDIR/word.sh
 source .buildkite/utilities/word.sh
 
 echo "--- Print software versions"
@@ -34,9 +36,9 @@ if [[ ! -z "${USE_JULIA_PGO_LTO-}" ]]; then
 fi
 
 # If we have the option, let's use `--output-sync`
-if ${MAKE} --help | grep output-sync >/dev/null 2>/dev/null; then
-    MFLAGS+=( "--output-sync" )
-fi
+#if ${MAKE} --help | grep output-sync >/dev/null 2>/dev/null; then
+#    MFLAGS+=( "--output-sync" )
+#fi
 
 # Always use this much parallelism
 MFLAGS+=( "-j${JULIA_CPU_THREADS}")
@@ -59,7 +61,8 @@ fi
 MFLAGS+=( "JULIA_CPU_TARGET=${JULIA_CPU_TARGET}" )
 
 # Finish off with any extra make flags from the `.arches` file
-MFLAGS+=( $(tr "," " " <<<"${MAKE_FLAGS}") )
+IFS=',' read -ra ARCHES_FLAGS <<<"${MAKE_FLAGS}"
+MFLAGS+=( "${ARCHES_FLAGS[@]}" )
 
 echo "Make Options:"
 for FLAG in "${MFLAGS[@]}"; do
@@ -67,7 +70,8 @@ for FLAG in "${MFLAGS[@]}"; do
 done
 
 echo "--- Build Julia"
-${MAKE} "${MFLAGS[@]}"
+echo "Note: The log stream is filtered. [buildroot] replaces pwd $(pwd)"
+${MAKE} "${MFLAGS[@]}" 2>&1 | sed "s|$(pwd)|[buildroot]|g"
 
 
 echo "--- Check that the working directory is clean"
@@ -89,7 +93,8 @@ ${JULIA_EXE} -e "import Test; Test.@test Sys.ARCH == :${ARCH:?}"
 ${JULIA_EXE} -e "import Test; Test.@test Sys.WORD_SIZE == ${EXPECTED_WORD_SIZE:?}"
 
 echo "--- Show build stats"
-${MAKE} "${MFLAGS[@]}" build-stats
+echo "Note: The log stream is filtered. [buildroot] replaces pwd $(pwd)"
+${MAKE} "${MFLAGS[@]}" build-stats 2>&1 | sed "s|$(pwd)|[buildroot]|g"
 
 echo "--- Create build artifacts"
 ${MAKE} "${MFLAGS[@]}" binary-dist

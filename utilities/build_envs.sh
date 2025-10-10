@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 # First, extract information from our triplet
+# shellcheck source=SCRIPTDIR/extract_triplet.sh
 source .buildkite/utilities/extract_triplet.sh
 
 # Figure out what GNU Make is on this system
@@ -14,7 +15,8 @@ export MAKE
 # Apply fixups to our environment for when we're running on julia-buildkite pipeline
 if buildkite-agent meta-data exists BUILDKITE_JULIA_BRANCH; then
     # `BUILDKITE_BRANCH` should refer to `julia.git`, not `julia-buildkite.git`
-    export BUILDKITE_BRANCH=$(buildkite-agent meta-data get BUILDKITE_JULIA_BRANCH)
+    BUILDKITE_BRANCH=$(buildkite-agent meta-data get BUILDKITE_JULIA_BRANCH)
+    export BUILDKITE_BRANCH
 fi
 
 # Determine JULIA_CPU_TARGETS for different architectures
@@ -108,13 +110,16 @@ export JULIA_IMAGE_THREADS="$JULIA_CPU_THREADS"
 
 # Extract git information
 SHORT_COMMIT_LENGTH=10
-export LONG_COMMIT="$(git rev-parse HEAD)"
-export SHORT_COMMIT="$(echo ${LONG_COMMIT} | cut -c1-${SHORT_COMMIT_LENGTH})"
+LONG_COMMIT="$(git rev-parse HEAD)"
+SHORT_COMMIT="$(echo "${LONG_COMMIT}" | cut -c1-${SHORT_COMMIT_LENGTH})"
+export LONG_COMMIT SHORT_COMMIT
 
 # Extract information about the current julia version number
-export JULIA_VERSION="$(cat VERSION)"
-export MAJMIN="$(cut -d. -f1-2 <<<"${JULIA_VERSION}")"
-export MAJMINPAT="$(cut -d- -f1 <<<"${JULIA_VERSION}")"
+JULIA_VERSION="$(cat VERSION)"
+MAJMIN="$(cut -d. -f1-2 <<<"${JULIA_VERSION}")"
+MAJMINPAT="$(cut -d- -f1 <<<"${JULIA_VERSION}")"
+export JULIA_VERSION MAJMIN MAJMINPAT
+
 # If we're on a tag, then our "tar version" will be the julia version.
 # Otherwise, it's the short commit.
 if git describe --tags --exact-match >/dev/null 2>/dev/null; then
@@ -124,11 +129,39 @@ else
 fi
 export TAR_VERSION
 
+# Get all external stdlib names
+EXTERNAL_STDLIB_NAMES=""
+for version_file in stdlib/*.version; do
+    if [[ -f "$version_file" ]]; then
+        stdlib_name=$(basename "$version_file" .version)
+        EXTERNAL_STDLIB_NAMES="$EXTERNAL_STDLIB_NAMES $stdlib_name"
+    fi
+done
+export EXTERNAL_STDLIB_NAMES
+
+# Detect changed stdlib .version files for conditional testing
+CHANGED_STDLIB_VERSIONS=""
+if changed_stdlib_version_files=$(git diff --name-only "$(git merge-base HEAD origin/master)" | grep -E '^stdlib/.*\.version$' 2>/dev/null || true); then
+    if [[ -n "$changed_stdlib_version_files" ]]; then
+        for file in $changed_stdlib_version_files; do
+            stdlib_name=$(basename "$file" .version)
+            CHANGED_STDLIB_VERSIONS="$CHANGED_STDLIB_VERSIONS $stdlib_name"
+        done
+    fi
+fi
+export CHANGED_STDLIB_VERSIONS
+
 
 # Build the filename that we'll upload as, and get the filename that will be built
 # These are not the same in situations such as `musl`, where the build system doesn't
 # differentiate but we need to give it a different name.
-export JULIA_BINARYDIST_FILENAME="$(${MAKE} print-JULIA_BINARYDIST_FILENAME | cut -c27- | tr -s ' ')"
+# Note that `make print-` can fail in environments without a compiler. This varible is only
+# used in build_julia.sh (where we obviously have a compiler) so if `make print-` fails we
+# simply leave the variable undefined.
+if BINARYDIST_FILENAME="$(${MAKE} print-JULIA_BINARYDIST_FILENAME 2>/dev/null)"; then
+    JULIA_BINARYDIST_FILENAME="$(echo -n "${BINARYDIST_FILENAME}" | cut -c27- | tr -s ' ')"
+    export JULIA_BINARYDIST_FILENAME
+fi
 
 export JULIA_INSTALL_DIR="julia-${TAR_VERSION}"
 JULIA_BINARY="${JULIA_INSTALL_DIR}/bin/julia${EXE}"
@@ -227,6 +260,6 @@ echo "Detected Julia version:            ${MAJMIN}  (${JULIA_VERSION})"
 echo "Detected build platform:           ${TRIPLET}  (${ARCH}, ${OS})"
 echo "Julia will be uploaded to:         s3://${UPLOAD_TARGETS[0]}.tar.gz"
 echo "With additional upload targets:"
-for UPLOAD_TARGET in ${UPLOAD_TARGETS[@]:1}; do
+for UPLOAD_TARGET in "${UPLOAD_TARGETS[@]:1}"; do
     echo " -> s3://${UPLOAD_TARGET}.tar.gz"
 done

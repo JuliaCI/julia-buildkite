@@ -1,0 +1,11 @@
+# ROOTFS_IMAGE_NAME    TRIPLET                          ARCH           ARCH_ROOTFS    TIMEOUT    USE_RR   ROOTFS_TAG    ROOTFS_HASH
+tester_linux           powerpc64le-linux-gnu            powerpc64le    powerpc64le    .          .        v6.00         e8b4e944a02ae3ef9800edb88ce57925cd21e140
+# tester_linux         powerpc64le-linux-gnuassert      powerpc64le    powerpc64le    .          .        v6.00         e8b4e944a02ae3ef9800edb88ce57925cd21e140
+
+# These special lines allow us to embed default values for the columns above.
+# Any column without a default mapping here will simply substitute a `.` to the empty string
+
+# Most tests should finish within ~45 minutes, barring exceptionally slow hardware
+# We double that to a default of 90 minutes, with an extra 45 minutes for cleanup,
+# including things like `rr` trace compression,
+#default TIMEOUT 135

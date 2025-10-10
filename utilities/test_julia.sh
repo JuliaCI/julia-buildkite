@@ -8,6 +8,7 @@
 set -euo pipefail
 
 # First, get things like `SHORT_COMMIT`, `JULIA_CPU_TARGET`, `UPLOAD_TARGETS`, etc...
+# shellcheck source=SCRIPTDIR/build_envs.sh
 source .buildkite/utilities/build_envs.sh
 
 echo "--- Print kernel version"
@@ -33,7 +34,7 @@ if [[ "${OS}" == "macos" ]]; then
     echo "--- [mac] Codesigning"
     .buildkite/utilities/macos/codesign.sh "${JULIA_INSTALL_DIR}"
     echo "--- [mac] Update checksums for stdlib cachefiles after codesigning"
-    JULIA_DEBUG=all ${JULIA_INSTALL_DIR}/bin/julia .buildkite/utilities/update_stdlib_pkgimage_checksums.jl
+    JULIA_DEBUG=all "${JULIA_INSTALL_DIR}/bin/julia" .buildkite/utilities/update_stdlib_pkgimage_checksums.jl
 fi
 
 
@@ -48,11 +49,18 @@ export JULIA_TEST_IS_BASE_CI="true"
 unset JULIA_DEPOT_PATH
 unset JULIA_PKG_SERVER
 
+if [[ "${OS}" != "windows" ]]; then
+    # Tell timeout.jl to detach the process group, so we get core dumps from
+    # each process.
+    export JL_TERM_DETACH="true"
+fi
+
 # Make sure that temp files and temp directories are created in a location that is
 # backed by real storage, and not by a tmpfs, as some tests don't like that on Linux
 if [[ "${OS}" == "linux" ]]; then
-    export TMPDIR="$(pwd)/tmp"
-    mkdir -p ${TMPDIR}
+    TMPDIR="$(pwd)/tmp"
+    export TMPDIR
+    mkdir -p "${TMPDIR}"
 fi
 
 #Always set the max rss so that if tests add large global variables (which they do) we don't make the GC's life too hard
@@ -75,14 +83,17 @@ if [[ "${USE_RR-}" == "rr" ]] || [[ "${USE_RR-}" == "rr-net" ]]; then
     export NCORES_FOR_TESTS="parse(Int, ENV[\"JULIA_RRCAPTURE_NUM_CORES\"])"
     export JULIA_NUM_THREADS=1
 
+    # Do not run Pkg tests on rr
+    TESTS_TO_SKIP+=( Pkg )
+
     # rr: all tests EXCEPT the network-related tests
     # rr-net: ONLY the network-related tests
-    NETWORK_RELATED_TESTS=( Artifacts Downloads download LazyArtifacts LibGit2/online Pkg )
+    NETWORK_RELATED_TESTS=( Artifacts Downloads download LazyArtifacts LibGit2/online )
     if [[ "${USE_RR-}" == "rr" ]]; then
-        TESTS_TO_SKIP+=( ${NETWORK_RELATED_TESTS[@]} )
+        TESTS_TO_SKIP+=( "${NETWORK_RELATED_TESTS[@]}" )
     elif [[ "${USE_RR-}" == "rr-net" ]]; then
         # Overwrite TESTS_TO_RUN, to get rid of default `"all"`
-        TESTS_TO_RUN=( ${NETWORK_RELATED_TESTS[@]} )
+        TESTS_TO_RUN=( "${NETWORK_RELATED_TESTS[@]}" )
     fi
 elif [[ "${USE_RR-}" == "" ]]; then
     # Run inside of a timeout
@@ -116,12 +127,41 @@ else
     exit 1
 fi
 
+# Determine which external stdlib tests to skip based on branch and version file changes
+EXTERNAL_STDLIB_SKIP_LIST=()
+
+branch="${BUILDKITE_BRANCH:-unknown}"
+pipeline="${BUILDKITE_PIPELINE_SLUG:-unknown}"
+echo "Branch is: ${branch}"
+echo "Pipeline is: ${pipeline}"
+# We test all external stdlibs in the following cases:
+if [[ "${branch}" == release-* ]] || \
+   [[ "${branch}" == backports-release-* ]] || \
+   [[ "${pipeline}" == "julia-master-scheduled" ]] || \
+   [[ "${pipeline}" == "julia-buildkite-scheduled" ]]; then
+    echo "On important branch '${branch}' or pipeline '${pipeline}': running all external stdlib tests"
+else
+    # Skip all external stdlibs that aren't in CHANGED_STDLIB_VERSIONS
+    for stdlib_name in ${EXTERNAL_STDLIB_NAMES}; do
+        if [[ "${CHANGED_STDLIB_VERSIONS:-}" != *"$stdlib_name"* ]]; then
+            EXTERNAL_STDLIB_SKIP_LIST+=("$stdlib_name")
+        fi
+    done
+
+    if [[ -n "${CHANGED_STDLIB_VERSIONS:-}" ]]; then
+        echo "Skipping external stdlib tests for: ${EXTERNAL_STDLIB_SKIP_LIST[*]}"
+    fi
+fi
+
+# Add external stdlibs to skip to the main skip list
+TESTS_TO_SKIP+=("${EXTERNAL_STDLIB_SKIP_LIST[@]}")
+
 # Build our `TESTS` string
 # `--ci` asserts that networking is available
 if [[ "${#TESTS_TO_SKIP[@]}" -gt 0 ]]; then
-    export TESTS="${TESTS_TO_RUN[@]} --ci --skip ${TESTS_TO_SKIP[@]}"
+    export TESTS="${TESTS_TO_RUN[*]} --ci --skip ${TESTS_TO_SKIP[*]}"
 else
-    export TESTS="${TESTS_TO_RUN[@]} --ci"
+    export TESTS="${TESTS_TO_RUN[*]} --ci"
 fi
 
 # Auto-set timeout to buildkite timeout minus 45m for most users
@@ -135,6 +175,9 @@ echo "OPENBLAS_NUM_THREADS is:   ${OPENBLAS_NUM_THREADS:?}"
 echo "TESTS is:                  ${TESTS:?}"
 echo "USE_RR is:                 ${USE_RR-}"
 echo "JL_TERM_TIMEOUT is:        ${JL_TERM_TIMEOUT}"
+if [[ "${#EXTERNAL_STDLIB_SKIP_LIST[@]}" -gt 0 ]]; then
+    echo "EXTERNAL_STDLIBS_SKIPPED:  ${EXTERNAL_STDLIB_SKIP_LIST[*]}"
+fi
 
 # Show our core dump file pattern and size limit if we're going to be recording them
 if [[ -z "${USE_RR-}" ]]; then
@@ -150,17 +193,21 @@ fi
 # Begin with "+++" => Expand test group by default
 echo "+++ Run the Julia test suite"
 # set -e; requires us using if to check the exit status
-if ${JULIA_CMD_FOR_TESTS:?} -e "Base.runtests(\"${TESTS:?}\"; ncores = ${NCORES_FOR_TESTS:?})"; then
+if ${JULIA_CMD_FOR_TESTS:?} --color=yes -e "Base.runtests(\"${TESTS:?}\"; ncores = ${NCORES_FOR_TESTS:?})"; then
   exitVal=0
 else
   exitVal=1
 fi
 
 echo "--- Upload results.json report"
+# store the test job id so that the upload job can assign the results to the right job id
+buildkite-agent meta-data set "BUILDKITE_TEST_JOB_ID_${BUILDKITE_STEP_KEY}" "${BUILDKITE_JOB_ID}"
+echo "meta-data BUILDKITE_TEST_JOB_ID_${BUILDKITE_STEP_KEY} has been set to \"$(buildkite-agent meta-data get "BUILDKITE_TEST_JOB_ID_${BUILDKITE_STEP_KEY}")\""
 if compgen -G "${JULIA_INSTALL_DIR}/share/julia/test/results*.json"; then
-    (cd "${JULIA_INSTALL_DIR}/share/julia/test"; buildkite-agent artifact upload results*.json)
+    (cd "${JULIA_INSTALL_DIR}/share/julia/test"; tar -czf results.tar.gz results*.json && buildkite-agent artifact upload "results.tar.gz")
 else
     echo "no JSON results files found"
 fi
+echo "--- Done"
 
 exit $exitVal

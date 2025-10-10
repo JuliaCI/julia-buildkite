@@ -13,7 +13,7 @@ steps:
               # Drop default "registries" directory, so it is not persisted from execution to execution
               persist_depot_dirs: packages,artifacts,compiled
               version: '1.6'
-          - staticfloat/sandbox#v1:
+          - staticfloat/sandbox#v2:
               rootfs_url: https://github.com/JuliaCI/rootfs-images/releases/download/v6.00/package_linux.x86_64.tar.gz
               rootfs_treehash: "4dcde853eb5baaa0a8f087b633eaf955dc94b5dc"
               uid: 1000
@@ -33,7 +33,7 @@ steps:
           mkdir -p "$${gcext_output:?}"
           make --output-sync -j$${JULIA_CPU_THREADS:?} -C test/gcext check JULIA="$$(pwd)/usr/bin/julia" BIN="$${gcext_output:?}"
         timeout_in_minutes: 60
-        soft_fail: true
+        soft_fail: ${ALLOW_FAIL?}
         agents:
           queue: "julia"
           sandbox_capable: "true"

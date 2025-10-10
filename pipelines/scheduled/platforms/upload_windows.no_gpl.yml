@@ -8,7 +8,7 @@ steps:
         # 2. The branch is `release-*`.
         # 3. The build is a tag build AND the tag is `v*`.
         # 4. The pipeline is `julia-buildkite`.
-        if: (build.branch == "master") || (build.branch =~ /^release-/) || (build.tag =~ /^v/) || (pipeline.slug == "julia-buildkite-scheduled")
+        if: (build.branch == "master") || (build.branch =~ /^release-/) || (build.tag =~ /^v/) || (pipeline.slug == "julia-buildkite-scheduled") || (build.pull_request.labels includes "needs full CI")
         depends_on:
           # Wait for the builder to finish
           - "build_${TRIPLET?}"
@@ -21,11 +21,13 @@ steps:
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
-          - staticfloat/cryptic#v2:
+          - JuliaCI/cryptic#v2:
               variables:
                 - AWS_ACCESS_KEY_ID="U2FsdGVkX184v87+NPs3j9r/JoIuOrYt4/Z4wnRdklnY17NP8C8AMZvWYLJfT9t1"
                 - AWS_SECRET_ACCESS_KEY="U2FsdGVkX1+qptnxR/Mo5jZdH8OQfflRPiQBEhjgZIiTpn8KNCJYh/Cb8xxaUWazlcM9ceOlo0InDubL+J8zdg=="
-                - WINDOWS_CODESIGN_PASSWORD="U2FsdGVkX1+wiqniliFf7YWn1f/Y2rppITsOMvLGgK8n+GYWXWJH+POojLhEwU75"
+                - AZURE_TENANT_ID="U2FsdGVkX1+c2HbeSTq1c0fEep5riO3+PSQCiovdRT5akVpyy5hC311cXUCUB+A7ivIezAdJ7oz3dt19t60iuw=="
+                - AZURE_CLIENT_ID="U2FsdGVkX195QeT0ywNdXSa2ctMb9DFXyFVo0zG0/GtZUw95PTycqSZ+qEwXZbRZhGxXjGMVzcP2XZ0f/OuNnQ=="
+                - AZURE_CLIENT_SECRET="U2FsdGVkX1/905nz82Iy5toukRXEO8QS2etwfFCocofgnpBB62wJRDrWClPCNEX6ICo0jQzgoSbwDr2+C1ETSA=="
               files:
                 - .buildkite/secrets/tarball_signing.gpg
                 - .buildkite/secrets/windows_codesigning.pfx
@@ -46,9 +48,11 @@ steps:
                 # Have to include this for `buildkite-agent` to work:
                 - "BUILDKITE_AGENT_ACCESS_TOKEN"
                 # Have to include these for codesigning and uploading
-                - "WINDOWS_CODESIGN_PASSWORD"
                 - "AWS_ACCESS_KEY_ID"
                 - "AWS_SECRET_ACCESS_KEY"
+                - "AZURE_TENANT_ID"
+                - "AZURE_CLIENT_ID"
+                - "AZURE_CLIENT_SECRET"
                 # These control where we upload, important when running on julia-buildkite
                 - "S3_BUCKET"
                 - "S3_BUCKET_PREFIX"

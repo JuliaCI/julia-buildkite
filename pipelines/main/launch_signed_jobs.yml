@@ -7,7 +7,7 @@ steps:
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
-          - staticfloat/cryptic#main:
+          - JuliaCI/cryptic#v2:
               verbose: true
               signed_pipelines:
                 # Launch the upload jobs
@@ -20,9 +20,11 @@ steps:
                     - .buildkite/utilities/build_envs.sh
                     - .buildkite/utilities/extract_triplet.sh
                     - .buildkite/utilities/upload_julia.sh
+                    - .buildkite/utilities/aws_config
                     - .buildkite/utilities/sign_tarball.sh
                     - .buildkite/utilities/macos/build_dmg.sh
                     - .buildkite/utilities/macos/codesign.sh
+                    - .buildkite/pipelines/main/platforms/launch_powerpc.jl
                     - .buildkite/pipelines/main/platforms/upload_linux.arches
                     - .buildkite/pipelines/main/platforms/upload_linux.yml
                     - .buildkite/pipelines/main/platforms/upload_macos.arches
@@ -31,9 +33,10 @@ steps:
                     - .buildkite/pipelines/main/platforms/upload_windows.yml
                     - .buildkite/pipelines/main/misc/upload_buildkite_results.yml
         agents:
-          queue: "julia"
           cryptic_capable: "true"
+          queue: "julia"
           os: "linux"
+          arch: "x86_64" # prevent from running on PiBots
         env:
           # Receive cryptic token from parent job
           BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET: ${BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET?}
