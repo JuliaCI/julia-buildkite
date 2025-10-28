@@ -55,7 +55,8 @@ fi
 MFLAGS+=( "JULIA_CPU_TARGET=${JULIA_CPU_TARGET}" )
 
 if [[ ! -z "${USE_JULIA_PGO_LTO_BOLT-}" ]]; then
-    MFLAGS+=( "STAGE2_BUILD=$PWD" )
+    STAGE2_BUILD=$PWD
+    MFLAGS+=( "STAGE2_BUILD=$STAGE2_BUILD" )
 
     echo "--- Collect make options"
     echo "Make Options:"
@@ -82,9 +83,8 @@ done
 
 if [[ ! -z "${USE_JULIA_PGO_LTO_BOLT-}" ]]; then
     echo "--- Build Julia Stage 2 - PGO + LTO optimised"
-    ${MAKE} "${MFLAGS[@]}" stage2 || true
-
-    echo "--- ReBuild Julia Stage 2 - PGO + LTO optimised"
+    ${MAKE} "${MFLAGS[@]}" "$STAGE2_BUILD"
+    ${MAKE} "${MFLAGS[@]}" -C "$STAGE2_BUILD/deps" install-csl
     ${MAKE} "${MFLAGS[@]}" stage2
 
     echo "--- Copying original shared libraries"
