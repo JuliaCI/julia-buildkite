@@ -82,6 +82,9 @@ done
 
 if [[ ! -z "${USE_JULIA_PGO_LTO_BOLT-}" ]]; then
     echo "--- Build Julia Stage 2 - PGO + LTO optimised"
+    ${MAKE} "${MFLAGS[@]}" stage2 || true
+
+    echo "--- ReBuild Julia Stage 2 - PGO + LTO optimised"
     ${MAKE} "${MFLAGS[@]}" stage2
 
     echo "--- Copying original shared libraries"
