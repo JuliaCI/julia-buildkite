@@ -103,6 +103,7 @@ if [[ ! -z "${USE_JULIA_PGO_LTO_BOLT-}" ]]; then
     ${MAKE} "${MFLAGS[@]}" bolt
 
     cd ../..
+    rm base/default.profraw
 else
     echo "--- Build Julia"
     echo "Note: The log stream is filtered. [buildroot] replaces pwd $(pwd)"
