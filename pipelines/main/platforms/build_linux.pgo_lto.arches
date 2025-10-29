@@ -5,4 +5,4 @@ llvm_passes          x86_64-linux-gnu-pgo-lto-bolt    x86_64   x86_64         PG
 # Any column without a default mapping here will simply substitute a `.` to the empty string
 
 # Builds should generally finish in much less time than this, but from-source builds can take longer
-#default TIMEOUT 180
+#default TIMEOUT 240
