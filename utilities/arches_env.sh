@@ -15,7 +15,7 @@ fi
 
 enforce_sanitized() {
     for value in "$@"; do
-        if ! [[ "${value}" =~ ^[a-zA-Z0-9_\.[:space:]=,-]*$ ]]; then
+        if ! [[ "${value}" =~ ^[a-zA-Z0-9_\.\"+[:space:]=,-]*$ ]]; then
             echo "Arches file '${ARCHES_FILE}' contains value '${value}' with non-alphanumeric characters; refusing to parse!" >&2
             exit 1
         fi
@@ -54,7 +54,13 @@ while read -r line; do
     enforce_sanitized "${line}"
 
     # Convert line to array
-    readarray -d ' ' -t line_array <<<"${line}"
+    {
+        set -f
+        # shellcheck disable=SC2207
+        # `read -a` ignores quoted strings when splitting and we are controlling word
+        # splitting via IFS and `set -f` as ShellCheck recommends
+        IFS=$'\n' line_array=( $(xargs -n1 <<<"${line}") )
+    }
 
     # Panic if we don't have the same number of items as our column names:
     if [[ "${#line_array[@]}" != "${#var_names[@]}" ]]; then
