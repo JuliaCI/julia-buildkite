@@ -1,0 +1,45 @@
+steps:
+  - group: "Check"
+    steps:
+      - label: "test juliasyntax (on older Julia versions)"
+        key: "test-juliasyntax"
+        timeout_in_minutes: 30
+        agents:
+          queue: "julia"
+          os: "linux"
+          arch: "x86_64"
+        matrix:
+          setup:
+            os:
+              - "linux"
+              - "macos"
+              - "windows"
+            julia_arch: # architecture of the Julia binary to install
+              - "x86_64"
+            julia_version:
+              # Don't put "1" here. Always include at least major and minor version
+              - "1.10"
+              - "1.11"
+              - "1.12"
+        plugins:
+          - JuliaCI/external-buildkite#v1:
+              version: "./.buildkite-external-version"
+              repo_url: "https://github.com/JuliaCI/julia-buildkite"
+          - JuliaCI/julia#v1:
+              # Drop default "registries" directory, so it is not persisted from execution to execution
+              persist_depot_dirs: packages,artifacts,compiled
+              version: '1.10' # we don't want to hardcode v1, as things might break when a new 1.x Julia is released
+        commands: |
+          echo "--- Setting stuff up"
+          unset JULIA_DEPOT_PATH
+          unset JULIA_LOAD_PATH
+          rm -rf ~/.julia/environments
+
+          echo "--- Pkg.dev-ing (by path) the local copy of JuliaSyntax"
+          export JULIA_PKG_PRECOMPILE_AUTO=0
+          julia -e 'import Pkg; p = Pkg.PackageSpec(path = "./JuliaSyntax"); Pkg.dev(p)'
+
+          echo "--- Testing JuliaSyntax on Julia {{matrix.julia_version}}"
+          unset JULIA_PKG_PRECOMPILE_AUTO
+          julia -e 'import Pkg; Pkg.test("JuliaSyntax")'
+          JULIA_PKG_PRECOMPILE_AUTO=0 ./julia -e 'using Pkg; Pkg.add(name="JuliaSyntax", rev="master"); ENV["JULIA_PKG_PRECOMPILE_AUTO"]=1; Pkg.test("JuliaSyntax")'
