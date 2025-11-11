@@ -90,6 +90,7 @@ steps:
 
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/sanitizers/asan.yml
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/sanitizers/tsan.yml
+          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/test_juliasyntax.dpa.yml
         agents:
           queue: "julia"
           os: "linux"
@@ -107,8 +108,6 @@ steps:
         commands: |
           export ALLOW_FAIL="false"
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/gcext.yml
-          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/test_juliasyntax.yml
-          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/test_juliasyntax.dpa.yml
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/test_revise.yml
 
           ### Launch Linux test jobs.
