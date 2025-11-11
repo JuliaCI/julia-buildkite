@@ -1,7 +1,7 @@
 steps:
   - group: "Check"
     steps:
-      - label: "juliasyntax {{matrix.agent_os}}/{{matrix.agent_arch}}/{{julia_version}}/{{julia_arch}}" # TODO: come up with better name.
+      - label: "juliasyntax {{matrix.agent_os}}/{{matrix.agent_arch}}/{{matrix.julia_version}}/{{matrix.julia_arch}}" # TODO: come up with better name.
         # key: "juliasyntax-key" # TODO: Figure out if we can define a Buildkite key here.
         timeout_in_minutes: 30
         agents:
