@@ -1,8 +1,8 @@
 steps:
   - group: "Check"
     steps:
-      - label: "test juliasyntax" # TODO: come up with better name
-        # key: "test-juliasyntax" # TODO: Fix this
+      - label: "juliasyntax" # TODO: come up with better name.
+        # key: "juliasyntax-key" # TODO: Figure out if we can define a Buildkite key here.
         timeout_in_minutes: 30
         agents:
           queue: "julia"
@@ -12,13 +12,13 @@ steps:
           setup:
             agent_os:
               - "linux"
-              # - "macos" # We handle macos special, see "adjustments" section below
               - "windows"
-            agent_arch: # architecture of the Buildkite agent. Distinct from the Julia binary's architecture.
+              # - "macos" # We handle macOS special, see "adjustments" section below
+            agent_arch: # architecture of the Buildkite agent. Distinct from the Julia binary's architecture
               - "x86_64" # The "x86_64" agent architectuere is used for both 32-bit Julia and 64-bit Julia
-            julia_arch: # architecture of the Julia binary to install. Distinct from the agent architecture.
-              - "x86_64" # 64-bit
-              # - "x86" # 32-bit # TODO: uncomment this line
+            julia_arch: # architecture of the Julia binary to install. Distinct from the agent architecture
+              - "x86_64" # 64-bit Julia
+              - "i686" # 32-bit Julia
             julia_version:
               # Don't put "1" here. Always include at least major and minor version.
               - "1.0"
@@ -26,7 +26,7 @@ steps:
               - "1.10" # current LTS
               - "1.12" # latest stable
           adjustments:
-            # macOS x86_64:
+            # macOS x86_64 (Intel):
             - with:
                 agent_os: "macos"
                 agent_arch: "x86_64"
@@ -47,8 +47,8 @@ steps:
                 agent_arch: "x86_64"
                 julia_arch: "x86_64"
                 julia_version: "1.12" # latest stable
-            # macOS arm64:
-            # Note: Julia 1.0 and 1.6 did not have native arm64 binaries for macOS
+            # macOS arm64 (Apple Silicon):
+            # Note: Julia 1.0 and 1.6 did not have native arm64 binaries for macOS, so we skip those
             - with:
                 agent_os: "macos"
                 agent_arch: "arm64"
