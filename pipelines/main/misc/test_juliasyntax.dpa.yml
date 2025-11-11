@@ -7,21 +7,56 @@ steps:
         agents:
           queue: "julia"
           os: "{{matrix.os}}"
-          arch: "x86_64" # TODO: Fix this part (agent architecture).
+          arch: "{{matrix.agent_arch}}"
         matrix:
           setup:
             os:
               - "linux"
-              - "macos"
+              # - "macos" # We handle macos special, see "adjustments" section below
               - "windows"
+            agent_arch: # architecture of the Buildkite agent. Distinct from the Julia binary's architecture.
+              - "x86_64" # The "x86_64" agent architectuere is used for both 32-bit Julia and 64-bit Julia
             julia_arch: # architecture of the Julia binary to install. Distinct from the agent architecture.
               - "x86_64" # 64-bit
-              - "x86" # 32-bit
+              - "x86" # 32-bit # TODO: uncomment this line
             julia_version:
               # Don't put "1" here. Always include at least major and minor version.
               - "1.10"
               - "1.11"
               - "1.12"
+          adjustments:
+            # macOS x86_64:
+            - with:
+                os: "macos"
+                agent_arch: "x86_64"
+                julia_arch: "x86_64"
+                julia_version: "1.10"
+            - with:
+                os: "macos"
+                agent_arch: "x86_64"
+                julia_arch: "x86_64"
+                julia_version: "1.11"
+            - with:
+                os: "macos"
+                agent_arch: "x86_64"
+                julia_arch: "x86_64"
+                julia_version: "1.12"
+            # macOS arm64:
+            - with:
+                os: "macos"
+                agent_arch: "arm64"
+                julia_arch: "arm64"
+                julia_version: "1.10"
+            - with:
+                os: "macos"
+                agent_arch: "arm64"
+                julia_arch: "arm64"
+                julia_version: "1.11"
+            - with:
+                os: "macos"
+                agent_arch: "arm64"
+                julia_arch: "arm64"
+                julia_version: "1.12"
         plugins:
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"
