@@ -142,12 +142,6 @@ steps:
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
-          - JuliaCI/julia#v1:
-              isolated_depot: true
-              # Drop default "registries" directory, so it is not persisted from execution to execution
-              persist_depot_dirs: packages,artifacts,compiled
-              version: '{{matrix.julia_version}}'
-              arch: '{{matrix.julia_arch}}'
           - staticfloat/sandbox#v2:
               rootfs_url: https://github.com/JuliaCI/rootfs-images/releases/download/v8.0/agent_linux.i686.tar.gz
               rootfs_treehash: "cba648ddb9ac0d292f9c8809652523806674a3d2"
@@ -156,6 +150,12 @@ steps:
               workspaces:
                 # Include `/cache/repos` so that our `git` version introspection works.
                 - "/cache/repos:/cache/repos"
+          - JuliaCI/julia#v1:
+              isolated_depot: true
+              # Drop default "registries" directory, so it is not persisted from execution to execution
+              persist_depot_dirs: packages,artifacts,compiled
+              version: '{{matrix.julia_version}}'
+              arch: '{{matrix.julia_arch}}'
         commands: |
           echo "--- Pkg.dev-ing (by path) the local copy of JuliaSyntax"
           export JULIA_PKG_PRECOMPILE_AUTO=0
