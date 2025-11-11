@@ -77,12 +77,12 @@ steps:
                 julia_version: "1.0"
               skip: true
             # 32-bit Julia on Windows
-            # TODO: Comment about 1.0 tarball for Windows i686
-            - with:
-                agent_os: "windows"
-                agent_arch: "x86_64"
-                julia_arch: "i686" # 32-bit Julia
-                julia_version: "1.0"
+            # For some reason, the Julia 1.0 tarball for Windows i686 doesn't seem to exist. Weird. Skip it for now, try to fix this in the future.
+            # - with:
+            #     agent_os: "windows"
+            #     agent_arch: "x86_64"
+            #     julia_arch: "i686" # 32-bit Julia
+            #     julia_version: "1.0"
             - with:
                 agent_os: "windows"
                 agent_arch: "x86_64"
