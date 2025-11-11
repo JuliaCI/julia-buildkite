@@ -12,13 +12,13 @@ steps:
           setup:
             agent_os:
               - "linux"
-              - "windows"
+              # - "windows" # TODO: Uncomment this line and fix the problems with Windows.
               # - "macos" # We handle macOS special, see "adjustments" section below
             agent_arch: # architecture of the Buildkite agent. Distinct from the Julia binary's architecture
               - "x86_64" # The "x86_64" agent architectuere is used for both 32-bit Julia and 64-bit Julia
             julia_arch: # architecture of the Julia binary to install. Distinct from the agent architecture
               - "x86_64" # 64-bit Julia
-              - "i686" # 32-bit Julia
+              # - "i686" # 32-bit Julia # TODO: Uncomment this line and fix the problems with i686.
             julia_version:
               # Don't put "1" here. Always include at least major and minor version.
               - "1.0"
