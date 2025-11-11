@@ -1,6 +1,11 @@
 steps:
   - group: "Check"
     steps:
+      # Note: This file only concerns testing JuliaSyntax on older Julia versions
+      # Testing JuliaSyntax on Julia#master is done separately.
+      # Specifically, for that case, testing JuliaSyntax is built into the regular `Base.runtests()`,
+      # so those tests are running in the regular Buildkite platform-specific test jobs.
+
       # This step has most of the JuliaSyntax test jobs
       - label: "juliasyntax {{matrix.agent_os}}/{{matrix.julia_arch}}/{{matrix.julia_version}}"
         # We comment out the Buildkite step key for this step, because:
