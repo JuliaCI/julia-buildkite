@@ -21,42 +21,44 @@ steps:
               # - "x86" # 32-bit # TODO: uncomment this line
             julia_version:
               # Don't put "1" here. Always include at least major and minor version.
-              - "1.10"
-              - "1.11"
-              - "1.12"
+              - "1.0"
+              - "1.6" # old LTS
+              - "1.10" # current LTS
+              - "1.12" # latest stable
           adjustments:
             # macOS x86_64:
             - with:
                 agent_os: "macos"
                 agent_arch: "x86_64"
                 julia_arch: "x86_64"
-                julia_version: "1.10"
+                julia_version: "1.0"
             - with:
                 agent_os: "macos"
                 agent_arch: "x86_64"
                 julia_arch: "x86_64"
-                julia_version: "1.11"
+                julia_version: "1.6" # old LTS
             - with:
                 agent_os: "macos"
                 agent_arch: "x86_64"
                 julia_arch: "x86_64"
-                julia_version: "1.12"
+                julia_version: "1.10" # current LTS
+            - with:
+                agent_os: "macos"
+                agent_arch: "x86_64"
+                julia_arch: "x86_64"
+                julia_version: "1.12" # latest stable
             # macOS arm64:
+            # Note: Julia 1.0 and 1.6 did not have native arm64 binaries for macOS
             - with:
                 agent_os: "macos"
                 agent_arch: "arm64"
                 julia_arch: "arm64"
-                julia_version: "1.10"
+                julia_version: "1.10" # old LTS
             - with:
                 agent_os: "macos"
                 agent_arch: "arm64"
                 julia_arch: "arm64"
-                julia_version: "1.11"
-            - with:
-                agent_os: "macos"
-                agent_arch: "arm64"
-                julia_arch: "arm64"
-                julia_version: "1.12"
+                julia_version: "1.12" # latest stable
         plugins:
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"
@@ -75,4 +77,3 @@ steps:
           echo "--- Testing JuliaSyntax on Julia {{matrix.julia_version}}"
           unset JULIA_PKG_PRECOMPILE_AUTO
           julia -e 'import Pkg; Pkg.test("JuliaSyntax")'
-          JULIA_PKG_PRECOMPILE_AUTO=0 ./julia -e 'using Pkg; Pkg.add(name="JuliaSyntax", rev="master"); ENV["JULIA_PKG_PRECOMPILE_AUTO"]=1; Pkg.test("JuliaSyntax")'
