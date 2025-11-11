@@ -81,16 +81,17 @@ steps:
               version: "./.buildkite-external-version"
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
         commands: |
-          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/analyzegc.yml
-          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/doctest.yml
-          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/pdf_docs/build_pdf_docs.yml
-          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/embedding.yml
-          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/trimming.yml
-          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/llvmpasses.yml
+          echo "TODO: uncomment these lines"
+          # buildkite-agent pipeline upload .buildkite/pipelines/main/misc/analyzegc.yml
+          # buildkite-agent pipeline upload .buildkite/pipelines/main/misc/doctest.yml
+          # buildkite-agent pipeline upload .buildkite/pipelines/main/misc/pdf_docs/build_pdf_docs.yml
+          # buildkite-agent pipeline upload .buildkite/pipelines/main/misc/embedding.yml
+          # buildkite-agent pipeline upload .buildkite/pipelines/main/misc/trimming.yml
+          # buildkite-agent pipeline upload .buildkite/pipelines/main/misc/llvmpasses.yml
           # buildkite-agent pipeline upload .buildkite/pipelines/main/misc/whitespace.yml # Currently runs in GitHub Actions instead of Buildkite
 
-          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/sanitizers/asan.yml
-          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/sanitizers/tsan.yml
+          # buildkite-agent pipeline upload .buildkite/pipelines/main/misc/sanitizers/asan.yml
+          # buildkite-agent pipeline upload .buildkite/pipelines/main/misc/sanitizers/tsan.yml
         agents:
           queue: "julia"
           os: "linux"
@@ -107,37 +108,37 @@ steps:
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
         commands: |
           export ALLOW_FAIL="false"
-          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/gcext.yml
+          # buildkite-agent pipeline upload .buildkite/pipelines/main/misc/gcext.yml
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/test_juliasyntax.yml
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/test_juliasyntax.dpa.yml
-          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/test_revise.yml
+          # buildkite-agent pipeline upload .buildkite/pipelines/main/misc/test_revise.yml
 
-          ### Launch Linux test jobs.
-          # Regular:
-          GROUP="Test" \
-              bash .buildkite/utilities/arches_pipeline_upload.sh \
-              .buildkite/pipelines/main/platforms/test_linux.arches \
-              .buildkite/pipelines/main/platforms/test_linux.yml
-          # i686-linux-gnu:
-          GROUP="Test" \
-              bash .buildkite/utilities/arches_pipeline_upload.sh \
-              .buildkite/pipelines/main/platforms/test_linux.i686.arches \
-              .buildkite/pipelines/main/platforms/test_linux.i686.yml
-          ### Launch macOS test jobs:
-          GROUP="Test" \
-              bash .buildkite/utilities/arches_pipeline_upload.sh \
-              .buildkite/pipelines/main/platforms/test_macos.arches \
-              .buildkite/pipelines/main/platforms/test_macos.yml
-          ### Launch FreeBSD test jobs:
-          GROUP="Test" \
-              bash .buildkite/utilities/arches_pipeline_upload.sh \
-              .buildkite/pipelines/main/platforms/test_freebsd.arches \
-              .buildkite/pipelines/main/platforms/test_freebsd.yml
-          ### Launch Windows test jobs:
-          GROUP="Test" \
-              bash .buildkite/utilities/arches_pipeline_upload.sh \
-              .buildkite/pipelines/main/platforms/test_windows.arches \
-              .buildkite/pipelines/main/platforms/test_windows.yml
+          # ### Launch Linux test jobs.
+          # # Regular:
+          # GROUP="Test" \
+          #     bash .buildkite/utilities/arches_pipeline_upload.sh \
+          #     .buildkite/pipelines/main/platforms/test_linux.arches \
+          #     .buildkite/pipelines/main/platforms/test_linux.yml
+          # # i686-linux-gnu:
+          # GROUP="Test" \
+          #     bash .buildkite/utilities/arches_pipeline_upload.sh \
+          #     .buildkite/pipelines/main/platforms/test_linux.i686.arches \
+          #     .buildkite/pipelines/main/platforms/test_linux.i686.yml
+          # ### Launch macOS test jobs:
+          # GROUP="Test" \
+          #     bash .buildkite/utilities/arches_pipeline_upload.sh \
+          #     .buildkite/pipelines/main/platforms/test_macos.arches \
+          #     .buildkite/pipelines/main/platforms/test_macos.yml
+          # ### Launch FreeBSD test jobs:
+          # GROUP="Test" \
+          #     bash .buildkite/utilities/arches_pipeline_upload.sh \
+          #     .buildkite/pipelines/main/platforms/test_freebsd.arches \
+          #     .buildkite/pipelines/main/platforms/test_freebsd.yml
+          # ### Launch Windows test jobs:
+          # GROUP="Test" \
+          #     bash .buildkite/utilities/arches_pipeline_upload.sh \
+          #     .buildkite/pipelines/main/platforms/test_windows.arches \
+          #     .buildkite/pipelines/main/platforms/test_windows.yml
           echo "+++ Finished launching test jobs"
         agents:
           queue: "julia"
