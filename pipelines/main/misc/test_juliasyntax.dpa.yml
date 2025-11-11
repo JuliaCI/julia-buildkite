@@ -59,6 +59,13 @@ steps:
                 agent_arch: "aarch64"
                 julia_arch: "aarch64"
                 julia_version: "1.12" # latest stable
+            # For some reason, the Julia 1.0 tarball for Windows x86_64 doesn't seem to exist. Weird. Skip it for now, try to fix this in the future.
+            - with:
+                agent_os: "windows"
+                agent_arch: "x86_64"
+                julia_arch: "x86_64"
+                julia_version: "1.0"
+              skip: true
         plugins:
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"
