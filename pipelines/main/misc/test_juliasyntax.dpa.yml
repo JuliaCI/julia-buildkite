@@ -117,7 +117,7 @@ steps:
       # AFAICT, there is currently no way to conditionally skip a plugin.
       # > Plugins run during the job lifecycle, before the conditional is evaluated
       # Source: https://buildkite.com/docs/pipelines/configure/conditionals
-      - label: "juliasyntax {{matrix.agent_os}}/{{matrix.julia_arch}}/{{matrix.julia_version}}"
+      - label: "juliasyntax {{matrix.agent_os}}/{{matrix.julia_arch}}/{{matrix.julia_version}} in i686 sandbox"
         # key: "juliasyntax-key" # TODO: Figure out if we can define a Buildkite key here.
         timeout_in_minutes: 30
         agents:
