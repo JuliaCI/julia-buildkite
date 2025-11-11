@@ -107,6 +107,7 @@ steps:
         commands: |
           export ALLOW_FAIL="false"
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/gcext.yml
+          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/test_juliasyntax.yml
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/test_revise.yml
 
           ### Launch Linux test jobs.
