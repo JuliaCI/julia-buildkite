@@ -6,11 +6,11 @@ steps:
         timeout_in_minutes: 30
         agents:
           queue: "julia"
-          os: "{{matrix.os}}"
+          os: "{{matrix.agent_os}}"
           arch: "{{matrix.agent_arch}}"
         matrix:
           setup:
-            os:
+            agent_os:
               - "linux"
               # - "macos" # We handle macos special, see "adjustments" section below
               - "windows"
@@ -18,7 +18,7 @@ steps:
               - "x86_64" # The "x86_64" agent architectuere is used for both 32-bit Julia and 64-bit Julia
             julia_arch: # architecture of the Julia binary to install. Distinct from the agent architecture.
               - "x86_64" # 64-bit
-              - "x86" # 32-bit # TODO: uncomment this line
+              # - "x86" # 32-bit # TODO: uncomment this line
             julia_version:
               # Don't put "1" here. Always include at least major and minor version.
               - "1.10"
@@ -27,33 +27,33 @@ steps:
           adjustments:
             # macOS x86_64:
             - with:
-                os: "macos"
+                agent_os: "macos"
                 agent_arch: "x86_64"
                 julia_arch: "x86_64"
                 julia_version: "1.10"
             - with:
-                os: "macos"
+                agent_os: "macos"
                 agent_arch: "x86_64"
                 julia_arch: "x86_64"
                 julia_version: "1.11"
             - with:
-                os: "macos"
+                agent_os: "macos"
                 agent_arch: "x86_64"
                 julia_arch: "x86_64"
                 julia_version: "1.12"
             # macOS arm64:
             - with:
-                os: "macos"
+                agent_os: "macos"
                 agent_arch: "arm64"
                 julia_arch: "arm64"
                 julia_version: "1.10"
             - with:
-                os: "macos"
+                agent_os: "macos"
                 agent_arch: "arm64"
                 julia_arch: "arm64"
                 julia_version: "1.11"
             - with:
-                os: "macos"
+                agent_os: "macos"
                 agent_arch: "arm64"
                 julia_arch: "arm64"
                 julia_version: "1.12"
