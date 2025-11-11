@@ -2,22 +2,22 @@ steps:
   - group: "Check"
     steps:
       - label: "test juliasyntax (on older Julia versions)"
-        key: "test-juliasyntax"
+        # key: "test-juliasyntax" # TODO: Fix this
         timeout_in_minutes: 30
         agents:
           queue: "julia"
-          os: "linux"
-          arch: "x86_64"
+          os: "{{matrix.os}}"
+          arch: "x86_64" # TODO: Fix this part (agent architecture).
         matrix:
           setup:
             os:
               - "linux"
               - "macos"
               - "windows"
-            julia_arch: # architecture of the Julia binary to install
+            julia_arch: # architecture of the Julia binary to install. Distinct from the agent architecture.
               - "x86_64"
             julia_version:
-              # Don't put "1" here. Always include at least major and minor version
+              # Don't put "1" here. Always include at least major and minor version.
               - "1.10"
               - "1.11"
               - "1.12"
@@ -28,7 +28,7 @@ steps:
           - JuliaCI/julia#v1:
               # Drop default "registries" directory, so it is not persisted from execution to execution
               persist_depot_dirs: packages,artifacts,compiled
-              version: '1.10' # we don't want to hardcode v1, as things might break when a new 1.x Julia is released
+              version: '{{matrix.julia_version}}'
         commands: |
           echo "--- Setting stuff up"
           unset JULIA_DEPOT_PATH
