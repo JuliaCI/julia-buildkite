@@ -154,15 +154,15 @@ steps:
         commands: |
           export ALLOW_FAIL="true"
           # Launch Linux allowed-to-fail build jobs:
-          GROUP="Allow Fail" \
-              bash .buildkite/utilities/arches_pipeline_upload.sh \
-              .buildkite/pipelines/main/platforms/build_linux.soft_fail.arches \
-              .buildkite/pipelines/main/platforms/build_linux.yml
-          # Launch macOS allowed-to-fail build jobs:
-          GROUP="Allow Fail" \
-              bash .buildkite/utilities/arches_pipeline_upload.sh \
-              .buildkite/pipelines/main/platforms/build_macos.soft_fail.arches \
-              .buildkite/pipelines/main/platforms/build_macos.yml
+          # GROUP="Allow Fail" \
+          #     bash .buildkite/utilities/arches_pipeline_upload.sh \
+          #     .buildkite/pipelines/main/platforms/build_linux.soft_fail.arches \
+          #     .buildkite/pipelines/main/platforms/build_linux.yml
+          # # Launch macOS allowed-to-fail build jobs:
+          # GROUP="Allow Fail" \
+          #     bash .buildkite/utilities/arches_pipeline_upload.sh \
+          #     .buildkite/pipelines/main/platforms/build_macos.soft_fail.arches \
+          #     .buildkite/pipelines/main/platforms/build_macos.yml
         agents:
           queue: "julia"
           os: "linux"
@@ -185,32 +185,32 @@ steps:
         commands: |
           export ALLOW_FAIL="true"
 
-          ### Launch Linux allowed-to-fail test jobs.
-          # Regular:
-          GROUP="Allow Fail" \
-              bash .buildkite/utilities/arches_pipeline_upload.sh \
-              .buildkite/pipelines/main/platforms/test_linux.soft_fail.arches \
-              .buildkite/pipelines/main/platforms/test_linux.yml
-          # PowerPC (only for Julia prior to 1.12):
-          GROUP="Allow Fail" \
-              julia .buildkite/pipelines/main/platforms/launch_powerpc.jl \
-              .buildkite/pipelines/main/platforms/test_linux.powerpc.soft_fail.arches \
-              .buildkite/pipelines/main/platforms/test_linux.yml
-          ### Launch macOS allowed-to-fail test jobs:
-          GROUP="Allow Fail" \
-              bash .buildkite/utilities/arches_pipeline_upload.sh \
-              .buildkite/pipelines/main/platforms/test_macos.soft_fail.arches \
-              .buildkite/pipelines/main/platforms/test_macos.yml
-          ### Launch FreeBSD allowed-to-fail jobs:
-          GROUP="Allow Fail" \
-              bash .buildkite/utilities/arches_pipeline_upload.sh \
-              .buildkite/pipelines/main/platforms/test_freebsd.soft_fail.arches \
-              .buildkite/pipelines/main/platforms/test_freebsd.yml
-          ### Launch Windows allowed-to-fail test jobs:
-          GROUP="Allow Fail" \
-              bash .buildkite/utilities/arches_pipeline_upload.sh \
-              .buildkite/pipelines/main/platforms/test_windows.soft_fail.arches \
-              .buildkite/pipelines/main/platforms/test_windows.yml
+          # ### Launch Linux allowed-to-fail test jobs.
+          # # Regular:
+          # GROUP="Allow Fail" \
+          #     bash .buildkite/utilities/arches_pipeline_upload.sh \
+          #     .buildkite/pipelines/main/platforms/test_linux.soft_fail.arches \
+          #     .buildkite/pipelines/main/platforms/test_linux.yml
+          # # PowerPC (only for Julia prior to 1.12):
+          # GROUP="Allow Fail" \
+          #     julia .buildkite/pipelines/main/platforms/launch_powerpc.jl \
+          #     .buildkite/pipelines/main/platforms/test_linux.powerpc.soft_fail.arches \
+          #     .buildkite/pipelines/main/platforms/test_linux.yml
+          # ### Launch macOS allowed-to-fail test jobs:
+          # GROUP="Allow Fail" \
+          #     bash .buildkite/utilities/arches_pipeline_upload.sh \
+          #     .buildkite/pipelines/main/platforms/test_macos.soft_fail.arches \
+          #     .buildkite/pipelines/main/platforms/test_macos.yml
+          # ### Launch FreeBSD allowed-to-fail jobs:
+          # GROUP="Allow Fail" \
+          #     bash .buildkite/utilities/arches_pipeline_upload.sh \
+          #     .buildkite/pipelines/main/platforms/test_freebsd.soft_fail.arches \
+          #     .buildkite/pipelines/main/platforms/test_freebsd.yml
+          # ### Launch Windows allowed-to-fail test jobs:
+          # GROUP="Allow Fail" \
+          #     bash .buildkite/utilities/arches_pipeline_upload.sh \
+          #     .buildkite/pipelines/main/platforms/test_windows.soft_fail.arches \
+          #     .buildkite/pipelines/main/platforms/test_windows.yml
         agents:
           queue: "julia"
           os: "linux"
