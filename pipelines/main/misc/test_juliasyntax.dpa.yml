@@ -1,7 +1,7 @@
 steps:
   - group: "Check"
     steps:
-      - label: "test juliasyntax (on older Julia versions)"
+      - label: "test juliasyntax" # TODO: come up with better name
         # key: "test-juliasyntax" # TODO: Fix this
         timeout_in_minutes: 30
         agents:
@@ -15,7 +15,8 @@ steps:
               - "macos"
               - "windows"
             julia_arch: # architecture of the Julia binary to install. Distinct from the agent architecture.
-              - "x86_64"
+              - "x86_64" # 64-bit
+              - "x86" # 32-bit
             julia_version:
               # Don't put "1" here. Always include at least major and minor version.
               - "1.10"
@@ -26,18 +27,15 @@ steps:
               version: "./.buildkite-external-version"
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
           - JuliaCI/julia#v1:
+              isolated_depot: true
               # Drop default "registries" directory, so it is not persisted from execution to execution
               persist_depot_dirs: packages,artifacts,compiled
               version: '{{matrix.julia_version}}'
+              arch: '{{matrix.julia_arch}}'
         commands: |
-          echo "--- Setting stuff up"
-          unset JULIA_DEPOT_PATH
-          unset JULIA_LOAD_PATH
-          rm -rf ~/.julia/environments
-
           echo "--- Pkg.dev-ing (by path) the local copy of JuliaSyntax"
           export JULIA_PKG_PRECOMPILE_AUTO=0
-          julia -e 'import Pkg; p = Pkg.PackageSpec(path = "./JuliaSyntax"); Pkg.dev(p)'
+          julia -e 'import Pkg; pspec = Pkg.PackageSpec(path = "./JuliaSyntax"); Pkg.develop(pspec)'
 
           echo "--- Testing JuliaSyntax on Julia {{matrix.julia_version}}"
           unset JULIA_PKG_PRECOMPILE_AUTO
