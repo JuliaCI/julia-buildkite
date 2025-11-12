@@ -1,4 +1,9 @@
-- group: "JuliaSyntax"
+# This is its own YAML file so that we can accomplish the following goal:
+# If JuliaSyntax has not yet been moved into the JuliaLang/julia repo,
+# then PRs to JuliaLang/julia should not display a `JuliaSyntax` PR commit status.
+
+steps:
+  - group: "JuliaSyntax"
     notify:
       - github_commit_status:
           context: "JuliaSyntax"
