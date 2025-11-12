@@ -90,6 +90,13 @@ steps:
 
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/sanitizers/asan.yml
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/sanitizers/tsan.yml
+
+          if [ -e "./JuliaSyntax/Project.toml" ]; then
+            echo "./JuliaSyntax/Project.toml file exists"
+            buildkite-agent pipeline upload .buildkite/pipelines/main/misc/juliasyntax.launch.yml
+          else
+            echo "./JuliaSyntax/Project.toml file does NOT exist. Will not launch JuliaSyntax test jobs"
+          fi
         agents:
           queue: "julia"
           os: "linux"
@@ -207,32 +214,6 @@ steps:
               bash .buildkite/utilities/arches_pipeline_upload.sh \
               .buildkite/pipelines/main/platforms/test_windows.soft_fail.arches \
               .buildkite/pipelines/main/platforms/test_windows.yml
-        agents:
-          queue: "julia"
-          os: "linux"
-          arch: "x86_64" # prevent from running on PiBots
-  - group: "JuliaSyntax"
-    notify:
-      - github_commit_status:
-          context: "JuliaSyntax"
-    steps:
-      - label: "Launch JuliaSyntax jobs"
-        plugins:
-          - JuliaCI/external-buildkite#v1:
-              version: "./.buildkite-external-version"
-              repo_url: "https://github.com/JuliaCI/julia-buildkite"
-          - JuliaCI/julia#b4d0bfa510bc399417133adae013385af5c71190: # v1.13.5
-              # A few notes:
-              # 1. We pin the `JuliaCI/julia` plugin to a full commit hash.
-              #    This is intentional. We want to make sure that this script doesn't suddenly
-              #    break when a new version of the plugin is released.
-              # 2. We specify the Julia version up to patch, e.g. '1.7.3'.
-              #    This is intentional. We don't do e.g. '1.7', because we want to make sure
-              #    that this script doesn't suddenly break when a new patch release of Julia
-              #    is released.
-              version: '1.10.10'
-        commands: |
-          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/juliasyntax.yml
         agents:
           queue: "julia"
           os: "linux"
