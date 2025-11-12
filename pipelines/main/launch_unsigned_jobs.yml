@@ -233,3 +233,7 @@ steps:
               version: '1.10.10'
         commands: |
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/juliasyntax.yml
+        agents:
+          queue: "julia"
+          os: "linux"
+          arch: "x86_64" # prevent from running on PiBots
