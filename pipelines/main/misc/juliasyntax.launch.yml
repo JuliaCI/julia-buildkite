@@ -24,7 +24,7 @@ steps:
               #    is released.
               version: '1.10.10'
         commands: |
-          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/juliasyntax.launch.yml
+          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/juliasyntax.test.yml
         agents:
           queue: "julia"
           os: "linux"
