@@ -114,6 +114,17 @@ steps:
 
           echo "--- Pkg.dev-ing (by path) the local copy of JuliaSyntax"
           export JULIA_PKG_PRECOMPILE_AUTO=0
+          # Double dollar signs $$ needed here because of Buildkite stuff
+          echo "Old JULIA_DEPOT_PATH: $${JULIA_DEPOT_PATH:?}"
+          # On Windows, the separator is ;
+          # On other platforms, the separator is :
+          sep=$$(julia -e 'println(Sys.iswindows() ? ";" : ":")')
+          # We change the depot path from `depot` to `depot:`
+          # The trailing colon/semicolon makes sure we can re-use the existing stdlib pkgimages,
+          # instead of needing to re-precompile them
+          # https://docs.julialang.org/en/v1/manual/environment-variables/#JULIA_DEPOT_PATH
+          export JULIA_DEPOT_PATH="$${JULIA_DEPOT_PATH:?}$${sep}"
+          echo "New JULIA_DEPOT_PATH: $${JULIA_DEPOT_PATH:?}"
           julia -e 'import Pkg; pspec = Pkg.PackageSpec(path = "./JuliaSyntax"); Pkg.develop(pspec)'
 
           echo "--- Testing JuliaSyntax on Julia {{matrix.julia_version}}"
@@ -195,7 +206,7 @@ steps:
           # The trailing colon/semicolon makes sure we can re-use the existing stdlib pkgimages,
           # instead of needing to re-precompile them
           # https://docs.julialang.org/en/v1/manual/environment-variables/#JULIA_DEPOT_PATH
-          export JULIA_DEPOT_PATH="$${JULIA_DEPOT_PATH:?}$$(sep)"
+          export JULIA_DEPOT_PATH="$${JULIA_DEPOT_PATH:?}$${sep}"
           echo "New JULIA_DEPOT_PATH: $${JULIA_DEPOT_PATH:?}"
           julia -e 'import Pkg; pspec = Pkg.PackageSpec(path = "./JuliaSyntax"); Pkg.develop(pspec)'
 
