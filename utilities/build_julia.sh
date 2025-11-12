@@ -30,6 +30,11 @@ echo "--- Collect make options"
 # These are the flags we'll provide to `make`
 MFLAGS=()
 
+if [[ ! -z "${USE_JULIA_PGO_LTO-}" ]]; then
+    MFLAGS+=( "-Ccontrib/pgo-lto" )
+    MFLAGS+=( "STAGE2_BUILD=$PWD" )
+fi
+
 # If we have the option, let's use `--output-sync`
 #if ${MAKE} --help | grep output-sync >/dev/null 2>/dev/null; then
 #    MFLAGS+=( "--output-sync" )
@@ -101,3 +106,8 @@ fi
 
 echo "--- Upload build artifacts to buildkite"
 buildkite-agent artifact upload "${UPLOAD_FILENAME}.tar.gz"
+
+# Upload the profile data to allow for reproducible builds
+if [[ ! -z "${USE_JULIA_PGO_LTO-}" ]]; then
+    buildkite-agent artifact upload "contrib/pgo-lto/profiles/merged.prof"
+fi
