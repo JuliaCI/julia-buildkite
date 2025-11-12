@@ -1,5 +1,5 @@
 steps:
-  - group: "Check"
+  - group: "JuliaSyntax"
     steps:
       # Note: This file only concerns testing JuliaSyntax on older Julia versions
       # Testing JuliaSyntax on Julia#master is done separately.
