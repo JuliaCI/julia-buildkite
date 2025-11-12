@@ -90,6 +90,13 @@ steps:
 
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/sanitizers/asan.yml
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/sanitizers/tsan.yml
+
+          if [ -e "./JuliaSyntax/Project.toml" ]; then
+            echo "./JuliaSyntax/Project.toml file exists"
+            buildkite-agent pipeline upload .buildkite/pipelines/main/misc/juliasyntax.launch.yml
+          else
+            echo "./JuliaSyntax/Project.toml file does NOT exist. Will not launch JuliaSyntax test jobs"
+          fi
         agents:
           queue: "julia"
           os: "linux"

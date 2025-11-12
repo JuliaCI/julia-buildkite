@@ -1,0 +1,215 @@
+steps:
+  - group: "JuliaSyntax"
+    steps:
+      # Note: This file only concerns testing JuliaSyntax on older Julia versions
+      # Testing JuliaSyntax on Julia#master is done separately.
+      # Specifically, for that case, testing JuliaSyntax is built into the regular `Base.runtests()`,
+      # so those tests are running in the regular Buildkite platform-specific test jobs.
+
+      # This step has most of the JuliaSyntax test jobs
+      - label: "juliasyntax {{matrix.agent_os}}/{{matrix.julia_arch}}/{{matrix.julia_version}}"
+        # We comment out the Buildkite step key for this step, because:
+        # > You can't use matrix values in other attributes, including step keys and ...
+        # Source: https://buildkite.com/docs/pipelines/configure/workflows/build-matrix
+        # key: "juliasyntax-step-key"
+        timeout_in_minutes: 30
+        agents:
+          queue: "julia"
+          os: "{{matrix.agent_os}}"
+          arch: "{{matrix.agent_arch}}"
+        matrix:
+          setup:
+            agent_os:
+              - "linux"
+              - "windows"
+              # - "macos" # We handle macOS special, see "adjustments" section below
+            agent_arch: # arch of the Buildkite agent. Distinct from the Julia binary's arch
+              - "x86_64" # The "x86_64" agent arch is used for both 32-bit Julia and 64-bit Julia
+            julia_arch: # arch of the Julia binary to install. Distinct from the agent arch
+              - "x86_64" # 64-bit Julia
+              # 32-bit Julia on Linux is handled in a separate step later in this YAML file
+              # 32-bit Julia on Windows is handled in the "adjustments" section below
+            julia_version:
+              # Don't put "1" here. Always include at least major and minor version.
+              - "1.0"
+              - "1.6" # old LTS
+              - "1.10" # current LTS
+              - "1.12" # latest stable
+          adjustments:
+            # macOS x86_64 (Intel):
+            - with:
+                agent_os: "macos"
+                agent_arch: "x86_64"
+                julia_arch: "x86_64"
+                julia_version: "1.0"
+            - with:
+                agent_os: "macos"
+                agent_arch: "x86_64"
+                julia_arch: "x86_64"
+                julia_version: "1.6" # old LTS
+            - with:
+                agent_os: "macos"
+                agent_arch: "x86_64"
+                julia_arch: "x86_64"
+                julia_version: "1.10" # current LTS
+            - with:
+                agent_os: "macos"
+                agent_arch: "x86_64"
+                julia_arch: "x86_64"
+                julia_version: "1.12" # latest stable
+            # macOS aarch64 (Apple Silicon):
+            # Note: Julia 1.0 and 1.6 did not have native aarch64 binaries for macOS, so we skip those
+            - with:
+                agent_os: "macos"
+                agent_arch: "aarch64"
+                julia_arch: "aarch64"
+                julia_version: "1.10" # old LTS
+            - with:
+                agent_os: "macos"
+                agent_arch: "aarch64"
+                julia_arch: "aarch64"
+                julia_version: "1.12" # latest stable
+            # For some reason, the Julia 1.0 tarball for Windows x86_64 doesn't seem to exist. Weird. Skip it for now, try to fix this in the future.
+            - with:
+                agent_os: "windows"
+                agent_arch: "x86_64"
+                julia_arch: "x86_64"
+                julia_version: "1.0"
+              skip: true
+            # 32-bit Julia on Windows
+            # For some reason, the Julia 1.0 tarball for Windows i686 doesn't seem to exist. Weird. Skip it for now, try to fix this in the future.
+            # - with:
+            #     agent_os: "windows"
+            #     agent_arch: "x86_64"
+            #     julia_arch: "i686" # 32-bit Julia
+            #     julia_version: "1.0"
+            - with:
+                agent_os: "windows"
+                agent_arch: "x86_64"
+                julia_arch: "i686" # 32-bit Julia
+                julia_version: "1.6" # old LTS
+            - with:
+                agent_os: "windows"
+                agent_arch: "x86_64"
+                julia_arch: "i686" # 32-bit Julia
+                julia_version: "1.10" # current LTS
+            - with:
+                agent_os: "windows"
+                agent_arch: "x86_64"
+                julia_arch: "i686" # 32-bit Julia
+                julia_version: "1.12" # latest stable
+        plugins:
+          - JuliaCI/external-buildkite#v1:
+              version: "./.buildkite-external-version"
+              repo_url: "https://github.com/JuliaCI/julia-buildkite"
+          - JuliaCI/julia#v1:
+              isolated_depot: true
+              # Drop default "registries" directory, so it is not persisted from execution to execution
+              persist_depot_dirs: packages,artifacts,compiled
+              version: '{{matrix.julia_version}}'
+              arch: '{{matrix.julia_arch}}'
+        commands: |
+          echo "--- Julia versioninfo"
+          julia -e 'import InteractiveUtils; InteractiveUtils.versioninfo()'
+
+          echo "--- Pkg.dev-ing (by path) the local copy of JuliaSyntax"
+          export JULIA_PKG_PRECOMPILE_AUTO=0
+          # Double dollar signs $$ needed here because of Buildkite stuff
+          echo "Old JULIA_DEPOT_PATH: $${JULIA_DEPOT_PATH:?}"
+          # On Windows, the separator is ;
+          # On other platforms, the separator is :
+          sep=$$(julia -e 'println(Sys.iswindows() ? ";" : ":")')
+          # We change the depot path from `depot` to `depot:`
+          # The trailing colon/semicolon makes sure we can re-use the existing stdlib pkgimages,
+          # instead of needing to re-precompile them
+          # https://docs.julialang.org/en/v1/manual/environment-variables/#JULIA_DEPOT_PATH
+          export JULIA_DEPOT_PATH="$${JULIA_DEPOT_PATH:?}$${sep}"
+          echo "New JULIA_DEPOT_PATH: $${JULIA_DEPOT_PATH:?}"
+          julia -e 'import Pkg; pspec = Pkg.PackageSpec(path = "./JuliaSyntax"); Pkg.develop(pspec)'
+
+          echo "--- Testing JuliaSyntax on Julia {{matrix.julia_version}}"
+          unset JULIA_PKG_PRECOMPILE_AUTO
+          julia -e 'import Pkg; Pkg.test("JuliaSyntax")'
+
+      # This step just has the 32-bit Linux jobs for JuliaSyntax.
+      # For these jobs, we have to run inside a different rootfs image, because the default 64-bit agent rootfs image will complain
+      # when we try to run a 32-bit executable.
+      # The logic for the sandbox plugin is annoying, so I've separated it out.
+      # AFAICT, there is currently no way to conditionally skip a plugin.
+      # > Plugins run during the job lifecycle, before the conditional is evaluated
+      # Source: https://buildkite.com/docs/pipelines/configure/conditionals
+      - label: "juliasyntax {{matrix.agent_os}}/{{matrix.julia_arch}}/{{matrix.julia_version}} in i686 sandbox"
+        # We comment out the Buildkite step key for this step, because:
+        # > You can't use matrix values in other attributes, including step keys and ...
+        # Source: https://buildkite.com/docs/pipelines/configure/workflows/build-matrix
+        # key: "juliasyntax-step-key"
+        timeout_in_minutes: 30
+        agents:
+          queue: "julia"
+          os: "{{matrix.agent_os}}"
+          arch: "{{matrix.agent_arch}}"
+        matrix:
+          setup:
+            agent_os:
+              - "linux"
+            agent_arch: # arch of the Buildkite agent. Distinct from the Julia binary's arch
+              - "x86_64" # The "x86_64" agent arch is used for both 32-bit Julia and 64-bit Julia
+            julia_arch: # arch of the Julia binary to install. Distinct from the agent arch
+              - "i686" # 32-bit Julia
+            julia_version:
+              # Don't put "1" here. Always include at least major and minor version.
+              - "1.0"
+              - "1.6" # old LTS
+              - "1.10" # current LTS
+              - "1.12" # latest stable
+        plugins:
+          - JuliaCI/external-buildkite#v1:
+              version: "./.buildkite-external-version"
+              repo_url: "https://github.com/JuliaCI/julia-buildkite"
+          - JuliaCI/julia#v1:
+              # This is the Julia install *outside* the sandbox.
+              # We only use this Julia install to run Sandbox.jl
+              # This is not the Julia install that will be used to run Pkg.test()
+              isolated_depot: true
+              # Drop default "registries" directory, so it is not persisted from execution to execution
+              persist_depot_dirs: packages,artifacts,compiled
+              version: '1.10' # current LTS. It doesn't really matter what version we pick here.
+              # arch: '{{matrix.julia_arch}}' # no need to specify the julia_arch for this "outside" Julia.
+          - staticfloat/sandbox#v2:
+              rootfs_url: https://github.com/JuliaCI/rootfs-images/releases/download/v8.0/agent_linux.i686.tar.gz
+              rootfs_treehash: "cba648ddb9ac0d292f9c8809652523806674a3d2"
+              uid: 1000
+              gid: 1000
+              workspaces:
+                # Include `/cache/repos` so that our `git` version introspection works.
+                - "/cache/repos:/cache/repos"
+          - JuliaCI/julia#v1:
+              # This is the Julia install *inside* the sandbox.
+              # That's the Julia install we actually use for Pkg.test()
+              isolated_depot: true
+              # Drop default "registries" directory, so it is not persisted from execution to execution
+              persist_depot_dirs: packages,artifacts,compiled
+              version: '{{matrix.julia_version}}'
+              arch: '{{matrix.julia_arch}}'
+        commands: |
+          echo "--- Julia versioninfo"
+          julia -e 'import InteractiveUtils; InteractiveUtils.versioninfo()'
+
+          echo "--- Pkg.dev-ing (by path) the local copy of JuliaSyntax"
+          export JULIA_PKG_PRECOMPILE_AUTO=0
+          # Double dollar signs $$ needed here because of Buildkite stuff
+          echo "Old JULIA_DEPOT_PATH: $${JULIA_DEPOT_PATH:?}"
+          # On Windows, the separator is ;
+          # On other platforms, the separator is :
+          sep=$$(julia -e 'println(Sys.iswindows() ? ";" : ":")')
+          # We change the depot path from `depot` to `depot:`
+          # The trailing colon/semicolon makes sure we can re-use the existing stdlib pkgimages,
+          # instead of needing to re-precompile them
+          # https://docs.julialang.org/en/v1/manual/environment-variables/#JULIA_DEPOT_PATH
+          export JULIA_DEPOT_PATH="$${JULIA_DEPOT_PATH:?}$${sep}"
+          echo "New JULIA_DEPOT_PATH: $${JULIA_DEPOT_PATH:?}"
+          julia -e 'import Pkg; pspec = Pkg.PackageSpec(path = "./JuliaSyntax"); Pkg.develop(pspec)'
+
+          echo "--- Testing JuliaSyntax on Julia {{matrix.julia_version}}"
+          unset JULIA_PKG_PRECOMPILE_AUTO
+          julia -e 'import Pkg; Pkg.test("JuliaSyntax")'
