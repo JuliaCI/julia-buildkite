@@ -32,7 +32,7 @@ steps:
               #    This is intentional. We don't do e.g. '1.7', because we want to make sure
               #    that this script doesn't suddenly break when a new patch release of Julia
               #    is released.
-              version: '1.7.3'
+              version: '1.10.10' # GREP_ME: Keep this updated to LTS. Do not set it to '1' or 'stable' or 'latest'.
         commands: |
           ### Launch Linux build jobs.
           # Regular:
@@ -184,7 +184,7 @@ steps:
               #    This is intentional. We don't do e.g. '1.7', because we want to make sure
               #    that this script doesn't suddenly break when a new patch release of Julia
               #    is released.
-              version: '1.7.3'
+              version: '1.10.10' # GREP_ME: Keep this updated to LTS. Do not set it to '1' or 'stable' or 'latest'.
         commands: |
           export ALLOW_FAIL="true"
 
