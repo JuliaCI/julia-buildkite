@@ -42,3 +42,4 @@ steps:
           TRIPLET: "${TRIPLET?}"
           USE_RR: "${USE_RR?}"
           i686_GROUP: "${i686_GROUP?}"
+          BUILDKITE_CANCEL_SIGNAL: "SIGQUIT"
