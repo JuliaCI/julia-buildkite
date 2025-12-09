@@ -1,0 +1,10 @@
+# ROOTFS_IMAGE_NAME    TRIPLET                         ARCH           ARCH_ROOTFS    TIMEOUT    USE_RR     USE_JULIA_PGO_LTO_BOLT     ROOTFS_TAG    ROOTFS_HASH
+tester_linux           x86_64-linux-gnu-pgo-lto-bolt   x86_64         x86_64         .          .          PGO_LTO_BOLT               v6.00         770c0240be788cfeb9654e1980ea929d3ed98d1f
+
+# These special lines allow us to embed default values for the columns above.
+# Any column without a default mapping here will simply substitute a `.` to the empty string
+
+# Most tests should finish within ~45 minutes, barring exceptionally slow hardware
+# We double that to a default of 90 minutes, with an extra 45 minutes for cleanup,
+# including things like `rr` trace compression,
+#default TIMEOUT 135

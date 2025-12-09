@@ -30,6 +30,9 @@ case "${TRIPLET}" in
     *-gnunogpl) # builds that use `USE_GPL_LIBS=0`
         OS="linuxnogpl"
         ;;
+    *-gnu-pgo-lto-bolt) # PGO + LTO + BOLT builds
+        OS="linuxpgoltobolt"
+        ;;
     *-musl)
         OS="musl"
         ;;
