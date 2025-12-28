@@ -1,6 +1,9 @@
 steps:
   - group: "Coverage"
     if: (pipeline.slug == "julia-buildkite-scheduled") || (pipeline.slug == "julia-master-scheduled") || (build.pull_request.labels includes "needs full CI")
+    notify:
+      - github_commit_status:
+          context: "Coverage"
     steps:
       - label: ":linux: coverage (x86_64)"
         key:   "coverage-linux"
@@ -220,7 +223,3 @@ steps:
           BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET: ${BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET?}
           # Set build number for Coveralls parallel mode
           COVERALLS_SERVICE_NUMBER: ${BUILDKITE_BUILD_NUMBER}
-
-notify:
-  - github_commit_status:
-      context: "Coverage"
