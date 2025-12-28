@@ -10,6 +10,14 @@ steps:
           - JuliaCI/cryptic#v2:
               verbose: true
               signed_pipelines:
+                # Launch the code coverage job (runs when "needs full CI" label is applied)
+                - pipeline: .buildkite/pipelines/scheduled/coverage/coverage.yml
+                  signature_file: .buildkite/pipelines/scheduled/coverage/coverage.yml.signature
+                  inputs:
+                    - .buildkite/pipelines/scheduled/coverage/coverage.yml
+                    - .buildkite/pipelines/scheduled/coverage/run_tests_parallel.jl
+                    - .buildkite/pipelines/scheduled/coverage/upload_coverage.jl
+                    - .buildkite/pipelines/scheduled/coverage/finish_coveralls_parallel.jl
                 # Launch the upload jobs
                 - pipeline: .buildkite/pipelines/main/launch_upload_jobs.yml
                   signature_file: .buildkite/pipelines/main/launch_upload_jobs.yml.signature
