@@ -1,6 +1,9 @@
 steps:
   - group: "Coverage"
     if: (pipeline.slug == "julia-buildkite-scheduled") || (pipeline.slug == "julia-master-scheduled") || (build.pull_request.labels includes "needs full CI")
+    notify:
+      - github_commit_status:
+          context: "Coverage"
     steps:
       - label: ":linux: coverage (x86_64)"
         key:   "coverage-linux"
