@@ -2,8 +2,8 @@
 package_linux          i686-linux-gnu                 x86_64         i686           JL_CFLAGS=-Werror,JL_CXXFLAGS=-Werror                                                   .             v7.3          002717b31100993dd232c6b35775b3e2e6941840
 package_linux          x86_64-linux-gnu               x86_64         x86_64         JL_CFLAGS=-Werror,JL_CXXFLAGS=-Werror                                                   .             v7.3          d8de9e0051c5cd69f3dde8ddaefc594d0a71043b
 package_linux          x86_64-linux-gnuassert         x86_64         x86_64         FORCE_ASSERTIONS=1,LLVM_ASSERTIONS=1,JL_CFLAGS=-Werror,JL_CXXFLAGS=-Werror              .             v7.3          d8de9e0051c5cd69f3dde8ddaefc594d0a71043b
-package_linux          x86_64-linux-gnuprofiling      x86_64         x86_64         WITH_TRACY=1,WITH_ITTAPI=1,WITH_TIMING_COUNTS=1,JL_CFLAGS=-Werror,JL_CXXFLAGS=-Werror            .             v7.3           d8de9e0051c5cd69f3dde8ddaefc594d0a71043b
-package_linux          aarch64-linux-gnu              aarch64        aarch64        JL_CFLAGS=-Werror,JL_CXXFLAGS=-Werror                                                   .              v7.3          d39fb11781df9b03e448ad9318df2d195a3acf26
+package_linux          x86_64-linux-gnuprofiling      x86_64         x86_64         WITH_TRACY=1,WITH_ITTAPI=1,WITH_TIMING_COUNTS=1,JL_CFLAGS=-Werror,JL_CXXFLAGS=-Werror           .             v7.3          d8de9e0051c5cd69f3dde8ddaefc594d0a71043b
+package_linux          aarch64-linux-gnu              aarch64        aarch64        JL_CFLAGS=-Werror,JL_CXXFLAGS=-Werror                                                   .            v7.3          d39fb11781df9b03e448ad9318df2d195a3acf26
 # package_musl           x86_64-linux-musl              x86_64         x86_64         JL_CFLAGS=-Werror,JL_CXXFLAGS=-Werror                                                   .             v7.3          0566496527284ed8b638273babbb5735b44d2b7e
 
 # These special lines allow us to embed default values for the columns above.
