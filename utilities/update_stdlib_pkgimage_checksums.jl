@@ -77,7 +77,7 @@ function update_cache_pkgimg_checksum!(ji_file::String, pkgimg_file::String)
 end
 
 julia_root = abspath(dirname(dirname(Base.julia_cmd()[1])))
-stdlib_cache_dir = abspath(joinpath(julia_root, "share", "julia", "compiled", "v$(VERSION.major).$(VERSION.minor)"))
+stdlib_cache_dir = abspath(joinpath(julia_root, "lib", "julia", "compiled", "v$(VERSION.major).$(VERSION.minor)"))
 
 for dir in readdir(stdlib_cache_dir, join = true)
     if !isdir(dir)
