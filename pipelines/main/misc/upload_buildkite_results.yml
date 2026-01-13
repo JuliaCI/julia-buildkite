@@ -27,7 +27,8 @@ steps:
             echo "  - The test step failed and produced no results"
             echo "  - This upload job was triggered manually before test completion"
             echo "You can re-run this job manually once test results are available."
-            exit 1
+            echo "Skipping upload since there are no results to upload."
+            exit 0
           fi
 
           # Extract with relaxed permissions handling

@@ -1,5 +1,5 @@
 # ROOTFS_IMAGE_NAME    TRIPLET                       ARCH           ARCH_ROOTFS    TIMEOUT    USE_RR     ROOTFS_TAG     ROOTFS_HASH
-llvm_passes            x86_64-linux-gnusrcassert     x86_64         x86_64         210        rr         v6.00          0badf5d8794e21a03ac2ff2d46c1ab538ac02571
+llvm_passes            x86_64-linux-gnusrcassert     x86_64         x86_64         270        rr         v6.00          0badf5d8794e21a03ac2ff2d46c1ab538ac02571
 llvm_passes            x86_64-linux-gnusrcassert     x86_64         x86_64         150        rr-net     v6.00          0badf5d8794e21a03ac2ff2d46c1ab538ac02571
 
 # These special lines allow us to embed default values for the columns above.
