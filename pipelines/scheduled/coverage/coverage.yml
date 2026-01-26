@@ -11,10 +11,6 @@ steps:
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
-          - JuliaCI/julia#v1:
-              # Drop default "registries" directory, so it is not persisted from execution to execution
-              persist_depot_dirs: packages,artifacts,compiled
-              version: '1.11' # GREP_ME: Keep this updated. Do not set it to '1' or 'stable' or 'latest'.
           - staticfloat/sandbox#v2:
               rootfs_url: https://github.com/JuliaCI/rootfs-images/releases/download/v6.00/package_linux.x86_64.tar.gz
               rootfs_treehash: "4dcde853eb5baaa0a8f087b633eaf955dc94b5dc"
@@ -71,10 +67,6 @@ steps:
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
-          - JuliaCI/julia#v1:
-              # Drop default "registries" directory, so it is not persisted from execution to execution
-              persist_depot_dirs: packages,artifacts,compiled
-              version: '1.11' # GREP_ME: Keep this updated. Do not set it to '1' or 'stable' or 'latest'.
           - JuliaCI/cryptic#v2:
               variables:
                 - CODECOV_TOKEN="U2FsdGVkX19l0fhdBabbuiEdysyEabkJLRHfxm7CNRkuGbnwPV365sxxC7Czs/CVcws0N1oB4pVwALRRMe36oA=="
@@ -125,10 +117,6 @@ steps:
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
-          - JuliaCI/julia#v1:
-              # Drop default "registries" directory, so it is not persisted from execution to execution
-              persist_depot_dirs: packages,artifacts,compiled
-              version: '1.11' # GREP_ME: Keep this updated. Do not set it to '1' or 'stable' or 'latest'.
           - JuliaCI/cryptic#v2:
               variables:
                 - CODECOV_TOKEN="U2FsdGVkX19l0fhdBabbuiEdysyEabkJLRHfxm7CNRkuGbnwPV365sxxC7Czs/CVcws0N1oB4pVwALRRMe36oA=="
