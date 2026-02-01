@@ -4,6 +4,7 @@ import Pkg
 import Logging
 import TOML
 
+Pkg.develop(path="./JuliaSyntax")
 Pkg.add(; name = "Coverage", uuid = "a2441757-f6aa-5fb2-8edb-039e3f45d037", version = "1")
 
 import Coverage
