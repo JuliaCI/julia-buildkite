@@ -1,0 +1,78 @@
+name: Test Upload Logic
+
+on:
+  pull_request:
+    paths:
+      - 'pipelines/main/launch_upload_jobs.yml'
+      - '.github/workflows/test_upload_logic.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'pipelines/main/launch_upload_jobs.yml'
+      - '.github/workflows/test_upload_logic.yml'
+
+jobs:
+  test-upload-logic:
+    runs-on: ubuntu-latest
+    name: Test UPLOAD_EVEN_IF_TEST_FAILURES Logic
+    steps:
+      - name: Test various branch and tag combinations
+        shell: bash
+        run: |
+          set -euo pipefail
+          
+          # Test function that mimics the logic in launch_upload_jobs.yml
+          test_logic() {
+            local branch="$1"
+            local tag="${2:-}"
+            local expected="$3"
+            
+            BUILDKITE_BRANCH="$branch"
+            BUILDKITE_TAG="$tag"
+            
+            # This is the exact logic from launch_upload_jobs.yml
+            UPLOAD_EVEN_IF_TEST_FAILURES=$(([[ "${BUILDKITE_BRANCH?}" == release-* ]] || [[ "${BUILDKITE_TAG:-}" == v* ]] || [[ "${BUILDKITE_BRANCH?}" == "main" ]] || [[ "${BUILDKITE_BRANCH?}" == "master" ]]) && echo "false" || echo "true")
+            
+            if [[ "$UPLOAD_EVEN_IF_TEST_FAILURES" != "$expected" ]]; then
+              echo "FAILED: branch='$branch', tag='$tag'"
+              echo "  Expected: $expected"
+              echo "  Got: $UPLOAD_EVEN_IF_TEST_FAILURES"
+              return 1
+            else
+              echo "PASSED: branch='$branch', tag='$tag' -> $UPLOAD_EVEN_IF_TEST_FAILURES"
+            fi
+          }
+          
+          echo "Testing UPLOAD_EVEN_IF_TEST_FAILURES logic..."
+          echo ""
+          
+          # Tags: Don't upload if tests fail (UPLOAD_EVEN_IF_TEST_FAILURES=false)
+          echo "=== Testing tags ==="
+          test_logic "master" "v1.10.0" "false"
+          test_logic "main" "v1.11.0-rc1" "false"
+          test_logic "some-branch" "v2.0.0" "false"
+          echo ""
+          
+          # Release branches: Don't upload if tests fail (UPLOAD_EVEN_IF_TEST_FAILURES=false)
+          echo "=== Testing release branches ==="
+          test_logic "release-julia-1.10" "" "false"
+          test_logic "release-julia-1.11" "" "false"
+          test_logic "release-1.9" "" "false"
+          echo ""
+          
+          # Master/main branch: Don't upload if tests fail (UPLOAD_EVEN_IF_TEST_FAILURES=false)
+          echo "=== Testing main/master branches ==="
+          test_logic "main" "" "false"
+          test_logic "master" "" "false"
+          echo ""
+          
+          # PR builds: Upload even if tests fail (UPLOAD_EVEN_IF_TEST_FAILURES=true)
+          echo "=== Testing PR/feature branches ==="
+          test_logic "my-feature-branch" "" "true"
+          test_logic "fix-bug-123" "" "true"
+          test_logic "user/some-work" "" "true"
+          test_logic "backport-pr-456" "" "true"
+          echo ""
+          
+          echo "All tests passed! ✅"
