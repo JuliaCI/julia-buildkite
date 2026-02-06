@@ -8,7 +8,7 @@ steps:
           - "build_${TRIPLET?}"
           # Wait for the tester to finish
           - step: "test_${TRIPLET?}"
-            allow_failure: "${ALLOW_TEST_FAILURES?}"
+            allow_failure: "${UPLOAD_EVEN_IF_TEST_FAILURES?}"
         # Prevent multiple pipelines from uploading to S3 simultaneously
         # It is okay for two different triplets to upload simultaneously
         concurrency: 1
