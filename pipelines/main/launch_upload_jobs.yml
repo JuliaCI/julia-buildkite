@@ -23,6 +23,9 @@ steps:
           export BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET
           export ALLOW_FAIL="false"
 
+          # Upload even if tests fail for PR builds only.
+          # For tags, release branches, and main branch: don't upload if tests fail.
+          export UPLOAD_EVEN_IF_TEST_FAILURES=$(([[ "${BUILDKITE_BRANCH?}" == release-* ]] || [[ "${BUILDKITE_TAG:-}" == v* ]] || [[ "${BUILDKITE_BRANCH?}" == "main" ]] || [[ "${BUILDKITE_BRANCH?}" == "master" ]]) && echo "false" || echo "true")
           ##### Launch `upload_*` jobs to store tarballs into S3 once tests are done
           ### Linux:
           # Regular Linux upload jobs:
@@ -84,6 +87,10 @@ steps:
           export BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET
 
           export ALLOW_FAIL="true"
+          
+          # Upload even if tests fail for PR builds only.
+          # For tags, release branches, and main branch: don't upload if tests fail.
+          export UPLOAD_EVEN_IF_TEST_FAILURES=$(([[ "${BUILDKITE_BRANCH?}" == release-* ]] || [[ "${BUILDKITE_TAG:-}" == v* ]] || [[ "${BUILDKITE_BRANCH?}" == "main" ]] || [[ "${BUILDKITE_BRANCH?}" == "master" ]]) && echo "false" || echo "true")
 
           # Launch Linux allowed-to-fail upload jobs
           GROUP="Allow Fail (Upload)" \
