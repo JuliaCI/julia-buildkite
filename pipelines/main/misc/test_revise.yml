@@ -30,7 +30,11 @@ steps:
 
           echo "--- Install and test Revise"
           unset JULIA_DEPOT_PATH
-          JULIA_PKG_PRECOMPILE_AUTO=0 ./julia -e 'using Pkg; Pkg.add(name="Revise", rev="master"); ENV["JULIA_PKG_PRECOMPILE_AUTO"]=1; Pkg.test("Revise")'
+          if [ -f deps/jlutilities/revise/Manifest.toml ]; then
+            JULIA_PKG_PRECOMPILE_AUTO=0 ./julia -e 'using Pkg; Pkg.activate("deps/jlutilities/revise"); Pkg.instantiate(); ENV["JULIA_PKG_PRECOMPILE_AUTO"]=1; Pkg.test("Revise")'
+          else
+            JULIA_PKG_PRECOMPILE_AUTO=0 ./julia -e 'using Pkg; Pkg.add(name="Revise", rev="master"); ENV["JULIA_PKG_PRECOMPILE_AUTO"]=1; Pkg.test("Revise")'
+          fi
         timeout_in_minutes: 30
         soft_fail: ${ALLOW_FAIL?}
         agents:
