@@ -8,7 +8,7 @@ steps:
         # 2. The branch is `release-*`.
         # 3. The build is a tag build AND the tag is `v*`.
         # 4. The pipeline is `julia-buildkite`.
-        if: (build.branch == "master") || (build.branch =~ /^release-/) || (build.tag =~ /^v/) || (pipeline.slug == "julia-buildkite-scheduled")
+        if: (build.branch == "master") || (build.branch =~ /^release-/) || (build.tag =~ /^v/) || (pipeline.slug == "julia-buildkite-scheduled") || (build.pull_request.labels includes "needs full CI")
         depends_on:
           # Wait for the builder to finish
           - "build_${TRIPLET?}"
@@ -53,9 +53,10 @@ steps:
                 - "AZURE_TENANT_ID"
                 - "AZURE_CLIENT_ID"
                 - "AZURE_CLIENT_SECRET"
-                # These control where we upload, important when running on julia-buildkite
-                - "S3_BUCKET"
-                - "S3_BUCKET_PREFIX"
+                # These control where we upload - must be explicit values for no_gpl
+                # (pass-through would use the hook-set ephemeral bucket instead)
+                - "S3_BUCKET=julialang-nogpl"
+                - "S3_BUCKET_PREFIX=bin-nogpl"
         timeout_in_minutes: ${TIMEOUT?}
         agents:
           queue: "julia"
@@ -64,3 +65,5 @@ steps:
           # Receive cryptic token from parent job
           BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET: ${BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET?}
           TRIPLET: "${TRIPLET?}"
+          S3_BUCKET: "julialang-nogpl"
+          S3_BUCKET_PREFIX: "bin-nogpl"
