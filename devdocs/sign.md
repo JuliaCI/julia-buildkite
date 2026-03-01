@@ -2,7 +2,7 @@
 
 1. [shyaml-rs](https://github.com/0k/shyaml-rs)
     - `shyaml-rs` is a drop-in replacement for the old [Python `shyaml`](https://github.com/0k/shyaml), which is now deprecated.
-    - On macOS and Linux, you can install `shyaml-rs` using Dilum's Homebrew tap:
+    - On macOS and Linux, you can install `shyaml-rs` using [Dilum's Homebrew tap](https://github.com/DilumAluthge/homebrew-tap):
         - `brew tap dilumaluthge/tap`
         - `brew install dilumaluthge/tap/shyaml-rs`
     - Alternatively, you can install it using the instructions in the [`shyaml-rs` repo](https://github.com/0k/shyaml-rs).
