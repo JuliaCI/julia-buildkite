@@ -210,4 +210,12 @@ else
 fi
 echo "--- Done"
 
+if [[ "${exitVal}" -ne 0 ]] && [[ "${OS}" == linux* || "${OS}" == "musl" || "${OS}" == "freebsd" ]]; then
+    echo "--- Upload dmesg to diagnose potential OOM killer activity"
+    dmesg > dmesg.log 2>&1 || true
+    if [[ -s dmesg.log ]]; then
+        buildkite-agent artifact upload dmesg.log || true
+    fi
+fi
+
 exit $exitVal
