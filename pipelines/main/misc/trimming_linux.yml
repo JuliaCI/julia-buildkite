@@ -1,8 +1,8 @@
 steps:
   - group: "Check"
     steps:
-      - label: "trimming"
-        key: "trimming"
+      - label: ":linux: trimming"
+        key: "trimming_x86_64-linux-gnu"
         depends_on:
           - "build_x86_64-linux-gnu"
         plugins:
@@ -24,16 +24,13 @@ steps:
         if: | # We only run the `trimming` job on Julia 1.12 and later.
           (pipeline.slug != "julia-release-1-dot-10") && (pipeline.slug != "julia-release-1-dot-11")
         commands: |
-          # Download pre-built julia, extract into `usr/`
-          buildkite-agent artifact download --step "build_x86_64-linux-gnu" 'julia-*-linux-x86_64.tar.gz' .
-          mkdir -p usr
-          tar -C usr --strip-components=1 -zxf julia-*-linux-x86_64.tar.gz
-          rm -f julia-*-linux-x86_64.tar.gz
-
-          make --output-sync -j$${JULIA_CPU_THREADS:?} -C test/trimming check JULIA="$$(pwd)/usr/bin/julia" BIN="$$(pwd)/usr/bin"
+          bash .buildkite/utilities/test_trimming.sh
         timeout_in_minutes: 60
         agents:
           queue: "julia"
           sandbox_capable: "true"
           os: "linux"
           arch: "x86_64"
+        env:
+          JULIA_SHELL: "/bin/bash"
+          TRIPLET: "x86_64-linux-gnu"

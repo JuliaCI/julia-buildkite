@@ -1,0 +1,36 @@
+steps:
+  - group: "Check"
+    steps:
+      - label: ":windows: trimming"
+        key: "trimming_x86_64-w64-mingw32"
+        depends_on:
+          - "build_x86_64-w64-mingw32"
+        plugins:
+          - JuliaCI/external-buildkite#v1:
+              version: "./.buildkite-external-version"
+              repo_url: "https://github.com/JuliaCI/julia-buildkite"
+          - docker#v3.13.0:
+              image: "juliapackaging/package-windows-x86_64:v7.10"
+              always-pull: true
+              command: ["bash", ".buildkite/utilities/test_trimming.sh"]
+              propagate-environment: true
+              volumes:
+                # Mount buildkite-agent as well
+                - "C:\\buildkite-agent\\bin:C:\\buildkite-agent\\bin"
+              environment:
+                # We have to list this here, because buildkite doesn't automatically
+                # include environment-hook-set variables in a way that the docker
+                # plugin finds.  It's annoying, but at least we have a workaround.
+                - "JULIA_CPU_THREADS"
+                # Have to include this for `buildkite-agent` to work:
+                - "BUILDKITE_AGENT_ACCESS_TOKEN"
+        if: | # We only run the `trimming` job on Julia 1.12 and later.
+          (pipeline.slug != "julia-release-1-dot-10") && (pipeline.slug != "julia-release-1-dot-11")
+        timeout_in_minutes: 60
+        agents:
+          queue: "julia"
+          os: "windows"
+          arch: "x86_64"
+        env:
+          JULIA_SHELL: "/bin/bash"
+          TRIPLET: "x86_64-w64-mingw32"
