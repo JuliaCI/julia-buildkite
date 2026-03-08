@@ -64,6 +64,11 @@ for FLAG in "${MFLAGS[@]}"; do
     echo " -> ${FLAG}"
 done
 
+if [[ ("${TRIPLET:?}" == *-mingw32) || ("${TRIPLET:?}" == *-mingw32nogpl) ]]; then
+    # https://github.com/JuliaCI/julia-buildkite/issues/525
+    git config --global --add safe.directory C:/workdir
+fi
+
 echo "--- Build Julia"
 echo "Note: The log stream is filtered. [buildroot] replaces pwd $(pwd)"
 ${MAKE} "${MFLAGS[@]}" 2>&1 | sed "s|$(pwd)|[buildroot]|g"
