@@ -1,0 +1,25 @@
+steps:
+  - group: "Test"
+    steps:
+      - label: ":windows: test JuliaC ${TRIPLET?}"
+        key: "test-juliac-${TRIPLET?}"
+        depends_on:
+          - "build_${TRIPLET?}"
+        plugins:
+          - JuliaCI/external-buildkite#v1:
+              version: "./.buildkite-external-version"
+              repo_url: "https://github.com/JuliaCI/julia-buildkite"
+        commands: |
+          # Download pre-built julia, extract into `usr/`
+          buildkite-agent artifact download --step "build_${TRIPLET}" 'julia-*-windows-*.tar.gz' .
+          mkdir -p ./usr
+          tar -C ./usr --strip-components=1 -zxf julia-*-windows-*.tar.gz
+          echo "--- Install and test JuliaC"
+          unset JULIA_DEPOT_PATH
+          JULIA_PKG_PRECOMPILE_AUTO=0 ./usr/bin/julia.exe -e 'using Pkg; Pkg.add(name="JuliaC", rev="main"); ENV["JULIA_PKG_PRECOMPILE_AUTO"]=1; Pkg.test("JuliaC")'
+        timeout_in_minutes: ${TIMEOUT?}
+        soft_fail: ${ALLOW_FAIL?}
+        agents:
+          queue: "julia"
+          os: "windows"
+          arch: "${ARCH}"

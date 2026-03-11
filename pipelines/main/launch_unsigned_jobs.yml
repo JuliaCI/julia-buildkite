@@ -115,6 +115,7 @@ steps:
           export ALLOW_FAIL="false"
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/gcext.yml
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/test_revise.yml
+          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/juliac/test_juliac.yml
 
           ### Launch Linux test jobs.
           # Regular:
