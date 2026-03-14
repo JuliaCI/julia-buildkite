@@ -24,7 +24,7 @@ build_number = get(ENV, "BUILDKITE_BUILD_NUMBER", nothing)
 @info "Finishing parallel Coveralls uploads" build_number=build_number
 
 try
-    success = Coverage.finish_coveralls_parallel(token=coveralls_token, build_num=build_number)
+    success = retry(Coverage.finish_coveralls_parallel, delays=ExponentialBackOff(n=5))(token=coveralls_token, build_num=build_number)
     if success
         @info "Successfully signaled parallel job completion to Coveralls"
         exit(0)
