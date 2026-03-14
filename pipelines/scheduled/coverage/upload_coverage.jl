@@ -278,7 +278,7 @@ function upload_coverage(fcs)
     # Upload to Codecov if token is available
     if codecov_token !== nothing
         @info "Uploading to Codecov with parallel job support..."
-        codecov_success = Coverage.upload_to_codecov(fcs;
+        codecov_success = retry(Coverage.upload_to_codecov, delays=ExponentialBackOff(n=5))(fcs;
             token=codecov_token,
             flags=job_flags,
             name=job_name,
@@ -299,7 +299,7 @@ function upload_coverage(fcs)
         @info "Uploading to Coveralls with parallel job support..."
         # For Coveralls, set parallel=true so it waits for other jobs
         # A separate job would need to call finish_coveralls_parallel() later
-        coveralls_success = Coverage.upload_to_coveralls(fcs;
+        coveralls_success = retry(Coverage.upload_to_coveralls, delays=ExponentialBackOff(n=5))(fcs;
             token=coveralls_token,
             parallel=true,
             job_flag=join(job_flags, "-"),
