@@ -1,5 +1,5 @@
 steps:
-  - group: "Test"
+  - group: "JuliaC"
     steps:
       - label: "Launch JuliaC test jobs"
         plugins:
@@ -9,17 +9,17 @@ steps:
         commands: |
           export ALLOW_FAIL="${ALLOW_FAIL:-false}"
           ### Launch Linux JuliaC test jobs:
-          GROUP="Test" \
+          GROUP="JuliaC" \
               bash .buildkite/utilities/arches_pipeline_upload.sh \
               .buildkite/pipelines/main/misc/juliac/test_juliac_linux.arches \
               .buildkite/pipelines/main/misc/juliac/test_juliac_linux.yml
           ### Launch macOS JuliaC test jobs:
-          GROUP="Test" \
+          GROUP="JuliaC" \
               bash .buildkite/utilities/arches_pipeline_upload.sh \
               .buildkite/pipelines/main/misc/juliac/test_juliac_macos.arches \
               .buildkite/pipelines/main/misc/juliac/test_juliac_macos.yml
           ### Launch Windows JuliaC test jobs:
-          GROUP="Test" \
+          GROUP="JuliaC" \
               bash .buildkite/utilities/arches_pipeline_upload.sh \
               .buildkite/pipelines/main/misc/juliac/test_juliac_windows.arches \
               .buildkite/pipelines/main/misc/juliac/test_juliac_windows.yml
