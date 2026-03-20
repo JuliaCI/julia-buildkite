@@ -1,0 +1,9 @@
+# ROOTFS_IMAGE_NAME    TRIPLET                  ARCH       ARCH_ROOTFS    TIMEOUT    ROOTFS_TAG    ROOTFS_HASH                                  ALLOW_FAIL
+package_linux          x86_64-linux-gnu         x86_64     x86_64         .          v6.00         4dcde853eb5baaa0a8f087b633eaf955dc94b5dc     .
+tester_linux           aarch64-linux-gnu        aarch64    aarch64        .          v6.00         4efb2a7f62f668ef08633579bfbfe1e5e4b2969b     true
+
+# These special lines allow us to embed default values for the columns above.
+# Any column without a default mapping here will simply substitute a `.` to the empty string
+
+#default TIMEOUT 30
+#default ALLOW_FAIL false
