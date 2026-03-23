@@ -1,5 +1,5 @@
 steps:
-  - group: "Test"
+  - group: "${GROUP?}"
     steps:
       - label: ":macos: test JuliaC ${TRIPLET?}"
         key: "test-juliac-${TRIPLET?}"
