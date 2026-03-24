@@ -1,6 +1,6 @@
 # ROOTFS_IMAGE_NAME    TRIPLET                  ARCH       ARCH_ROOTFS    TIMEOUT    ROOTFS_TAG    ROOTFS_HASH                                  ALLOW_FAIL
-tester_linux           x86_64-linux-gnu         x86_64     x86_64         .          v6.00         770c0240be788cfeb9654e1980ea929d3ed98d1f     .
-tester_linux           aarch64-linux-gnu        aarch64    aarch64        .          v6.00         4efb2a7f62f668ef08633579bfbfe1e5e4b2969b     true
+package_linux          x86_64-linux-gnu         x86_64     x86_64         .          v7.3          d8de9e0051c5cd69f3dde8ddaefc594d0a71043b     .
+package_linux          aarch64-linux-gnu        aarch64    aarch64        .          v7.3          d39fb11781df9b03e448ad9318df2d195a3acf26     true
 
 # These special lines allow us to embed default values for the columns above.
 # Any column without a default mapping here will simply substitute a `.` to the empty string
