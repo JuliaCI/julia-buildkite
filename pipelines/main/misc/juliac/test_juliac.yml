@@ -1,5 +1,8 @@
 steps:
   - group: "JuliaC"
+    notify:
+      - github_commit_status:
+          context: "JuliaC"
     steps:
       - label: "Launch JuliaC test jobs"
         plugins:
