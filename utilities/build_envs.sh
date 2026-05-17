@@ -77,8 +77,9 @@ case "${ARCH?}" in
                     "carmel,clone_all"
                     # Apple M1
                     "apple-m1,base(3)"
-                    # Vector-length-agnostic common denominator between Neoverse V1 and V2, recent Arm server architectures
-                    "neoverse-512tvb,base(3)"
+                    # Vector-length-agnostic common denominator between Neoverse V1 and V2, recent Arm server architectures.
+                    # Disable little used rand and fpac features which would prevent matching on many systems.
+                    "neoverse-512tvb,-rand,-fpac,base(3)"
                 )
                 ;;
         esac
