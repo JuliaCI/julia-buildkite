@@ -1,0 +1,34 @@
+steps:
+  - group: "${GROUP?}"
+    steps:
+      - label: ":macos: test JuliaC ${TRIPLET?}"
+        key: "test-juliac-${TRIPLET?}"
+        depends_on:
+          - "build_${TRIPLET?}"
+        plugins:
+          - JuliaCI/external-buildkite#v1:
+              version: "./.buildkite-external-version"
+              repo_url: "https://github.com/JuliaCI/julia-buildkite"
+        commands: |
+          # Download pre-built julia, extract into `usr/`
+          buildkite-agent artifact download --step "build_${TRIPLET}" 'julia-*-macos-*.tar.gz' .
+          mkdir -p ./usr
+          tar -C ./usr --strip-components=1 -zxf julia-*-macos-*.tar.gz
+          ln -s ./usr/bin/julia ./julia
+
+          # Re-sign after download
+          .buildkite/utilities/macos/codesign.sh ./usr
+
+          echo "--- Install and test JuliaC"
+          unset JULIA_DEPOT_PATH
+          if [ -f deps/jlutilities/juliac/Manifest.toml ]; then
+            JULIA_PKG_PRECOMPILE_AUTO=0 ./julia -e 'using Pkg; Pkg.activate("deps/jlutilities/juliac"); Pkg.instantiate(); ENV["JULIA_PKG_PRECOMPILE_AUTO"]=1; Pkg.test("JuliaC")'
+          else
+            JULIA_PKG_PRECOMPILE_AUTO=0 ./julia -e 'using Pkg; Pkg.add(name="JuliaC", rev="main"); ENV["JULIA_PKG_PRECOMPILE_AUTO"]=1; Pkg.test("JuliaC")'
+          fi
+        timeout_in_minutes: ${TIMEOUT?}
+        soft_fail: ${ALLOW_FAIL?}
+        agents:
+          queue: "julia"
+          os: "macos"
+          arch: "${ARCH}"
