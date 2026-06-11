@@ -1,0 +1,25 @@
+# This file represents what is put into the webUI.
+# It is purely for keeping track of the changes we make to the webUI configuration; modifying this file has no effect.
+# We use the `cryptic` buildkite plugin to provide secrets management, which requires some integration into the WebUI's steps.
+
+### WARNING THIS DOES NOT DO ANY CRYPTIC UNLOCKS ONLY DURING INCIDENT
+steps:
+  - group: "Upload"
+    steps:
+      - label: "Unlock secrets, launch pipelines"
+        agents:
+          queue: "julia"
+          os: "linux"
+        plugins:
+          - JuliaCI/external-buildkite#v1:
+              version: "./.buildkite-external-version"
+              repo_url: "https://github.com/JuliaCI/julia-buildkite"
+          - JuliaCI/cryptic#v2:
+              # Our list of pipelines that should be launched (but don't require a signature)
+              # These pipelines can be modified by any contributor and CI will still run.
+              # Build secrets will not be available in these pipelines (or their children)
+              # but some of our signed pipelines can wait upon the completion of these unsigned
+              # pipelines.
+              unsigned_pipelines:
+                - .buildkite/pipelines/main/launch_unsigned_builders.yml
+        command: "true"
