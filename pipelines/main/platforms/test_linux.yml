@@ -32,7 +32,7 @@ steps:
         soft_fail: ${ALLOW_FAIL?}
         commands: "bash .buildkite/utilities/test_julia.sh"
         agents:
-          queue: "julia"
+          queue: "test"
           sandbox_capable: "true"
           os: "linux"
           arch: "${ARCH?}"

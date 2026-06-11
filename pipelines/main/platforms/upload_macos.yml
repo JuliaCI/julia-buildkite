@@ -34,7 +34,7 @@ steps:
               limit: 3
         commands: "bash .buildkite/utilities/upload_julia.sh"
         agents:
-          queue: "julia"
+          queue: "build"
           os: "macos"
           arch: "${ARCH}"
         env:

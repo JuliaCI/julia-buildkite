@@ -24,6 +24,6 @@ steps:
         timeout_in_minutes: ${TIMEOUT?}
         soft_fail: ${ALLOW_FAIL?}
         agents:
-          queue: "julia"
+          queue: "test"
           os: "windows"
           arch: "${ARCH}"

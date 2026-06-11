@@ -40,7 +40,7 @@ steps:
         soft_fail: ${ALLOW_FAIL?}
         commands: "bash .buildkite/utilities/upload_julia.sh"
         agents:
-          queue: "julia"
+          queue: "build"
           # Only run on `sandbox.jl` machines (not `docker`-isolated ones) since we need nestable sandboxing
           sandbox_capable: "true"
           os: "linux"
