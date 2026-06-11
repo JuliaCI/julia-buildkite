@@ -14,7 +14,7 @@ steps:
         # key: "juliasyntax-step-key"
         timeout_in_minutes: 30
         agents:
-          queue: "julia"
+          queue: "test"
           os: "{{matrix.agent_os}}"
           arch: "{{matrix.agent_arch}}"
         matrix:
@@ -145,7 +145,7 @@ steps:
         # key: "juliasyntax-step-key"
         timeout_in_minutes: 30
         agents:
-          queue: "julia"
+          queue: "test"
           os: "{{matrix.agent_os}}"
           arch: "{{matrix.agent_arch}}"
         matrix:
