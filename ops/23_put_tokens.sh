@@ -4,7 +4,8 @@
 # Bearer tokens (codecov, coveralls, buildkite analytics) are inherently
 # symmetric secrets and cannot be turned into KMS signing operations, so
 # they live in the AWS secrets store and are fetched at job runtime by
-# the julia-oidc-tokens role. Nothing secret is stored in the repository.
+# the julia-oidc-tokens-ci role (julia-ci only; PR builds get no
+# tokens). Nothing secret is stored in the repository.
 #
 # Usage:
 #   23_put_tokens.sh codecov_token             # prompts for the value

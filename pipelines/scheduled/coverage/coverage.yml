@@ -1,6 +1,9 @@
 steps:
   - group: "Coverage"
-    if: (build.source == "schedule") || (build.pull_request.labels includes "needs full CI")
+    # Scheduled (julia-ci) builds only: coverage uploads need the codecov /
+    # coveralls bearer tokens, and pull request builds hold no tokens at
+    # all (the old "needs full CI" PR-label path is gone for that reason).
+    if: (build.source == "schedule") && (pipeline.slug == "julia-ci")
     notify:
       - github_commit_status:
           context: "Coverage"

@@ -4,7 +4,7 @@ This directory configures the AWS (and Azure) resources that replace the
 `cryptic` Buildkite plugin:
 
 - **`terraform/`** — the declarative infrastructure: Buildkite OIDC
-  provider, the four KMS keys, the four IAM roles and their policies.
+  provider, the four KMS keys, the IAM roles and their policies.
 - **`terraform/azure/`** — a separate root module (different control
   plane / credentials) for the Azure Trusted Signing federated identity
   credentials.
@@ -20,7 +20,7 @@ remote KMS operation, authorized by the job's OIDC identity:
 
 | Concern                  | Before (cryptic)                          | After                                                        |
 |--------------------------|-------------------------------------------|--------------------------------------------------------------|
-| S3 uploads               | static `AWS_ACCESS_KEY_ID/SECRET` in yml   | OIDC → `julia-oidc-stage` (untrusted) + `julia-oidc-publish` (trusted) roles |
+| S3 uploads               | static `AWS_ACCESS_KEY_ID/SECRET` in yml   | OIDC → `julia-oidc-stage-{pr,ci}` (untrusted, per pipeline) + `julia-oidc-publish` (trusted) roles |
 | macOS codesigning        | keychain file w/ Developer ID key          | KMS RSA key + patched `rcodesign` (`utilities/macos/rcodesign`) |
 | macOS notarization       | Apple ID + app-specific password           | App Store Connect API key in KMS (ES256 JWTs via `kms:Sign`)  |
 | Linux/source GPG signing | raw GPG private key file                   | fresh key generated in KMS, `utilities/kms_gpg_sign.py` (new public key published) |
@@ -49,7 +49,8 @@ only trust the publish pipeline's slug. There are three pipelines:
    build ──► s3://julialang-ephemeral-pr/      build ──► s3://julialang-ephemeral-ci/
                <prefix>/<commit>/julia-*                   <prefix>/<commit>/julia-*
    (UNTRUSTED: the build step stages directly -- write-once, own pipeline's
-    ephemeral bucket, own commit's path; role julia-oidc-stage, no KMS)
+    ephemeral bucket, own commit's path; per-pipeline roles
+    julia-oidc-stage-pr / julia-oidc-stage-ci, no KMS)
    PRs stop here (juliaup reads               │  tests pass, julia-ci only:
    the -pr bucket).                           ▼  trigger
                               julia-publish  ──►  publish_all (single step)
@@ -104,19 +105,25 @@ and which carry AWS session tags (`step_key`, `build_commit`, `pipeline_slug`, .
   why these (like `step_key`) travel as AWS session tags requested in
   `utilities/aws_oidc.sh`; the claims are attested by Buildkite, and a
   token requested without the tags fails the trust conditions outright.
-* **Staging** (`julia-oidc-stage`) may be assumed from any job of `julia-ci`
-  or `julia-pr` (the build step assumes it directly; there is no step
-  restriction on the untrusted roles), but can *only* write to
-  `<own pipeline's staging bucket>/<prefix>/${aws:PrincipalTag/build_commit}/*`
-  — the path contains the source git sha and the bucket is selected by the
-  pipeline UUID, both attested session tags the job cannot influence. Each
-  untrusted pipeline has its own ephemeral, lifecycle-expired staging
-  bucket (`julialang-ephemeral-pr` / `julialang-ephemeral-ci`), and publish
-  reads **only** the `julia-ci` one — so a PR build can never place, or
-  pre-claim (paths are write-once), anything that publish would consume.
-  Build / PR jobs cannot touch release paths, sign anything, or read
-  tokens. (Consumers, e.g. juliaup, map PR number → head sha via the
-  GitHub API and fetch from the sha path in the `-pr` bucket.)
+* **Staging**: each build pipeline has its own role
+  (`julia-oidc-stage-pr` / `julia-oidc-stage-ci`), assumable from any job
+  of that one pipeline (the build step assumes it directly; there is no
+  step restriction on the untrusted roles). Each role can *only* write to
+  its own pipeline's staging bucket, and only below
+  `<prefix>/${aws:PrincipalTag/build_commit}/*` — the source git sha,
+  an attested session tag the job cannot influence. The buckets
+  (`julialang-ephemeral-pr` / `julialang-ephemeral-ci`) are ephemeral and
+  lifecycle-expired, and publish reads **only** the `julia-ci` one — so a
+  PR build can never place, or pre-claim (paths are write-once), anything
+  that publish would consume. Build / PR jobs cannot touch release paths
+  or sign anything. (Consumers, e.g. juliaup, map PR number → head sha
+  via the GitHub API and fetch from the sha path in the `-pr` bucket.)
+* **Tokens**: only `julia-ci` has a tokens role (`julia-oidc-tokens-ci`,
+  SSM `ssm:GetParameter` on the telemetry tokens). There is deliberately
+  no `-pr` counterpart: a pull request executes attacker-controlled code
+  inside the job, which could exfiltrate any bearer token the job can
+  read — so PR builds hold **no tokens at all** (and consequently no
+  coverage/analytics uploads happen on PRs).
 * **No overwrites**: all roles must use S3 conditional writes
   (`If-None-Match: *`, enforced via the `s3:if-none-match` policy condition);
   uploads of already-existing objects fail. The only exception is the
@@ -154,7 +161,9 @@ are Terraform variables with the production defaults):
 3. `terraform -chdir=ops/terraform init && terraform -chdir=ops/terraform apply`
    — creates the OIDC provider for `agent.buildkite.com`, the four KMS
    keys (the notary key as `EXTERNAL`-origin, pending import), and the
-   four IAM roles + policies. Re-apply any time trust patterns or
+   IAM roles + policies (one stage role per build pipeline, tokens for
+   julia-ci only, publish + docs-deploy). Re-apply any time trust
+   patterns or
    policies change. Configure a state backend of your choice first (the
    state contains no secrets).
 4. Key material:

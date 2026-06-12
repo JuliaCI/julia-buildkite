@@ -20,7 +20,8 @@ steps:
               version: "./.buildkite-external-version"
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
         commands: |
-          # Launch the code coverage job (runs when "needs full CI" label is applied)
+          # Launch the code coverage job (scheduled julia-ci builds only --
+          # see the `if:` inside; PR builds hold no coverage tokens)
           buildkite-agent pipeline upload .buildkite/pipelines/scheduled/coverage/coverage.yml
 
           # Once everything is done, trigger the trusted publish pipeline

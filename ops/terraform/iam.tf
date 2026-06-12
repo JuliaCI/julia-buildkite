@@ -3,28 +3,33 @@
 # Trust is split into an untrusted tier and a trusted tier so that pull
 # request builds can never reach signing keys or release locations:
 #
-#   julia-oidc-stage    UNTRUSTED. Assumable from any job of the build
-#                     pipelines (PRs included; the build step assumes it to
-#                     stage its tarball directly). May only write unsigned
+# The untrusted roles exist once per build pipeline -- julia-pr and
+# julia-ci never share a role, so a role's identity IS its pipeline:
+#
+#   julia-oidc-stage-pr   UNTRUSTED. Assumable from any job of julia-pr
+#   julia-oidc-stage-ci   (resp. julia-ci); the build step assumes it to
+#                     stage its tarball directly. May only write unsigned
 #                     artifacts, write-once, to a path gated by the build's
-#                     own commit sha, inside the calling pipeline's OWN
-#                     ephemeral staging bucket (julia-pr and julia-ci have
-#                     separate ones; publish only reads julia-ci's). No
-#                     KMS, no final-location write. Because its permissions
-#                     are harmless, the spoofable `ref` component of the
-#                     sub claim does not matter here.
+#                     own commit sha, inside that one pipeline's OWN
+#                     ephemeral staging bucket (publish only ever reads
+#                     julia-ci's). No KMS, no final-location write. Because
+#                     the permissions are harmless, the spoofable `ref`
+#                     component of the sub claim does not matter here.
+#   julia-oidc-tokens-ci  Telemetry bearer tokens from SSM; julia-ci ONLY.
+#                     PR builds get no tokens whatsoever: a malicious pull
+#                     request executes code inside the job and could read
+#                     and exfiltrate any bearer token available to it.
 #   julia-oidc-publish  TRUSTED. kms:Sign with the signing keys, read the
-#                     staging area, and write the final release locations.
-#                     Assumable ONLY from the `julia-publish` pipeline slug.
-#                     That pipeline must have pull-request builds DISABLED
-#                     and be branch-limited to master/release-*/v* (see
-#                     ops/README.md). Since a PR can never produce a build
-#                     under that slug, the slug is the trust boundary -- not
-#                     the (PR-spoofable) branch name.
+#                     julia-ci staging bucket, and write the final release
+#                     locations. Assumable ONLY from the `julia-publish`
+#                     pipeline slug. That pipeline must have pull-request
+#                     builds DISABLED and be branch-limited to
+#                     master/release-*/v* (see ops/README.md). Since a PR
+#                     can never produce a build under that slug, the slug
+#                     is the trust boundary -- not the (PR-spoofable)
+#                     branch name.
 #   julia-oidc-docs-deploy  TRUSTED. kms:Sign with the docs SSH key; publish
 #                     pipeline only.
-#   julia-oidc-tokens   Low-value telemetry bearer tokens from SSM; build
-#                     pipelines.
 #
 # Defense in depth: trusted publish jobs additionally run
 # utilities/verify_trusted_commit.sh before assuming their role, which
@@ -41,15 +46,15 @@ data "aws_caller_identity" "current" {}
 locals {
   # `sub` format: organization:ORG:pipeline:PIPELINE:ref:REF:commit:SHA:step:STEP
 
-  # The UNTRUSTED build pipelines:
+  # The UNTRUSTED build pipelines (short suffix used in role names):
   #   julia-pr  builds pull requests
   #   julia-ci  builds trusted refs (master / release-* / tags), incl. scheduled
   # Any ref is allowed: the stage/token roles these map to are deliberately
   # harmless, so we do not (and must not) rely on the ref component for trust.
-  build_sub_patterns = [
-    "organization:${var.bk_org}:pipeline:julia-pr:*",
-    "organization:${var.bk_org}:pipeline:julia-ci:*",
-  ]
+  build_pipelines = {
+    "julia-pr" = "pr"
+    "julia-ci" = "ci"
+  }
 
   # The TRUSTED publish pipeline. julia-publish MUST be configured in
   # Buildkite with pull-request builds disabled and branch-limited to the
@@ -62,16 +67,30 @@ locals {
     "organization:${var.bk_org}:pipeline:julia-publish:ref:refs/tags/v*:*",
   ]
 
-  # Per-role trust: which pipelines (by slug pattern in `sub` AND by
+  # Per-role trust: which pipeline (by slug pattern in `sub` AND by
   # unforgeable UUID session tag) and -- for the trusted roles -- which
   # steps (aws:RequestTag/step_key, attested by the agent) may assume it.
-  # The untrusted roles have no step restriction (null): build steps stage
-  # artifacts directly, test steps post results directly, and the
-  # permissions are deliberately harmless anyway.
+  # Every role trusts exactly ONE pipeline. The untrusted roles have no
+  # step restriction (null): build steps stage artifacts directly, test
+  # steps post results directly, and the permissions are deliberately
+  # harmless anyway.
   oidc_trust = {
-    stage = {
-      pipelines         = ["julia-pr", "julia-ci"]
-      sub_patterns      = local.build_sub_patterns
+    stage-pr = {
+      pipelines         = ["julia-pr"]
+      sub_patterns      = ["organization:${var.bk_org}:pipeline:julia-pr:*"]
+      step_key_patterns = null
+    }
+    stage-ci = {
+      pipelines         = ["julia-ci"]
+      sub_patterns      = ["organization:${var.bk_org}:pipeline:julia-ci:*"]
+      step_key_patterns = null
+    }
+    # NB: there is deliberately no tokens-pr. A pull request executes
+    # attacker-controlled code inside the job, which could exfiltrate any
+    # bearer token the job can read -- so PR builds get NO tokens at all.
+    tokens-ci = {
+      pipelines         = ["julia-ci"]
+      sub_patterns      = ["organization:${var.bk_org}:pipeline:julia-ci:*"]
       step_key_patterns = null
     }
     publish = {
@@ -83,11 +102,6 @@ locals {
       pipelines         = ["julia-publish"]
       sub_patterns      = local.publish_sub_patterns
       step_key_patterns = ["deploy_docs"]
-    }
-    tokens = {
-      pipelines         = ["julia-pr", "julia-ci"]
-      sub_patterns      = local.build_sub_patterns
-      step_key_patterns = null
     }
   }
 
@@ -172,57 +186,54 @@ data "aws_iam_policy_document" "trust" {
   }
 }
 
-# ---- julia-oidc-stage (UNTRUSTED) -------------------------------------------
-# Write-once, to <own pipeline's staging bucket>/<prefix>/<own commit sha>/
-# only. The build_commit and pipeline_id tags are attested by Buildkite
-# (not settable by the job), so a build can only ever write under its own
-# source commit, and only inside its own pipeline's bucket -- julia-pr can
-# never touch the julia-ci bucket that publish reads from.
+# ---- julia-oidc-stage-{pr,ci} (UNTRUSTED, one role per build pipeline) ------
+# Each role is assumable from exactly one pipeline (trust policy) and can
+# write-once to exactly that pipeline's staging bucket, only below the
+# build's own commit sha (the build_commit tag is attested by Buildkite,
+# not settable by the job). julia-pr's role never mentions the julia-ci
+# bucket that publish reads from.
 
 resource "aws_iam_role" "stage" {
-  name                 = "julia-oidc-stage"
-  description          = "Buildkite staging upload: write-once to own pipeline's staging bucket, own commit path (via OIDC)"
-  assume_role_policy   = data.aws_iam_policy_document.trust["stage"].json
+  for_each = local.build_pipelines
+
+  name                 = "julia-oidc-stage-${each.value}"
+  description          = "Buildkite ${each.key} staging upload: write-once to ${var.s3_staging_buckets[each.key]}, own commit path (via OIDC)"
+  assume_role_policy   = data.aws_iam_policy_document.trust["stage-${each.value}"].json
   max_session_duration = 3600
 }
 
 data "aws_iam_policy_document" "stage" {
-  dynamic "statement" {
-    for_each = var.s3_staging_buckets
+  for_each = local.build_pipelines
 
-    content {
-      sid     = "WriteOnceToOwnCommitPath${replace(title(statement.key), "-", "")}"
-      actions = ["s3:PutObject", "s3:PutObjectAcl"]
-      # $${...} is the literal IAM policy variable, not Terraform interpolation.
-      resources = [
-        for p in local.staging_prefixes :
-        "${local.staging_bucket_arns[statement.key]}/${p}/$${aws:PrincipalTag/build_commit}/*"
-      ]
+  statement {
+    sid     = "WriteOnceToOwnCommitStagingPath"
+    actions = ["s3:PutObject", "s3:PutObjectAcl"]
+    # $${...} is the literal IAM policy variable, not Terraform interpolation.
+    resources = [
+      for p in local.staging_prefixes :
+      "${local.staging_bucket_arns[each.key]}/${p}/$${aws:PrincipalTag/build_commit}/*"
+    ]
 
-      condition {
-        test     = "StringEquals"
-        variable = "s3:if-none-match"
-        values   = ["*"]
-      }
-      condition {
-        test     = "StringEquals"
-        variable = "aws:PrincipalTag/pipeline_id"
-        values   = [var.buildkite_pipeline_ids[statement.key]]
-      }
+    condition {
+      test     = "StringEquals"
+      variable = "s3:if-none-match"
+      values   = ["*"]
     }
   }
 
   statement {
     sid       = "ReadStagingForRetryChecks"
     actions   = ["s3:GetObject"]
-    resources = [for arn in values(local.staging_bucket_arns) : "${arn}/*"]
+    resources = ["${local.staging_bucket_arns[each.key]}/*"]
   }
 }
 
 resource "aws_iam_role_policy" "stage" {
+  for_each = local.build_pipelines
+
   name   = "stage"
-  role   = aws_iam_role.stage.id
-  policy = data.aws_iam_policy_document.stage.json
+  role   = aws_iam_role.stage[each.key].id
+  policy = data.aws_iam_policy_document.stage[each.key].json
 }
 
 # ---- julia-oidc-publish (TRUSTED) -------------------------------------------
@@ -325,16 +336,18 @@ resource "aws_iam_role_policy" "docs_deploy" {
   policy = data.aws_iam_policy_document.docs_deploy.json
 }
 
-# ---- julia-oidc-tokens -------------------------------------------------------
+# ---- julia-oidc-tokens-ci ----------------------------------------------------
 # CI telemetry bearer tokens (codecov, coveralls, buildkite analytics) are
 # inherently symmetric secrets, so they live in SSM Parameter Store
 # (SecureString, see ops/23_put_tokens.sh) and are fetched at runtime by
 # this role. Nothing secret is stored in the repository or this state.
+# julia-ci ONLY -- pull request builds run attacker-controlled code and
+# therefore get no bearer tokens at all (there is no tokens-pr role).
 
 resource "aws_iam_role" "tokens" {
-  name                 = "julia-oidc-tokens"
-  description          = "Buildkite CI telemetry: read coverage/analytics tokens from SSM (via OIDC)"
-  assume_role_policy   = data.aws_iam_policy_document.trust["tokens"].json
+  name                 = "julia-oidc-tokens-ci"
+  description          = "Buildkite julia-ci telemetry: read coverage/analytics tokens from SSM (via OIDC)"
+  assume_role_policy   = data.aws_iam_policy_document.trust["tokens-ci"].json
   max_session_duration = 3600
 }
 

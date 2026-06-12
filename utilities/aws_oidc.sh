@@ -9,7 +9,13 @@
 #     source .buildkite/utilities/aws_oidc.sh stage       # untrusted: write-once to own pipeline's staging bucket, <sha>/ path
 #     source .buildkite/utilities/aws_oidc.sh publish     # trusted: sign + promote to final (publish pipeline only)
 #     source .buildkite/utilities/aws_oidc.sh docs-deploy # trusted: docs deploy SSH signing via KMS
-#     source .buildkite/utilities/aws_oidc.sh tokens      # CI telemetry tokens from SSM
+#     source .buildkite/utilities/aws_oidc.sh tokens      # CI telemetry tokens from SSM (julia-ci only)
+#
+# The untrusted roles exist once per build pipeline (julia-oidc-stage-pr /
+# julia-oidc-stage-ci, ...): `stage` resolves to this pipeline's role.
+# `tokens` resolves to julia-oidc-tokens-ci and is refused on pull request
+# builds -- a PR runs attacker-controlled code inside the job, so PR
+# builds get no bearer tokens at all.
 #
 # The `publish` and `docs-deploy` roles are only assumable from the
 # `julia-publish` pipeline (PR builds disabled there); callers should also
@@ -47,6 +53,25 @@ case "${_OIDC_ROLE_SUFFIX}" in
             echo "ERROR: ${_OIDC_ROLE_SUFFIX} role must not be requested on a pull request build" >&2
             return 1 2>/dev/null || exit 1
         fi
+        ;;
+esac
+
+# The untrusted roles exist once per build pipeline; resolve to ours.
+case "${_OIDC_ROLE_SUFFIX}" in
+    stage)
+        if [[ "${BUILDKITE_PIPELINE_SLUG:-}" == "julia-pr" ]]; then
+            _OIDC_ROLE_SUFFIX="stage-pr"
+        else
+            _OIDC_ROLE_SUFFIX="stage-ci"
+        fi
+        ;;
+    tokens)
+        # There is no tokens-pr role on purpose (see ops/terraform/iam.tf).
+        if [[ "${BUILDKITE_PIPELINE_SLUG:-}" == "julia-pr" || "${BUILDKITE_PULL_REQUEST:-false}" != "false" ]]; then
+            echo "ERROR: bearer tokens are not available on pull request builds" >&2
+            return 1 2>/dev/null || exit 1
+        fi
+        _OIDC_ROLE_SUFFIX="tokens-ci"
         ;;
 esac
 

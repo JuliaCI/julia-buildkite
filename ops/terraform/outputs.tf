@@ -6,10 +6,11 @@ output "oidc_provider_arn" {
 output "role_arns" {
   description = "IAM roles assumed by Buildkite jobs"
   value = {
-    stage       = aws_iam_role.stage.arn
+    stage-pr    = aws_iam_role.stage["julia-pr"].arn
+    stage-ci    = aws_iam_role.stage["julia-ci"].arn
+    tokens-ci   = aws_iam_role.tokens.arn
     publish     = aws_iam_role.publish.arn
     docs-deploy = aws_iam_role.docs_deploy.arn
-    tokens      = aws_iam_role.tokens.arn
   }
 }
 
