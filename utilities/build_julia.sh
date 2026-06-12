@@ -126,4 +126,5 @@ echo "--- Stage unsigned tarball to s3://${STAGING_TARGET}.tar.gz"
 source .buildkite/utilities/aws_oidc.sh stage
 # shellcheck source=SCRIPTDIR/upload_to_s3.sh
 source .buildkite/utilities/upload_to_s3.sh
-upload_to_s3 "${UPLOAD_FILENAME}.tar.gz" "${STAGING_TARGET}.tar.gz"
+# The staging buckets disable object ACLs (public read via bucket policy)
+UPLOAD_TO_S3_ACL=none upload_to_s3 "${UPLOAD_FILENAME}.tar.gz" "${STAGING_TARGET}.tar.gz"

@@ -13,14 +13,17 @@ resource "aws_s3_bucket" "staging" {
   bucket = each.value
 }
 
-# Uploads set `--acl public-read` per object (the same helper used for the
-# release buckets), which requires ACLs to be honored.
+# Object ACLs are disabled entirely (the modern S3 arrangement): public
+# readability comes from the bucket policy below, and uploads must NOT
+# send --acl (an ACL'd PUT would both fail under BucketOwnerEnforced and
+# require s3:PutObjectAcl, which the stage roles do not have -- the
+# s3:if-none-match condition key only exists for the PutObject action).
 resource "aws_s3_bucket_ownership_controls" "staging" {
   for_each = aws_s3_bucket.staging
 
   bucket = each.value.id
   rule {
-    object_ownership = "ObjectWriter"
+    object_ownership = "BucketOwnerEnforced"
   }
 }
 
@@ -32,6 +35,26 @@ resource "aws_s3_bucket_public_access_block" "staging" {
   block_public_policy     = false
   ignore_public_acls      = false
   restrict_public_buckets = false
+}
+
+# Everything staged is world-readable: PR binaries are consumed by juliaup
+# anonymously, and the artifacts are public release candidates anyway.
+resource "aws_s3_bucket_policy" "staging_public_read" {
+  for_each = aws_s3_bucket.staging
+
+  bucket     = each.value.id
+  depends_on = [aws_s3_bucket_public_access_block.staging]
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid       = "PublicReadStagedArtifacts"
+      Effect    = "Allow"
+      Principal = "*"
+      Action    = "s3:GetObject"
+      Resource  = "${each.value.arn}/*"
+    }]
+  })
 }
 
 resource "aws_s3_bucket_lifecycle_configuration" "staging" {

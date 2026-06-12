@@ -206,8 +206,11 @@ data "aws_iam_policy_document" "stage" {
   for_each = local.build_pipelines
 
   statement {
-    sid     = "WriteOnceToOwnCommitStagingPath"
-    actions = ["s3:PutObject", "s3:PutObjectAcl"]
+    sid = "WriteOnceToOwnCommitStagingPath"
+    # No PutObjectAcl: the staging buckets disable ACLs (BucketOwnerEnforced,
+    # public read via bucket policy), and the s3:if-none-match condition key
+    # only exists for the PutObject action anyway.
+    actions = ["s3:PutObject"]
     # $${...} is the literal IAM policy variable, not Terraform interpolation.
     resources = [
       for p in local.staging_prefixes :

@@ -28,8 +28,10 @@ KEY="${PREFIX}/${BUILDKITE_COMMIT:?}/oidc-smoke-${BUILDKITE_BUILD_NUMBER:?}.txt"
 BODY="$(mktemp)"; echo "oidc smoke test build ${BUILDKITE_BUILD_NUMBER}" > "${BODY}"
 
 put() { # put <bucket> <key> -> 0 on success
+    # No --acl: the staging buckets disable object ACLs; public read comes
+    # from the bucket policy (verified below).
     aws s3api put-object --bucket "$1" --key "$2" \
-        --body "${BODY}" --acl public-read --if-none-match '*' 2>&1
+        --body "${BODY}" --if-none-match '*' 2>&1
 }
 
 echo "--- Assume the stage role"
@@ -54,6 +56,13 @@ if OUT="$(put "${MY_BUCKET}" "${KEY}")"; then
     ok "wrote s3://${MY_BUCKET}/${KEY}"
 else
     bad "could not write own staging path: ${OUT}"
+fi
+
+echo "--- Anonymous public read of the staged object (the juliaup contract)"
+if curl -sf -o /dev/null "https://${MY_BUCKET}.s3.amazonaws.com/${KEY}"; then
+    ok "anonymous GET of s3://${MY_BUCKET}/${KEY}"
+else
+    bad "staged object is not publicly readable"
 fi
 
 echo "--- Negative: overwrite of an existing object"

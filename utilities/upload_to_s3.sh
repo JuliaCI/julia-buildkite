@@ -1,6 +1,12 @@
 # Shared write-once S3 upload helper. Source this file, then call
 # `upload_to_s3 <local-file> <bucket/key>`; AWS credentials come from
 # Buildkite OIDC (source aws_oidc.sh first).
+#
+# By default objects are uploaded with `--acl public-read` (the legacy
+# release buckets are ACL-based). Set UPLOAD_TO_S3_ACL=none for buckets
+# that disable ACLs and grant public read via bucket policy instead (the
+# ephemeral staging buckets): there an ACL'd PUT would be rejected, and
+# the stage roles deliberately lack s3:PutObjectAcl.
 
 # Tell the AWS CLI not to contact the metadata service; credentials come
 # from OIDC web identity (AWS_WEB_IDENTITY_TOKEN_FILE / AWS_ROLE_ARN).
@@ -18,10 +24,15 @@ upload_to_s3() {
     local bucket="${target%%/*}"
     local key="${target#*/}"
 
+    local acl_args=( --acl public-read )
+    if [[ "${UPLOAD_TO_S3_ACL:-public-read}" == "none" ]]; then
+        acl_args=()
+    fi
+
     if [[ "$(basename "${key}")" == julia-latest-* ]]; then
         aws s3api put-object \
             --bucket "${bucket}" --key "${key}" \
-            --body "${file}" --acl public-read >/dev/null
+            --body "${file}" ${acl_args[@]+"${acl_args[@]}"} >/dev/null
         echo "uploaded (latest pointer): s3://${target}"
         return 0
     fi
@@ -29,7 +40,7 @@ upload_to_s3() {
     local output
     if output="$(aws s3api put-object \
             --bucket "${bucket}" --key "${key}" \
-            --body "${file}" --acl public-read \
+            --body "${file}" ${acl_args[@]+"${acl_args[@]}"} \
             --if-none-match '*' 2>&1)"; then
         echo "uploaded (write-once): s3://${target}"
         return 0
