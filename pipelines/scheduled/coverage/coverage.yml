@@ -1,9 +1,10 @@
 steps:
   - group: "Coverage"
-    # Scheduled (julia-ci) builds only: coverage uploads need the codecov /
-    # coveralls bearer tokens, and pull request builds hold no tokens at
-    # all (the old "needs full CI" PR-label path is gone for that reason).
-    if: (build.source == "schedule") && (pipeline.slug == "julia-ci")
+    # Scheduled (julia-ci) builds, plus "needs full CI"-labeled PRs. Only
+    # julia-ci holds the codecov / coveralls bearer tokens; PR builds run
+    # the same coverage collection but skip the uploads (the lcov tarball
+    # is still available as a buildkite artifact).
+    if: (build.source == "schedule") || (build.pull_request.labels includes "needs full CI")
     notify:
       - github_commit_status:
           context: "Coverage"
@@ -28,9 +29,15 @@ steps:
           echo "--- Obtain coverage tokens"
           # Coverage tokens are fetched from SSM Parameter Store with this
           # job's OIDC identity; no static secrets exist in CI config.
-          source .buildkite/utilities/aws_oidc.sh tokens
-          export CODECOV_TOKEN="$$(aws ssm get-parameter --with-decryption --name /julia-ci/tokens/codecov_token --query Parameter.Value --output text)"
-          export COVERALLS_TOKEN="$$(aws ssm get-parameter --with-decryption --name /julia-ci/tokens/coveralls_token --query Parameter.Value --output text)"
+          # PR builds hold no tokens at all (there is no tokens role for
+          # julia-pr): collect coverage anyway, skip the uploads below.
+          if [[ "$${BUILDKITE_PIPELINE_SLUG}" == "julia-pr" ]]; then
+            echo "PR build: no coverage tokens; coverage uploads will be skipped"
+          else
+            source .buildkite/utilities/aws_oidc.sh tokens
+            export CODECOV_TOKEN="$$(aws ssm get-parameter --with-decryption --name /julia-ci/tokens/codecov_token --query Parameter.Value --output text)"
+            export COVERALLS_TOKEN="$$(aws ssm get-parameter --with-decryption --name /julia-ci/tokens/coveralls_token --query Parameter.Value --output text)"
+          fi
 
           echo "--- Build Julia from source"
           make --output-sync -j$${JULIA_NUM_THREADS}
@@ -58,7 +65,11 @@ steps:
           buildkite-agent artifact upload lcov_files.tar.gz
 
           echo "--- Process and upload coverage information"
-          ./julia --color=yes .buildkite/pipelines/scheduled/coverage/upload_coverage.jl
+          if [[ -n "$${CODECOV_TOKEN:-}" ]]; then
+            ./julia --color=yes .buildkite/pipelines/scheduled/coverage/upload_coverage.jl
+          else
+            echo "No coverage tokens (PR build); skipping upload"
+          fi
         agents:
           queue: "test"
           # Only run on `sandbox.jl` machines (not `docker`-isolated ones) since we need nestable sandboxing
@@ -84,9 +95,15 @@ steps:
           echo "--- Obtain coverage tokens"
           # Coverage tokens are fetched from SSM Parameter Store with this
           # job's OIDC identity; no static secrets exist in CI config.
-          source .buildkite/utilities/aws_oidc.sh tokens
-          export CODECOV_TOKEN="$$(aws ssm get-parameter --with-decryption --name /julia-ci/tokens/codecov_token --query Parameter.Value --output text)"
-          export COVERALLS_TOKEN="$$(aws ssm get-parameter --with-decryption --name /julia-ci/tokens/coveralls_token --query Parameter.Value --output text)"
+          # PR builds hold no tokens at all (there is no tokens role for
+          # julia-pr): collect coverage anyway, skip the uploads below.
+          if [[ "$${BUILDKITE_PIPELINE_SLUG}" == "julia-pr" ]]; then
+            echo "PR build: no coverage tokens; coverage uploads will be skipped"
+          else
+            source .buildkite/utilities/aws_oidc.sh tokens
+            export CODECOV_TOKEN="$$(aws ssm get-parameter --with-decryption --name /julia-ci/tokens/codecov_token --query Parameter.Value --output text)"
+            export COVERALLS_TOKEN="$$(aws ssm get-parameter --with-decryption --name /julia-ci/tokens/coveralls_token --query Parameter.Value --output text)"
+          fi
 
           echo "--- Build Julia from source"
           make -j$${JULIA_NUM_THREADS}
@@ -114,7 +131,11 @@ steps:
           buildkite-agent artifact upload lcov_files.tar.gz
 
           echo "--- Process and upload coverage information"
-          ./julia --color=yes .buildkite/pipelines/scheduled/coverage/upload_coverage.jl
+          if [[ -n "$${CODECOV_TOKEN:-}" ]]; then
+            ./julia --color=yes .buildkite/pipelines/scheduled/coverage/upload_coverage.jl
+          else
+            echo "No coverage tokens (PR build); skipping upload"
+          fi
         agents:
           queue: "test"
           os: "macos"
@@ -139,9 +160,13 @@ steps:
               always-pull: true
               command: ["bash", "-c", "
                 echo '--- Obtain coverage tokens' &&
-                source .buildkite/utilities/aws_oidc.sh tokens &&
-                export CODECOV_TOKEN=$$(aws ssm get-parameter --with-decryption --name /julia-ci/tokens/codecov_token --query Parameter.Value --output text) &&
-                export COVERALLS_TOKEN=$$(aws ssm get-parameter --with-decryption --name /julia-ci/tokens/coveralls_token --query Parameter.Value --output text) &&
+                if [[ $${BUILDKITE_PIPELINE_SLUG} == julia-pr ]]; then
+                  echo 'PR build: no coverage tokens; coverage uploads will be skipped';
+                else
+                  source .buildkite/utilities/aws_oidc.sh tokens &&
+                  export CODECOV_TOKEN=$$(aws ssm get-parameter --with-decryption --name /julia-ci/tokens/codecov_token --query Parameter.Value --output text) &&
+                  export COVERALLS_TOKEN=$$(aws ssm get-parameter --with-decryption --name /julia-ci/tokens/coveralls_token --query Parameter.Value --output text);
+                fi &&
                 echo '--- Build Julia from source' &&
                 make -j$${JULIA_NUM_THREADS} VERBOSE=1 &&
                 echo '--- Print Julia version info' &&
@@ -162,7 +187,11 @@ steps:
                 tar -zcf lcov_files.tar.gz lcov_files/ &&
                 buildkite-agent artifact upload lcov_files.tar.gz &&
                 echo '--- Process and upload coverage information' &&
-                ./usr/bin/julia.exe --color=yes .buildkite/pipelines/scheduled/coverage/upload_coverage.jl
+                if [[ -n $${CODECOV_TOKEN:-} ]]; then
+                  ./usr/bin/julia.exe --color=yes .buildkite/pipelines/scheduled/coverage/upload_coverage.jl;
+                else
+                  echo 'No coverage tokens (PR build); skipping upload';
+                fi
                 "]
               propagate-environment: true
               volumes:
@@ -181,6 +210,7 @@ steps:
                 - "BUILDKITE_BUILD_CREATOR_EMAIL"
                 - "BUILDKITE_PULL_REQUEST"
                 - "BUILDKITE_BUILD_NUMBER"
+                - "BUILDKITE_PIPELINE_SLUG"
         timeout_in_minutes: 540 # 9h
         agents:
           queue: "test"
@@ -210,14 +240,18 @@ steps:
               version: '1.11' # GREP_ME: Keep this updated. Do not set it to '1' or 'stable' or 'latest'.
         timeout_in_minutes: 10
         commands: |
-          echo "--- Obtain coverage tokens"
-          # Coverage tokens are fetched from SSM Parameter Store with this
-          # job's OIDC identity; no static secrets exist in CI config.
-          source .buildkite/utilities/aws_oidc.sh tokens
-          export COVERALLS_TOKEN="$$(aws ssm get-parameter --with-decryption --name /julia-ci/tokens/coveralls_token --query Parameter.Value --output text)"
-
           echo "--- Signal completion of parallel coverage uploads"
-          julia --color=yes .buildkite/pipelines/scheduled/coverage/finish_parallel_coverage.jl
+          # PR builds hold no tokens and did not upload anything, so there
+          # is nothing to finalize there.
+          if [[ "$${BUILDKITE_PIPELINE_SLUG}" == "julia-pr" ]]; then
+            echo "PR build: nothing was uploaded; nothing to finalize"
+          else
+            # The coveralls token is fetched from SSM Parameter Store with
+            # this job's OIDC identity; no static secrets exist in CI config.
+            source .buildkite/utilities/aws_oidc.sh tokens
+            export COVERALLS_TOKEN="$$(aws ssm get-parameter --with-decryption --name /julia-ci/tokens/coveralls_token --query Parameter.Value --output text)"
+            julia --color=yes .buildkite/pipelines/scheduled/coverage/finish_parallel_coverage.jl
+          fi
         agents:
           queue: "test"
           os: "linux"
