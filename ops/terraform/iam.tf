@@ -59,25 +59,37 @@ locals {
     "organization:${var.bk_org}:pipeline:julia-publish:ref:refs/tags/v*:*",
   ]
 
-  # Per-role trust: which pipelines (sub patterns) and which steps
-  # (aws:RequestTag/step_key, attested by the agent) may assume it.
+  # Per-role trust: which pipelines (by slug pattern in `sub` AND by
+  # unforgeable UUID session tag) and which steps (aws:RequestTag/step_key,
+  # attested by the agent) may assume it.
   oidc_trust = {
     stage = {
+      pipelines         = ["julia-pr", "julia-ci"]
       sub_patterns      = local.build_sub_patterns
       step_key_patterns = ["stage_*"]
     }
     publish = {
+      pipelines         = ["julia-publish"]
       sub_patterns      = local.publish_sub_patterns
       step_key_patterns = ["publish_*"]
     }
     docs-deploy = {
+      pipelines         = ["julia-publish"]
       sub_patterns      = local.publish_sub_patterns
       step_key_patterns = ["deploy_docs"]
     }
     tokens = {
+      pipelines         = ["julia-pr", "julia-ci"]
       sub_patterns      = local.build_sub_patterns
       step_key_patterns = ["coverage-*", "upload_results_*"]
     }
+  }
+
+  # Allowed cluster UUIDs per role, from the per-pipeline cluster map;
+  # roles whose pipelines have no configured cluster get no condition.
+  trust_cluster_ids = {
+    for role, t in local.oidc_trust :
+    role => distinct(compact([for p in t.pipelines : lookup(var.buildkite_cluster_ids, p, "")]))
   }
 
   # The staging areas (one per bucket) and the corresponding final
@@ -120,6 +132,29 @@ data "aws_iam_policy_document" "trust" {
       test     = "StringLike"
       variable = "aws:RequestTag/step_key"
       values   = each.value.step_key_patterns
+    }
+
+    # Pin the Buildkite UUIDs, not just the slugs in `sub`: slugs are
+    # renameable/re-mintable, UUIDs are not. These arrive as session tags
+    # (utilities/aws_oidc.sh) since IAM cannot condition on other claims.
+    # A token requested without these tags fails the conditions outright.
+    condition {
+      test     = "StringEquals"
+      variable = "aws:RequestTag/organization_id"
+      values   = [var.buildkite_organization_id]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "aws:RequestTag/pipeline_id"
+      values   = [for p in each.value.pipelines : var.buildkite_pipeline_ids[p]]
+    }
+    dynamic "condition" {
+      for_each = length(local.trust_cluster_ids[each.key]) > 0 ? [1] : []
+      content {
+        test     = "StringEquals"
+        variable = "aws:RequestTag/cluster_id"
+        values   = local.trust_cluster_ids[each.key]
+      }
     }
   }
 }

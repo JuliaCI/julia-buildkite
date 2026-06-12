@@ -10,6 +10,58 @@ variable "bk_org" {
   default     = "julialang"
 }
 
+# The Buildkite UUIDs pinned by the IAM trust policies, alongside the
+# slug-based `sub` patterns. Slugs are renameable and can be re-minted by
+# deleting + recreating a pipeline; UUIDs cannot, so a recreated pipeline
+# with a matching slug does not regain role access. The jobs pass these as
+# AWS session tags (see utilities/aws_oidc.sh) because IAM can only
+# condition on aud/sub from the raw token. Values live in
+# buildkite_ids.auto.tfvars (fetched once from the Buildkite REST API:
+# GET /v2/organizations/<org> and /v2/organizations/<org>/pipelines/<slug>;
+# re-fetch only if a pipeline is ever recreated or moved between clusters).
+# No defaults and nullable = false: an apply without real, well-formed
+# UUIDs (set in buildkite_ids.auto.tfvars) must be impossible -- a trust
+# policy missing these conditions would fall back to slug-only pinning.
+variable "buildkite_organization_id" {
+  description = "UUID of the Buildkite organization"
+  type        = string
+  nullable    = false
+
+  validation {
+    # The null guard keeps `terraform validate` (which leaves required
+    # variables unset) happy; nullable = false rejects null at plan time.
+    condition     = var.buildkite_organization_id == null ? true : can(regex("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", var.buildkite_organization_id)) && var.buildkite_organization_id != "00000000-0000-0000-0000-000000000000"
+    error_message = "Set buildkite_organization_id to the organization UUID (see buildkite_ids.auto.tfvars)."
+  }
+}
+
+variable "buildkite_pipeline_ids" {
+  description = "UUIDs of the three Buildkite pipelines, keyed by slug"
+  type        = map(string)
+  nullable    = false
+
+  validation {
+    condition     = var.buildkite_pipeline_ids == null ? true : keys(var.buildkite_pipeline_ids) == tolist(["julia-ci", "julia-pr", "julia-publish"])
+    error_message = "buildkite_pipeline_ids must have exactly the keys julia-ci, julia-pr, julia-publish."
+  }
+  validation {
+    condition = var.buildkite_pipeline_ids == null ? true : alltrue([
+      for id in values(var.buildkite_pipeline_ids) :
+      can(regex("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", id)) && id != "00000000-0000-0000-0000-000000000000"
+    ])
+    error_message = "Set every pipeline UUID (see buildkite_ids.auto.tfvars)."
+  }
+}
+
+# Cluster UUID each pipeline runs in, keyed by pipeline slug. Optional:
+# pipelines without an entry get no cluster condition (e.g. unclustered
+# agents, where the cluster_id claim is empty).
+variable "buildkite_cluster_ids" {
+  description = "UUIDs of the Buildkite cluster each pipeline belongs to, keyed by pipeline slug"
+  type        = map(string)
+  default     = {}
+}
+
 variable "s3_bucket" {
   description = "S3 bucket that release binaries are uploaded to"
   type        = string

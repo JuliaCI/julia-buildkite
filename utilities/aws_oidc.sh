@@ -50,11 +50,14 @@ case "${_OIDC_ROLE_SUFFIX}" in
         ;;
 esac
 
+# The *_id tags carry the Buildkite UUIDs (not the renameable slugs); the
+# IAM trust policies pin organization_id / pipeline_id / cluster_id so a
+# recreated or renamed pipeline with a matching slug cannot assume a role.
 _OIDC_TOKEN_FILE="$(mktemp)"
 buildkite-agent oidc request-token \
     --audience "sts.amazonaws.com" \
     --lifetime 43200 \
-    --aws-session-tag "organization_slug,pipeline_slug,build_branch,build_number,build_commit,step_key,job_id,agent_id" \
+    --aws-session-tag "organization_slug,organization_id,pipeline_slug,pipeline_id,cluster_id,build_branch,build_number,build_commit,step_key,job_id,agent_id" \
     > "${_OIDC_TOKEN_FILE}"
 
 export AWS_WEB_IDENTITY_TOKEN_FILE="${_OIDC_TOKEN_FILE}"

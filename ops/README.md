@@ -94,6 +94,16 @@ and which carry AWS session tags (`step_key`, `build_commit`, `pipeline_slug`, .
 * **Trusted roles** (`julia-oidc-publish`, `julia-oidc-docs-deploy`) are
   assumable only from the `julia-publish` pipeline slug, and only from the
   expected step (`aws:RequestTag/step_key` in the trust policy).
+* Every trust policy additionally pins the Buildkite **organization,
+  pipeline, and cluster UUIDs** (`aws:RequestTag/organization_id` /
+  `pipeline_id` / `cluster_id`, values in
+  `ops/terraform/buildkite_ids.auto.tfvars`). Slugs are renameable and can
+  be re-minted by deleting + recreating a pipeline; the UUIDs cannot, so a
+  recreated pipeline with a matching slug does not regain role access.
+  IAM can only condition on `aud`/`sub` from the raw OIDC token, which is
+  why these (like `step_key`) travel as AWS session tags requested in
+  `utilities/aws_oidc.sh`; the claims are attested by Buildkite, and a
+  token requested without the tags fails the trust conditions outright.
 * **Staging** (`julia-oidc-stage`) may be assumed from any ref of `julia-ci`
   or `julia-pr`, but can *only* write to
   `<prefix>/staging/${aws:PrincipalTag/build_commit}/*` — a path containing
@@ -116,13 +126,32 @@ and which carry AWS session tags (`step_key`, `build_commit`, `pipeline_slug`, .
 One-time setup, in order (admin AWS credentials; region and bucket names
 are Terraform variables with the production defaults):
 
-1. `terraform -chdir=ops/terraform init && terraform -chdir=ops/terraform apply`
+1. Create the three Buildkite pipelines and set their WebUI steps:
+   - `julia-pr` — builds pull requests; WebUI = `pipelines/main/0_webui.yml`.
+   - `julia-ci` — builds master / release-* / tags / schedule (no PRs);
+     WebUI = `pipelines/main/0_webui.yml` (same launch flow; only `julia-ci`
+     reaches the publish trigger via the `if:` in `trigger_publish.yml`).
+   - `julia-publish` — PRs OFF, branch-limited, triggered by `julia-ci`;
+     WebUI = `pipelines/publish/0_webui.yml`.
+   All are plain `buildkite-agent pipeline upload` (no cryptic plugin, no
+   `cryptic_capable` agent targeting).
+2. Record the organization / pipeline / cluster UUIDs that the IAM trust
+   policies pin (in addition to the slug-based `sub` patterns; slugs can
+   be renamed or re-minted, UUIDs cannot) in
+   `ops/terraform/buildkite_ids.auto.tfvars` and commit it (the UUIDs are
+   not secrets). They come from the Buildkite REST API (token scope
+   `read_pipelines`): `GET /v2/organizations/julialang` (`.id`) and
+   `GET /v2/organizations/julialang/pipelines/<slug>` (`.id`,
+   `.cluster_id`). The UUIDs are static; this needs redoing only if a
+   pipeline is ever recreated or moved to another cluster. Terraform
+   refuses to apply without real values here.
+3. `terraform -chdir=ops/terraform init && terraform -chdir=ops/terraform apply`
    — creates the OIDC provider for `agent.buildkite.com`, the four KMS
    keys (the notary key as `EXTERNAL`-origin, pending import), and the
    four IAM roles + policies. Re-apply any time trust patterns or
    policies change. Configure a state backend of your choice first (the
    state contains no secrets).
-2. Key material:
+4. Key material:
    * `./20_export_gpg_pubkey.py --created <today>` — exports the OpenPGP
      public half of the KMS-generated tarball signing key to
      `secrets/tarball_signing.pub.asc`. Commit it, and publish it as the
@@ -136,25 +165,25 @@ are Terraform variables with the production defaults):
      cryptic agent key, securely delete it afterwards). Writes
      `utilities/macos/notary_api_key.json` — commit it; it contains no
      secret material.
-3. Telemetry tokens into SSM:
+5. Telemetry tokens into SSM:
    * `./23_put_tokens.sh codecov_token`
    * `./23_put_tokens.sh coveralls_token`
    * `./23_put_tokens.sh buildkite_analytics_token`
-4. macOS certificate for the new KMS key:
+6. macOS certificate for the new KMS key:
    * `./22_generate_macos_csr.sh`
    * Submit CSR at developer.apple.com → Developer ID Application cert
    * `openssl x509 -inform DER -in developerID_application.cer -out utilities/macos/developer_id.pem`
      and commit (certificates are public).
-5. Docs deploy key:
+7. Docs deploy key:
    * `./24_docs_deploy_pubkey.sh` and register the printed key as a
      deploy key with write access on JuliaLang/docs.julialang.org.
    * Ensure the `aws_uploader` rootfs image (JuliaCI/rootfs-images)
      ships `aws_kms_pkcs11.so` (https://github.com/JackOfMostTrades/aws-kms-pkcs11).
-6. Build + publish rcodesign binaries (on a macOS machine):
+8. Build + publish rcodesign binaries (on a macOS machine):
    * `utilities/macos/rcodesign/build_rcodesign.sh` (per arch)
    * `./30_upload_tools.sh <binary> <arch>`; update the pinned sha256s in
      `utilities/macos/get_rcodesign.sh`.
-7. `terraform -chdir=ops/terraform/azure apply -var azure_app_id=<client-id>`
+9. `terraform -chdir=ops/terraform/azure apply -var azure_app_id=<client-id>`
    (with Azure credentials that may manage the Trusted Signing app
    registration) — federated credentials for Windows Trusted Signing
    (matched to the `julia-publish` pipeline, where Windows signing now
@@ -163,18 +192,9 @@ are Terraform variables with the production defaults):
    If flexible federated credentials are unavailable on the tenant, fall
    back to `--subject-claim organization_id` tokens (exact-match credential
    on the Buildkite organization UUID) at the cost of org-level granularity.
-8. Fill `JULIA_CI_AWS_ACCOUNT_ID` in `utilities/aws_oidc.sh` (from the
-   `julia_ci_aws_account_id` Terraform output).
-9. Create/rename the three Buildkite pipelines and set their WebUI steps:
-    - `julia-pr` — builds pull requests; WebUI = `pipelines/main/0_webui.yml`.
-    - `julia-ci` — builds master / release-* / tags / schedule (no PRs);
-      WebUI = `pipelines/main/0_webui.yml` (same launch flow; only `julia-ci`
-      reaches the publish trigger via the `if:` in `trigger_publish.yml`).
-    - `julia-publish` — PRs OFF, branch-limited, triggered by `julia-ci`;
-      WebUI = `pipelines/publish/0_webui.yml`.
-    All are plain `buildkite-agent pipeline upload` (no cryptic plugin, no
-    `cryptic_capable` agent targeting).
-10. Once green: revoke the legacy static AWS IAM user, delete the cryptic
+10. Fill `JULIA_CI_AWS_ACCOUNT_ID` in `utilities/aws_oidc.sh` (from the
+    `julia_ci_aws_account_id` Terraform output).
+11. Once green: revoke the legacy static AWS IAM user, delete the cryptic
     agent keys from the agents, decommission `cryptic_capable` queues,
     revoke the old Apple Developer ID certificate, the Apple ID
     app-specific password, the old SSH deploy key, and the
