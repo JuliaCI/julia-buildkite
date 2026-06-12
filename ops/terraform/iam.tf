@@ -231,7 +231,7 @@ data "aws_iam_policy_document" "stage" {
 resource "aws_iam_role_policy" "stage" {
   for_each = local.build_pipelines
 
-  name   = "stage"
+  name   = "write-once-uploads-to-own-commit-staging-path"
   role   = aws_iam_role.stage[each.key].id
   policy = data.aws_iam_policy_document.stage[each.key].json
 }
@@ -302,7 +302,7 @@ data "aws_iam_policy_document" "publish" {
 }
 
 resource "aws_iam_role_policy" "publish" {
-  name   = "publish"
+  name   = "sign-and-promote-staged-artifacts-to-release"
   role   = aws_iam_role.publish.id
   policy = data.aws_iam_policy_document.publish.json
 }
@@ -331,7 +331,7 @@ data "aws_iam_policy_document" "docs_deploy" {
 }
 
 resource "aws_iam_role_policy" "docs_deploy" {
-  name   = "docs-deploy"
+  name   = "ssh-sign-docs-deploy-via-kms"
   role   = aws_iam_role.docs_deploy.id
   policy = data.aws_iam_policy_document.docs_deploy.json
 }
@@ -360,7 +360,7 @@ data "aws_iam_policy_document" "tokens" {
 }
 
 resource "aws_iam_role_policy" "tokens" {
-  name   = "tokens"
+  name   = "read-telemetry-tokens-from-ssm"
   role   = aws_iam_role.tokens.id
   policy = data.aws_iam_policy_document.tokens.json
 }

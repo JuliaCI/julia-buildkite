@@ -16,6 +16,19 @@ resource "aws_kms_key" "macos_codesign" {
   description              = "Julia macOS Developer ID codesigning key (used via rcodesign)"
   key_usage                = "SIGN_VERIFY"
   customer_master_key_spec = "RSA_2048"
+
+  # The signing keys are the only unrecoverable resources in this module
+  # (the GPG key exists nowhere else; the notary .p8 is destroyed after
+  # import; the others are bound to issued certificates / registered
+  # deploy keys). prevent_destroy makes any plan that would destroy or
+  # REPLACE one (key specs are immutable, so e.g. a key_spec edit plans
+  # as replacement) a hard error. 30 days is the maximum (and default)
+  # cancellation window for a scheduled deletion; set explicitly.
+  deletion_window_in_days = 30
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "aws_kms_alias" "macos_codesign" {
@@ -29,6 +42,13 @@ resource "aws_kms_external_key" "notary_api" {
   description = "Julia App Store Connect API key (notarization JWT signing)"
   key_usage   = "SIGN_VERIFY"
   key_spec    = "ECC_NIST_P256"
+
+  # See the lifecycle note on aws_kms_key.macos_codesign.
+  deletion_window_in_days = 30
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "aws_kms_alias" "notary_api" {
@@ -44,6 +64,13 @@ resource "aws_kms_key" "tarball_signing" {
   description              = "Julia release tarball GPG signing key"
   key_usage                = "SIGN_VERIFY"
   customer_master_key_spec = var.tarball_key_spec
+
+  # See the lifecycle note on aws_kms_key.macos_codesign.
+  deletion_window_in_days = 30
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "aws_kms_alias" "tarball_signing" {
@@ -59,6 +86,13 @@ resource "aws_kms_key" "docs_deploy" {
   description              = "Julia docs.julialang.org SSH deploy key (used via aws-kms-pkcs11)"
   key_usage                = "SIGN_VERIFY"
   customer_master_key_spec = "ECC_NIST_P256"
+
+  # See the lifecycle note on aws_kms_key.macos_codesign.
+  deletion_window_in_days = 30
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "aws_kms_alias" "docs_deploy" {

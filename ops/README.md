@@ -165,9 +165,11 @@ are Terraform variables with the production defaults):
    keys (the notary key as `EXTERNAL`-origin, pending import), and the
    IAM roles + policies (one stage role per build pipeline, tokens for
    julia-ci only, publish + docs-deploy). Re-apply any time trust
-   patterns or
-   policies change. Configure a state backend of your choice first (the
-   state contains no secrets).
+   patterns or policies change. Local state is fine while testing (it
+   contains no secrets); once things settle, move it to S3 by adding a
+   `backend "s3"` block (bucket `julia-ci-tfstate`, `use_lockfile =
+   true`) and running `terraform init -migrate-state` — the resources
+   are untouched by the migration.
 4. Key material:
    * `./20_export_gpg_pubkey.py --created <today>` — exports the OpenPGP
      public half of the KMS-generated tarball signing key to
