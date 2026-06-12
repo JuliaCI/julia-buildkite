@@ -27,14 +27,8 @@
 # ...) that IAM policies match against.
 
 # AWS account that holds the Julia CI roles (not a secret).
-# TODO: fill in after applying ops/terraform (output julia_ci_aws_account_id).
-JULIA_CI_AWS_ACCOUNT_ID="${JULIA_CI_AWS_ACCOUNT_ID:-000000000000}"
+JULIA_CI_AWS_ACCOUNT_ID="${JULIA_CI_AWS_ACCOUNT_ID:-873569884612}"
 JULIA_CI_AWS_REGION="${JULIA_CI_AWS_REGION:-us-east-1}"
-
-if [[ "${JULIA_CI_AWS_ACCOUNT_ID}" == "000000000000" ]]; then
-    echo "ERROR: JULIA_CI_AWS_ACCOUNT_ID placeholder not configured" >&2
-    return 1 2>/dev/null || exit 1
-fi
 
 _OIDC_ROLE_SUFFIX="${1:?usage: source aws_oidc.sh <stage|publish|docs-deploy|tokens>}"
 
