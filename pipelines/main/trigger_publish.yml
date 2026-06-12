@@ -3,17 +3,17 @@
 # The `wait` barrier ensures every stage_* job has finished (so all unsigned
 # artifacts are in the commit-sha-gated staging area) before publish runs.
 #
-# The `if:` is hygiene only -- the real boundary is that the julia-publish
-# pipeline does not build pull requests, and its jobs run
-# verify_trusted_commit.sh. A pull request that reached this step would
-# trigger a julia-publish build, but that build is rejected (PR builds
-# disabled) / aborts (commit not on a protected ref).
+# This file is uploaded by both julia-ci and julia-pr build flows, but the
+# `if:` restricts the trigger to julia-ci -- the pipeline that only builds
+# trusted refs. julia-pr (pull requests) never triggers publish. This is
+# layered with: julia-publish not building PRs at all, and its jobs running
+# verify_trusted_commit.sh.
 steps:
   - wait: ~
 
   - trigger: "julia-publish"
     label: ":rocket: trigger publish"
-    if: (build.branch == "master") || (build.branch =~ /^release-/) || (build.tag =~ /^v/) || (pipeline.slug == "julia-buildkite")
+    if: pipeline.slug == "julia-ci"
     build:
       commit: "${BUILDKITE_COMMIT}"
       branch: "${BUILDKITE_BRANCH}"

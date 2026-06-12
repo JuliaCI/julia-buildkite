@@ -1,15 +1,18 @@
 ## Main pipeline
 
-This is the main pipeline. It contains most of the builders. These builders are triggered by GitHub webhook events, such as pushes and pull requests.
+This directory contains most of the builders. They are triggered by GitHub
+webhook events (pushes and pull requests).
 
-We have a different main pipeline for each permanent branch.
+Builds are split across three Buildkite pipelines by trust level (see
+`ops/README.md` for why):
 
-For example:
+| Pipeline        | Builds                                            | Trust                          |
+| --------------- | ------------------------------------------------- | ------------------------------ |
+| `julia-pr`      | pull requests                                     | untrusted (stage only)         |
+| `julia-ci`      | `master`, `release-*`, tags, and scheduled nightlies | untrusted to sign; triggers publish |
+| `julia-publish` | (triggered by `julia-ci`) signs + promotes        | trusted (KMS signing keys)     |
 
-| Permanent Branch | Pipeline                                                                         |
-| ---------------- | -------------------------------------------------------------------------------- |
-| `master`         | [`julia-master`](https://buildkite.com/julialang/julia-master)                   |
-| `release-1.6`    | [`julia-release-1.6`](https://buildkite.com/julialang/julia-release-1-dot-6) |
-| `release-1.7`    | [`julia-release-1.7`](https://buildkite.com/julialang/julia-release-1-dot-7) |
-
-(This is not a complete list.)
+Pull requests run only in `julia-pr` and stop after staging unsigned
+artifacts to a commit-sha-gated path. Trusted-ref builds run in `julia-ci`,
+which triggers `julia-publish` to sign and publish. `julia-publish` does not
+build pull requests, so a PR can never reach the signing keys.

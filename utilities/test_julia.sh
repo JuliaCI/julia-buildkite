@@ -137,8 +137,7 @@ echo "Pipeline is: ${pipeline}"
 # We test all external stdlibs in the following cases:
 if [[ "${branch}" == release-* ]] || \
    [[ "${branch}" == backports-release-* ]] || \
-   [[ "${pipeline}" == "julia-master-scheduled" ]] || \
-   [[ "${pipeline}" == "julia-buildkite-scheduled" ]]; then
+   [[ "${BUILDKITE_SOURCE:-}" == "schedule" ]]; then
     echo "On important branch '${branch}' or pipeline '${pipeline}': running all external stdlib tests"
 else
     # Skip all external stdlibs that aren't in CHANGED_STDLIB_VERSIONS

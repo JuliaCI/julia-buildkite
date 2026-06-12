@@ -15,12 +15,13 @@ source "${SCRIPT_DIR}/common.sh"
 
 # Buildkite `sub` claims embed the commit sha, so exact-match federated
 # credentials cannot work. Use a flexible federated identity credential
-# (claimsMatchingExpression) to wildcard-match release refs of the Julia
-# pipelines. Requires Microsoft.Graph API support for flexible FIC.
+# (claimsMatchingExpression) to wildcard-match protected refs of the
+# julia-publish pipeline (Windows codesigning now happens in the trusted
+# publish step). Requires Microsoft.Graph API support for flexible FIC.
 for entry in \
-    "buildkite-julia-master|organization:${BK_ORG}:pipeline:julia-master:ref:refs/heads/master:*" \
-    "buildkite-julia-release|organization:${BK_ORG}:pipeline:julia-release-*" \
-    "buildkite-julia-buildkite|organization:${BK_ORG}:pipeline:julia-buildkite:ref:refs/heads/main:*" \
+    "buildkite-julia-publish-master|organization:${BK_ORG}:pipeline:julia-publish:ref:refs/heads/master:*" \
+    "buildkite-julia-publish-release|organization:${BK_ORG}:pipeline:julia-publish:ref:refs/heads/release-*:*" \
+    "buildkite-julia-publish-tags|organization:${BK_ORG}:pipeline:julia-publish:ref:refs/tags/v*:*" \
 ; do
     name="${entry%%|*}"
     pattern="${entry#*|}"

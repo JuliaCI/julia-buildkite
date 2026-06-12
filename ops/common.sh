@@ -63,39 +63,35 @@ export S3_STAGING_SUBPREFIX="staging"
 # Buildkite OIDC issuer host
 export BK_OIDC_HOST="agent.buildkite.com"
 
-# `sub` patterns for the UNTRUSTED build pipelines. Any ref (PRs included);
-# the stage/token roles these map to are deliberately harmless, so we do
-# not (and must not) rely on the ref component for trust here.
+# `sub` patterns for the UNTRUSTED build pipelines:
+#   julia-pr  builds pull requests
+#   julia-ci  builds trusted refs (master / release-* / tags), incl. scheduled
+# Any ref is allowed: the stage/token roles these map to are deliberately
+# harmless, so we do not (and must not) rely on the ref component for trust.
 # sub format: organization:ORG:pipeline:PIPELINE:ref:REF:commit:SHA:step:STEP
 BUILD_SUB_PATTERNS=(
-    "organization:${BK_ORG}:pipeline:julia-master:*"
-    "organization:${BK_ORG}:pipeline:julia-master-scheduled:*"
-    "organization:${BK_ORG}:pipeline:julia-release-*:*"
-    "organization:${BK_ORG}:pipeline:julia-buildkite:*"
-    "organization:${BK_ORG}:pipeline:julia-buildkite-scheduled:*"
+    "organization:${BK_ORG}:pipeline:julia-pr:*"
+    "organization:${BK_ORG}:pipeline:julia-ci:*"
 )
 
-# `sub` patterns for the TRUSTED publish pipelines. These pipeline slugs
-# MUST be configured in Buildkite with pull-request builds disabled and
-# branch-limited to the protected refs (see ops/README.md); a PR can then
-# never produce a build under these slugs, so the slug itself is the trust
-# boundary. The ref patterns below are belt-and-braces only.
+# `sub` patterns for the TRUSTED publish pipeline. julia-publish MUST be
+# configured in Buildkite with pull-request builds disabled and branch-limited
+# to the protected refs (see ops/README.md), and is triggered only by julia-ci.
+# A PR can then never produce a build under this slug, so the slug itself is
+# the trust boundary; the ref patterns below are belt-and-braces only.
 PUBLISH_SUB_PATTERNS=(
     "organization:${BK_ORG}:pipeline:julia-publish:ref:refs/heads/master:*"
     "organization:${BK_ORG}:pipeline:julia-publish:ref:refs/heads/release-*:*"
     "organization:${BK_ORG}:pipeline:julia-publish:ref:refs/tags/v*:*"
-    # julia-buildkite's own end-to-end publish test (ephemeral bucket only)
-    "organization:${BK_ORG}:pipeline:julia-buildkite-publish:ref:refs/heads/main:*"
 )
 
 # Pipelines whose jobs may read CI telemetry tokens (coverage uploads,
-# buildkite test analytics). These steps also run on "needs full CI"-labeled
-# PRs (as they always have), so this includes any ref of the build
-# pipelines; the tokens are deliberately low-value.
+# buildkite test analytics). These run on scheduled julia-ci builds and on
+# "needs full CI"-labeled PRs in julia-pr; the tokens are deliberately
+# low-value, so any ref of the build pipelines is fine.
 TOKEN_SUB_PATTERNS=(
-    "organization:${BK_ORG}:pipeline:julia-master:*"
-    "organization:${BK_ORG}:pipeline:julia-master-scheduled:*"
-    "organization:${BK_ORG}:pipeline:julia-buildkite-scheduled:*"
+    "organization:${BK_ORG}:pipeline:julia-ci:*"
+    "organization:${BK_ORG}:pipeline:julia-pr:*"
 )
 
 # --- Helpers ------------------------------------------------------------------

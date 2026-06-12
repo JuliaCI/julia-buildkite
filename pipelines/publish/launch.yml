@@ -25,6 +25,14 @@ steps:
           queue: "publish"
           os: "linux"
           arch: "x86_64"
+        env:
+          # Identify the Azure Trusted Signing app registration for Windows
+          # Authenticode signing (not secrets; auth is via Buildkite OIDC
+          # workload identity federation -- see windows/codesign.sh and
+          # ops/50_azure_trusted_signing_oidc.sh).
+          # TODO: fill in after running ops/50_azure_trusted_signing_oidc.sh
+          AZURE_TENANT_ID: "00000000-0000-0000-0000-000000000000"
+          AZURE_CLIENT_ID: "00000000-0000-0000-0000-000000000000"
 
       - label: "deploy docs"
         key: "deploy_docs"

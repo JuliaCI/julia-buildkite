@@ -7,7 +7,7 @@ remote KMS operation, authorized by the job's OIDC identity:
 
 | Concern                  | Before (cryptic)                          | After                                                        |
 |--------------------------|-------------------------------------------|--------------------------------------------------------------|
-| S3 uploads               | static `AWS_ACCESS_KEY_ID/SECRET` in yml   | OIDC → `julia-ci-upload[-pr]` role                            |
+| S3 uploads               | static `AWS_ACCESS_KEY_ID/SECRET` in yml   | OIDC → `julia-ci-stage` (untrusted) + `julia-ci-publish` (trusted) roles |
 | macOS codesigning        | keychain file w/ Developer ID key          | KMS RSA key + patched `rcodesign` (`utilities/macos/rcodesign`) |
 | macOS notarization       | Apple ID + app-specific password           | App Store Connect API key in KMS (ES256 JWTs via `kms:Sign`)  |
 | Linux/source GPG signing | raw GPG private key file                   | GPG key material imported into KMS, `utilities/kms_gpg_sign.py` |
@@ -22,17 +22,25 @@ repository in any form.)
 
 ## Trusted / untrusted pipeline split
 
-The single most important control is that **pull request builds and release
+The single most important control is that **pull requests and release
 publishing run in different Buildkite pipelines**, and the trusted IAM roles
-only trust the publish pipeline's slug:
+only trust the publish pipeline's slug. There are three pipelines:
+
+- **`julia-pr`** — builds pull requests (untrusted).
+- **`julia-ci`** — builds trusted refs only: master, release-*, tags, and the
+  scheduled nightlies (untrusted to sign, but it is what triggers publish).
+- **`julia-publish`** — the trusted pipeline that signs + promotes.
 
 ```
- build pipelines (julia-master, julia-release-*, julia-buildkite, ...)
-   build + test  ──►  stage_<triplet>  ──►  s3://<bucket>/<prefix>/staging/<commit>/julia-*.tar.gz
+ julia-pr  (pull requests)          julia-ci  (master / release-* / tags / scheduled)
+   build + test                        build + test
+        │                                   │
+        ▼                                   ▼
+   stage_<triplet>  ──►  s3://<bucket>/<prefix>/staging/<commit>/julia-*.tar.gz
    (UNTRUSTED: role julia-ci-stage, write-once to its own commit's staging path; no KMS)
-                              │  on protected refs only
-                              ▼   (trigger; PRs can't enter the publish pipeline)
- julia-publish pipeline  ──►  publish_all (single step)
+   PRs stop here.                          │  julia-ci only: trigger
+                                           ▼
+                              julia-publish  ──►  publish_all (single step)
    (TRUSTED: role julia-ci-publish, kms:Sign + read staging + write final)
    verify_trusted_commit.sh → sign (rcodesign / Trusted Signing / KMS-GPG) → promote → deploy docs
 ```
@@ -42,15 +50,19 @@ request build's `sub` ref as the PR head branch, with no PR-vs-push
 discriminator, so a fork PR whose branch is named `master` would match a
 `ref:refs/heads/master` trust pattern. We therefore do **not** trust any
 build-pipeline slug for signing. The trusted roles trust only the
-`julia-publish` slug, and a PR cannot produce a build under that slug.
+`julia-publish` slug, and a PR (which only ever runs in `julia-pr`) cannot
+produce a build under that slug.
 
-**Required Buildkite configuration for the `julia-publish` pipeline** (this
-is load-bearing — the IAM trust depends on it):
-- "Build pull requests" OFF, and "Build pull requests from third-party
-  forked repositories" OFF.
-- Branch limiting to `master release-*` (plus build tags `v*`).
-- Its webUI step loads launch steps from a pinned julia-buildkite (the
-  external-buildkite plugin), never from the triggered build's tree.
+**Required Buildkite configuration** (this is load-bearing — the IAM trust
+depends on it):
+- `julia-pr`: builds pull requests (this is the only pipeline that should).
+- `julia-ci`: builds master / release-* / tags / schedule; **does not build
+  pull requests**.
+- `julia-publish`: "Build pull requests" OFF (incl. third-party forks);
+  branch-limited to `master release-*` (plus build tags `v*`); triggered only
+  by `julia-ci`. Its webUI step loads launch steps from a pinned
+  julia-buildkite (the external-buildkite plugin), never from the triggered
+  build's tree.
 - Backstop: every publish job runs `utilities/verify_trusted_commit.sh`,
   which aborts unless `BUILDKITE_COMMIT` is reachable from a protected ref
   of the canonical upstream — so even a mis-triggered build cannot publish.
@@ -66,13 +78,14 @@ Buildkite agents mint OIDC tokens (`buildkite-agent oidc request-token`)
 whose `sub` claim is `organization:<org>:pipeline:<pipeline>:ref:<ref>:commit:<sha>:step:<step>`
 and which carry AWS session tags (`step_key`, `build_commit`, `pipeline_slug`, ...).
 
-* **Release roles** (`julia-ci-upload`, `julia-ci-docs-deploy`) only trust
-  `master` / `release-*` / `v*` tag refs of the release pipelines, and only
-  from the expected step (`aws:RequestTag/step_key` in the trust policy).
-* **PR uploads** (`julia-ci-upload-pr`) may be assumed from any ref, but can
-  *only* write to `bin/pr/${aws:PrincipalTag/build_commit}/*` — a path
-  containing the source git sha, tagged by the (trusted) agent itself. PR
-  builds cannot touch release paths, sign anything, or read tokens.
+* **Trusted roles** (`julia-ci-publish`, `julia-ci-docs-deploy`) are
+  assumable only from the `julia-publish` pipeline slug, and only from the
+  expected step (`aws:RequestTag/step_key` in the trust policy).
+* **Staging** (`julia-ci-stage`) may be assumed from any ref of `julia-ci`
+  or `julia-pr`, but can *only* write to
+  `<prefix>/staging/${aws:PrincipalTag/build_commit}/*` — a path containing
+  the source git sha, tagged by the (trusted) agent itself. Build / PR jobs
+  cannot touch release paths, sign anything, or read tokens.
   (Consumers, e.g. juliaup, map PR number → head sha via the GitHub API and
   fetch from the sha path.)
 * **No overwrites**: all roles must use S3 conditional writes
@@ -120,15 +133,22 @@ defaults in `common.sh`):
    * `./30_upload_tools.sh <binary> <arch>`; update the pinned sha256s in
      `utilities/macos/get_rcodesign.sh`.
 9. `AZURE_APP_ID=... ./50_azure_trusted_signing_oidc.sh` — federated
-   credentials for Windows Trusted Signing; fill the (non-secret)
-   `AZURE_TENANT_ID` / `AZURE_CLIENT_ID` placeholders in
-   `pipelines/*/platforms/upload_windows*.yml`. If flexible federated
-   credentials are unavailable on the tenant, fall back to
+   credentials for Windows Trusted Signing (matched to the `julia-publish`
+   pipeline, where Windows signing now runs); fill the (non-secret)
+   `AZURE_TENANT_ID` / `AZURE_CLIENT_ID` placeholders on the `publish_all`
+   step in `pipelines/publish/launch.yml`. If flexible
+   federated credentials are unavailable on the tenant, fall back to
    `--subject-claim organization_id` tokens (exact-match credential on the
    Buildkite organization UUID) at the cost of org-level granularity.
 10. Fill `JULIA_CI_AWS_ACCOUNT_ID` in `utilities/aws_oidc.sh`.
-11. Update the Buildkite WebUI steps to match `pipelines/*/0_webui.yml`
-    (plain `buildkite-agent pipeline upload`, no cryptic plugin, no
+11. Create/rename the three Buildkite pipelines and set their WebUI steps:
+    - `julia-pr` — builds pull requests; WebUI = `pipelines/main/0_webui.yml`.
+    - `julia-ci` — builds master / release-* / tags / schedule (no PRs);
+      WebUI = `pipelines/main/0_webui.yml` (same launch flow; only `julia-ci`
+      reaches the publish trigger via the `if:` in `trigger_publish.yml`).
+    - `julia-publish` — PRs OFF, branch-limited, triggered by `julia-ci`;
+      WebUI = `pipelines/publish/0_webui.yml`.
+    All are plain `buildkite-agent pipeline upload` (no cryptic plugin, no
     `cryptic_capable` agent targeting).
 12. Once green: revoke the legacy static AWS IAM user, delete the cryptic
     agent keys from the agents, decommission `cryptic_capable` queues,
@@ -153,5 +173,5 @@ defaults in `common.sh`):
   `utilities/upload_julia.sh` (412 + ETag comparison), not by allowing
   overwrites.
 * juliaup needs a change to consume PR binaries: resolve PR number → head
-  sha via the GitHub API, then fetch `bin/pr/<sha>/julia-*` (this replaces
-  the old `julia-pr<NUM>-` upload names).
+  sha via the GitHub API, then fetch `bin/staging/<sha>/julia-*` (this
+  replaces the old `julia-prNNNN-` upload filenames).

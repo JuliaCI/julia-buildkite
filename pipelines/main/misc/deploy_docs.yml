@@ -78,7 +78,7 @@ steps:
           git add .
           git commit -a -F ../commit_message
 
-          if [[ "$${BUILDKITE_PIPELINE_SLUG}" == "julia-buildkite" ]]; then
+          if [[ "$${S3_BUCKET:-}" == "julialang-ephemeral" ]]; then
             # If we're testing new CI configurations, push to a temporary branch, then delete it
             git push origin gh-pages:gh-pages-buildkite-$${BUILDKITE_COMMIT}
             git push origin --delete gh-pages-buildkite-$${BUILDKITE_COMMIT}
