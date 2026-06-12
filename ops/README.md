@@ -1,7 +1,20 @@
 # Julia CI trust infrastructure (post-cryptic)
 
-These scripts configure the AWS (and Azure) resources that replace the
-`cryptic` Buildkite plugin. After this migration, **no private key ever
+This directory configures the AWS (and Azure) resources that replace the
+`cryptic` Buildkite plugin:
+
+- **`terraform/`** — the declarative infrastructure: Buildkite OIDC
+  provider, the four KMS keys, the four IAM roles and their policies.
+- **`terraform/azure/`** — a separate root module (different control
+  plane / credentials) for the Azure Trusted Signing federated identity
+  credentials.
+- **numbered scripts** — the imperative one-time operations: importing
+  existing key material into KMS, entering bearer tokens, generating the
+  macOS CSR, printing the docs deploy public key, uploading tool binaries.
+  These stay out of Terraform on purpose: their inputs are secrets, and
+  anything Terraform touches ends up in its state file. The Terraform
+  state for this module therefore contains **no secret material** and can
+  be stored in any ordinary backend. After this migration, **no private key ever
 exists on a build agent or in this repository** — every signature is a
 remote KMS operation, authorized by the job's OIDC identity:
 
@@ -100,48 +113,52 @@ and which carry AWS session tags (`step_key`, `build_commit`, `pipeline_slug`, .
 
 ## Runbook
 
-One-time setup, in order (admin AWS credentials; region via `AWS_REGION`,
-defaults in `common.sh`):
+One-time setup, in order (admin AWS credentials; region and bucket names
+are Terraform variables with the production defaults):
 
-1. `./10_oidc_provider.sh` — IAM OIDC provider for `agent.buildkite.com`.
-2. `./11_kms_keys.sh` — create the five KMS keys.
-3. `./12_iam_roles.sh` — create/update the four roles + policies.
-   Re-run any time patterns/policies change.
-4. Import existing key material (from a trusted workstation; obtain the
+1. `terraform -chdir=ops/terraform init && terraform -chdir=ops/terraform apply`
+   — creates the OIDC provider for `agent.buildkite.com`, the four KMS
+   keys (the notary + tarball keys as `EXTERNAL`-origin, pending import),
+   and the four IAM roles + policies. Re-apply any time trust patterns or
+   policies change. Configure a state backend of your choice first (the
+   state contains no secrets).
+2. Import existing key material (from a trusted workstation; obtain the
    plaintexts once via the legacy cryptic agent key):
    * `./20_import_gpg_key.sh /path/to/tarball_signing.gpg`
    * `./21_import_notary_key.sh AuthKey_X.p8 <issuer-id> <key-id>`
      (writes `utilities/macos/notary_api_key.json` — commit it; it
      contains no secret material)
    * securely delete the plaintexts afterwards.
-5. Telemetry tokens into SSM:
+3. Telemetry tokens into SSM:
    * `./23_put_tokens.sh codecov_token`
    * `./23_put_tokens.sh coveralls_token`
    * `./23_put_tokens.sh buildkite_analytics_token`
-6. macOS certificate for the new KMS key:
+4. macOS certificate for the new KMS key:
    * `./22_generate_macos_csr.sh`
    * Submit CSR at developer.apple.com → Developer ID Application cert
    * `openssl x509 -inform DER -in developerID_application.cer -out utilities/macos/developer_id.pem`
      and commit (certificates are public).
-7. Docs deploy key:
+5. Docs deploy key:
    * `./24_docs_deploy_pubkey.sh` and register the printed key as a
      deploy key with write access on JuliaLang/docs.julialang.org.
    * Ensure the `aws_uploader` rootfs image (JuliaCI/rootfs-images)
      ships `aws_kms_pkcs11.so` (https://github.com/JackOfMostTrades/aws-kms-pkcs11).
-8. Build + publish rcodesign binaries (on a macOS machine):
+6. Build + publish rcodesign binaries (on a macOS machine):
    * `utilities/macos/rcodesign/build_rcodesign.sh` (per arch)
    * `./30_upload_tools.sh <binary> <arch>`; update the pinned sha256s in
      `utilities/macos/get_rcodesign.sh`.
-9. `AZURE_APP_ID=... ./50_azure_trusted_signing_oidc.sh` — federated
-   credentials for Windows Trusted Signing (matched to the `julia-publish`
-   pipeline, where Windows signing now runs); fill the (non-secret)
-   `AZURE_TENANT_ID` / `AZURE_CLIENT_ID` placeholders on the `publish_all`
-   step in `pipelines/publish/launch.yml`. If flexible
-   federated credentials are unavailable on the tenant, fall back to
-   `--subject-claim organization_id` tokens (exact-match credential on the
-   Buildkite organization UUID) at the cost of org-level granularity.
-10. Fill `JULIA_CI_AWS_ACCOUNT_ID` in `utilities/aws_oidc.sh`.
-11. Create/rename the three Buildkite pipelines and set their WebUI steps:
+7. `terraform -chdir=ops/terraform/azure apply -var azure_app_id=<client-id>`
+   (with Azure credentials that may manage the Trusted Signing app
+   registration) — federated credentials for Windows Trusted Signing
+   (matched to the `julia-publish` pipeline, where Windows signing now
+   runs); fill the (non-secret) `AZURE_TENANT_ID` / `AZURE_CLIENT_ID`
+   placeholders on the `publish_all` step in `pipelines/publish/launch.yml`.
+   If flexible federated credentials are unavailable on the tenant, fall
+   back to `--subject-claim organization_id` tokens (exact-match credential
+   on the Buildkite organization UUID) at the cost of org-level granularity.
+8. Fill `JULIA_CI_AWS_ACCOUNT_ID` in `utilities/aws_oidc.sh` (from the
+   `julia_ci_aws_account_id` Terraform output).
+9. Create/rename the three Buildkite pipelines and set their WebUI steps:
     - `julia-pr` — builds pull requests; WebUI = `pipelines/main/0_webui.yml`.
     - `julia-ci` — builds master / release-* / tags / schedule (no PRs);
       WebUI = `pipelines/main/0_webui.yml` (same launch flow; only `julia-ci`
@@ -150,7 +167,7 @@ defaults in `common.sh`):
       WebUI = `pipelines/publish/0_webui.yml`.
     All are plain `buildkite-agent pipeline upload` (no cryptic plugin, no
     `cryptic_capable` agent targeting).
-12. Once green: revoke the legacy static AWS IAM user, delete the cryptic
+10. Once green: revoke the legacy static AWS IAM user, delete the cryptic
     agent keys from the agents, decommission `cryptic_capable` queues,
     revoke the old Apple Developer ID certificate, the Apple ID
     app-specific password, the old SSH deploy key, and the

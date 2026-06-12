@@ -21,7 +21,7 @@
 # ...) that IAM policies match against.
 
 # AWS account that holds the Julia CI roles (not a secret).
-# TODO: fill in after running ops/12_iam_roles.sh.
+# TODO: fill in after applying ops/terraform (output julia_ci_aws_account_id).
 JULIA_CI_AWS_ACCOUNT_ID="${JULIA_CI_AWS_ACCOUNT_ID:-000000000000}"
 JULIA_CI_AWS_REGION="${JULIA_CI_AWS_REGION:-us-east-1}"
 

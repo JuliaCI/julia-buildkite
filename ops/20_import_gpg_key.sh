@@ -18,7 +18,7 @@ GPG_KEY_FILE="${1:?usage: $0 /path/to/tarball_signing.gpg}"
 
 KEY_ARN="$(kms_key_arn "${KMS_ALIAS_TARBALL_SIGNING}")"
 if [[ -z "${KEY_ARN}" || "${KEY_ARN}" == "None" ]]; then
-    echo "ERROR: ${KMS_ALIAS_TARBALL_SIGNING} does not exist; run 11_kms_keys.sh" >&2
+    echo "ERROR: ${KMS_ALIAS_TARBALL_SIGNING} does not exist; apply ops/terraform first" >&2
     exit 1
 fi
 

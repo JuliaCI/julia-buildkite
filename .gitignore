@@ -16,3 +16,8 @@ cryptic-buildkite-plugin/
 
 /apple-platform-rs/
 __pycache__/
+
+# Terraform working directories (provider binaries); lock files are committed
+.terraform/
+*.tfstate
+*.tfstate.*

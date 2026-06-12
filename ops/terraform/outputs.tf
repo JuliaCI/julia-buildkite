@@ -1,0 +1,29 @@
+output "oidc_provider_arn" {
+  description = "IAM OIDC provider for agent.buildkite.com"
+  value       = aws_iam_openid_connect_provider.buildkite.arn
+}
+
+output "role_arns" {
+  description = "IAM roles assumed by Buildkite jobs"
+  value = {
+    stage       = aws_iam_role.stage.arn
+    publish     = aws_iam_role.publish.arn
+    docs-deploy = aws_iam_role.docs_deploy.arn
+    tokens      = aws_iam_role.tokens.arn
+  }
+}
+
+output "kms_key_arns" {
+  description = "KMS signing keys (the two EXTERNAL ones need material imported)"
+  value = {
+    macos_codesign  = aws_kms_key.macos_codesign.arn
+    notary_api      = aws_kms_external_key.notary_api.arn
+    tarball_signing = aws_kms_external_key.tarball_signing.arn
+    docs_deploy     = aws_kms_key.docs_deploy.arn
+  }
+}
+
+output "julia_ci_aws_account_id" {
+  description = "Fill this into JULIA_CI_AWS_ACCOUNT_ID in utilities/aws_oidc.sh"
+  value       = data.aws_caller_identity.current.account_id
+}

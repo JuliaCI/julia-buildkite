@@ -60,7 +60,7 @@ fi
 # Buildkite OIDC token for Azure credentials (no AZURE_CLIENT_SECRET).
 # The Azure.Identity credential chain used by the Trusted Signing dlib
 # picks up AZURE_FEDERATED_TOKEN_FILE automatically.
-# See ops/50_azure_trusted_signing_oidc.sh for the Azure-side setup.
+# See ops/terraform/azure for the Azure-side setup.
 if [[ -z "${AZURE_FEDERATED_TOKEN_FILE:-}" ]]; then
     AZURE_FEDERATED_TOKEN_FILE="$(mktemp)"
     buildkite-agent oidc request-token \
