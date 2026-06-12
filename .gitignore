@@ -25,3 +25,5 @@ __pycache__/
 # Scratch clone for preparing the rootfs-images PR
 /rootfs-images/
 /rootfs-images-PR.md
+/juliaup/
+/juliaup-PR.md
