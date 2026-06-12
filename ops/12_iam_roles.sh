@@ -4,14 +4,14 @@
 # Trust is split into an untrusted tier and a trusted tier so that pull
 # request builds can never reach signing keys or release locations:
 #
-#   julia-ci-stage    UNTRUSTED. Assumable from any ref of the build
+#   julia-oidc-stage    UNTRUSTED. Assumable from any ref of the build
 #                     pipelines (PRs included). May only write unsigned
 #                     artifacts, write-once, to a path gated by the build's
 #                     own commit sha (bin/staging/<commit>/...). No KMS, no
 #                     final-location write. Because its permissions are
 #                     harmless, the spoofable `ref` component of the sub
 #                     claim does not matter here.
-#   julia-ci-publish  TRUSTED. kms:Sign with the signing keys, read the
+#   julia-oidc-publish  TRUSTED. kms:Sign with the signing keys, read the
 #                     staging area, and write the final release locations.
 #                     Assumable ONLY from the `julia-publish` pipeline slug.
 #                     That pipeline must have pull-request builds DISABLED
@@ -19,9 +19,9 @@
 #                     ops/README.md). Since a PR can never produce a build
 #                     under that slug, the slug is the trust boundary -- not
 #                     the (PR-spoofable) branch name.
-#   julia-ci-docs-deploy  TRUSTED. kms:Sign with the docs SSH key; publish
+#   julia-oidc-docs-deploy  TRUSTED. kms:Sign with the docs SSH key; publish
 #                     pipeline only.
-#   julia-ci-tokens   Low-value telemetry bearer tokens from SSM; build
+#   julia-oidc-tokens   Low-value telemetry bearer tokens from SSM; build
 #                     pipelines.
 #
 # Defense in depth: trusted publish jobs additionally run
@@ -86,7 +86,7 @@ NOGPL_ARN="arn:aws:s3:::${S3_NOGPL_BUCKET}"
 NOGPL_PREFIX="${S3_NOGPL_PREFIX}"
 STAGE="${S3_STAGING_SUBPREFIX}"
 
-# ---- julia-ci-stage (UNTRUSTED) ----------------------------------------------
+# ---- julia-oidc-stage (UNTRUSTED) ----------------------------------------------
 # Write-once, to bin/staging/<own commit sha>/ only. The build_commit tag is
 # attested by Buildkite (not settable by the job), so a build can only ever
 # write under its own source commit.
@@ -126,7 +126,7 @@ EOF
 aws iam put-role-policy --role-name "${ROLE_STAGE}" \
     --policy-name stage --policy-document "file://${WORK}/stage-policy.json"
 
-# ---- julia-ci-publish (TRUSTED) ----------------------------------------------
+# ---- julia-oidc-publish (TRUSTED) ----------------------------------------------
 # Sign + promote staged artifacts to the final release locations. Assumable
 # only from the julia-publish pipeline slug (PR builds disabled there).
 
@@ -204,7 +204,7 @@ EOF
 aws iam put-role-policy --role-name "${ROLE_PUBLISH}" \
     --policy-name publish --policy-document "file://${WORK}/publish-policy.json"
 
-# ---- julia-ci-docs-deploy (TRUSTED) ------------------------------------------
+# ---- julia-oidc-docs-deploy (TRUSTED) ------------------------------------------
 
 trust_policy "${WORK}/docs-trust.json" "deploy_docs" "${PUBLISH_SUB_PATTERNS[@]}"
 ensure_role "${ROLE_DOCS_DEPLOY}" "${WORK}/docs-trust.json" \
@@ -229,7 +229,7 @@ EOF
 aws iam put-role-policy --role-name "${ROLE_DOCS_DEPLOY}" \
     --policy-name docs-deploy --policy-document "file://${WORK}/docs-policy.json"
 
-# ---- julia-ci-tokens ---------------------------------------------------------
+# ---- julia-oidc-tokens ---------------------------------------------------------
 # CI telemetry bearer tokens (codecov, coveralls, buildkite analytics) are
 # inherently symmetric secrets, so they live in SSM Parameter Store
 # (SecureString, see 23_put_tokens.sh) and are fetched at runtime by this

@@ -58,7 +58,7 @@ buildkite-agent oidc request-token \
     > "${_OIDC_TOKEN_FILE}"
 
 export AWS_WEB_IDENTITY_TOKEN_FILE="${_OIDC_TOKEN_FILE}"
-export AWS_ROLE_ARN="arn:aws:iam::${JULIA_CI_AWS_ACCOUNT_ID}:role/julia-ci-${_OIDC_ROLE_SUFFIX}"
+export AWS_ROLE_ARN="arn:aws:iam::${JULIA_CI_AWS_ACCOUNT_ID}:role/julia-oidc-${_OIDC_ROLE_SUFFIX}"
 export AWS_ROLE_SESSION_NAME="bk-$(tr -dc 'a-zA-Z0-9=,.@-' <<<"${BUILDKITE_STEP_KEY:-job}" | cut -c1-48)-${BUILDKITE_BUILD_NUMBER:-0}"
 export AWS_DEFAULT_REGION="${JULIA_CI_AWS_REGION}"
 export AWS_REGION="${JULIA_CI_AWS_REGION}"

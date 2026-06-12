@@ -7,7 +7,7 @@ remote KMS operation, authorized by the job's OIDC identity:
 
 | Concern                  | Before (cryptic)                          | After                                                        |
 |--------------------------|-------------------------------------------|--------------------------------------------------------------|
-| S3 uploads               | static `AWS_ACCESS_KEY_ID/SECRET` in yml   | OIDC → `julia-ci-stage` (untrusted) + `julia-ci-publish` (trusted) roles |
+| S3 uploads               | static `AWS_ACCESS_KEY_ID/SECRET` in yml   | OIDC → `julia-oidc-stage` (untrusted) + `julia-oidc-publish` (trusted) roles |
 | macOS codesigning        | keychain file w/ Developer ID key          | KMS RSA key + patched `rcodesign` (`utilities/macos/rcodesign`) |
 | macOS notarization       | Apple ID + app-specific password           | App Store Connect API key in KMS (ES256 JWTs via `kms:Sign`)  |
 | Linux/source GPG signing | raw GPG private key file                   | GPG key material imported into KMS, `utilities/kms_gpg_sign.py` |
@@ -37,11 +37,11 @@ only trust the publish pipeline's slug. There are three pipelines:
         │                                   │
         ▼                                   ▼
    stage_<triplet>  ──►  s3://<bucket>/<prefix>/staging/<commit>/julia-*.tar.gz
-   (UNTRUSTED: role julia-ci-stage, write-once to its own commit's staging path; no KMS)
+   (UNTRUSTED: role julia-oidc-stage, write-once to its own commit's staging path; no KMS)
    PRs stop here.                          │  julia-ci only: trigger
                                            ▼
                               julia-publish  ──►  publish_all (single step)
-   (TRUSTED: role julia-ci-publish, kms:Sign + read staging + write final)
+   (TRUSTED: role julia-oidc-publish, kms:Sign + read staging + write final)
    verify_trusted_commit.sh → sign (rcodesign / Trusted Signing / KMS-GPG) → promote → deploy docs
 ```
 
@@ -78,10 +78,10 @@ Buildkite agents mint OIDC tokens (`buildkite-agent oidc request-token`)
 whose `sub` claim is `organization:<org>:pipeline:<pipeline>:ref:<ref>:commit:<sha>:step:<step>`
 and which carry AWS session tags (`step_key`, `build_commit`, `pipeline_slug`, ...).
 
-* **Trusted roles** (`julia-ci-publish`, `julia-ci-docs-deploy`) are
+* **Trusted roles** (`julia-oidc-publish`, `julia-oidc-docs-deploy`) are
   assumable only from the `julia-publish` pipeline slug, and only from the
   expected step (`aws:RequestTag/step_key` in the trust policy).
-* **Staging** (`julia-ci-stage`) may be assumed from any ref of `julia-ci`
+* **Staging** (`julia-oidc-stage`) may be assumed from any ref of `julia-ci`
   or `julia-pr`, but can *only* write to
   `<prefix>/staging/${aws:PrincipalTag/build_commit}/*` — a path containing
   the source git sha, tagged by the (trusted) agent itself. Build / PR jobs

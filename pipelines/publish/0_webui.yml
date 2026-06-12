@@ -9,7 +9,7 @@
 #   * Be triggered only by trusted release builds (a `trigger` step at the end
 #     of the build pipeline) and/or the canonical-repo push webhook.
 # Because a pull request can never produce a build under this pipeline slug,
-# the slug itself is what the julia-ci-publish / julia-ci-docs-deploy IAM
+# the slug itself is what the julia-oidc-publish / julia-oidc-docs-deploy IAM
 # roles trust -- not the (PR-spoofable) branch name. The publish jobs also
 # run verify_trusted_commit.sh as a backstop.
 #

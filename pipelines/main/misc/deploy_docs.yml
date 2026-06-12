@@ -3,7 +3,7 @@ steps:
     steps:
       - label: "upload docs"
         # The step key is part of the job's OIDC identity: the
-        # julia-ci-docs-deploy IAM role only trusts this step, and only from
+        # julia-oidc-docs-deploy IAM role only trusts this step, and only from
         # the trusted julia-publish pipeline (this file is launched by the
         # publish pipeline, not the build pipeline). There is no `depends_on`
         # doctest here: the html docs tarball is read from the commit-sha

@@ -42,18 +42,18 @@ export SSM_TOKEN_PREFIX="/julia-ci/tokens"
 # Trust is split into an UNTRUSTED tier (anything that runs on PR builds)
 # and a TRUSTED tier (only the dedicated publish pipeline, which never
 # builds pull requests):
-#   julia-ci-stage    untrusted: write unsigned artifacts to a commit-sha
+#   julia-oidc-stage    untrusted: write unsigned artifacts to a commit-sha
 #                     gated staging path only. No KMS, no final-location
 #                     write. Runs on every build, PRs included.
-#   julia-ci-publish  trusted: kms:Sign + read staging + write final
+#   julia-oidc-publish  trusted: kms:Sign + read staging + write final
 #                     location. Assumable ONLY from the julia-publish
 #                     pipeline slug, which is not connected to PR builds.
-#   julia-ci-docs-deploy trusted docs SSH signing (publish pipeline only).
-#   julia-ci-tokens   low-value telemetry tokens (build pipelines).
-export ROLE_STAGE="julia-ci-stage"
-export ROLE_PUBLISH="julia-ci-publish"
-export ROLE_DOCS_DEPLOY="julia-ci-docs-deploy"
-export ROLE_TOKENS="julia-ci-tokens"
+#   julia-oidc-docs-deploy trusted docs SSH signing (publish pipeline only).
+#   julia-oidc-tokens   low-value telemetry tokens (build pipelines).
+export ROLE_STAGE="julia-oidc-stage"
+export ROLE_PUBLISH="julia-oidc-publish"
+export ROLE_DOCS_DEPLOY="julia-oidc-docs-deploy"
+export ROLE_TOKENS="julia-oidc-tokens"
 
 # Sub-path (under each bucket prefix) that unsigned, commit-sha-gated
 # artifacts are staged to. The publish pipeline reads from here; PR

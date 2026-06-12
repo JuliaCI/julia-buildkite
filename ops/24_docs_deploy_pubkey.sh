@@ -6,7 +6,7 @@
 # The private half never leaves KMS: the docs deploy job's ssh uses the
 # aws-kms-pkcs11 provider (https://github.com/JackOfMostTrades/aws-kms-pkcs11)
 # so each SSH authentication is a kms:Sign call gated by the
-# julia-ci-docs-deploy role.
+# julia-oidc-docs-deploy role.
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 source "${SCRIPT_DIR}/common.sh"
 
