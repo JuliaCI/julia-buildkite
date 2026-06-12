@@ -15,6 +15,10 @@ steps:
       - JuliaCI/external-buildkite#v1:
           version: "./.buildkite-external-version"
           repo_url: "https://github.com/JuliaCI/julia-buildkite"
+      - JuliaCI/julia#v1:
+          # The sandbox plugin itself runs on Julia (Sandbox.jl)
+          persist_depot_dirs: packages,artifacts,compiled
+          version: '1.10' # GREP_ME: Keep this updated to LTS. Do not set it to '1' or 'stable' or 'latest'.
       - staticfloat/sandbox#v2:
           # The bare agents do not carry the AWS CLI; like the historical
           # upload jobs, run inside the `aws_uploader` rootfs, which exists
