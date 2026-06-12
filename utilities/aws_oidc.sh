@@ -72,10 +72,14 @@ esac
 # The *_id tags carry the Buildkite UUIDs (not the renameable slugs); the
 # IAM trust policies pin organization_id / pipeline_id / cluster_id so a
 # recreated or renamed pipeline with a matching slug cannot assume a role.
+# Buildkite caps the OIDC token lifetime at 7200s (2h). The AWS SDK/CLI
+# re-assumes the role from the token file whenever the (1h) STS session
+# expires, so jobs whose AWS usage spans more than ~2h must re-source
+# this script to mint a fresh token (publish.sh does so per triplet).
 _OIDC_TOKEN_FILE="$(mktemp)"
 buildkite-agent oidc request-token \
     --audience "sts.amazonaws.com" \
-    --lifetime 43200 \
+    --lifetime 7200 \
     --aws-session-tag "organization_slug,organization_id,pipeline_slug,pipeline_id,cluster_id,build_branch,build_number,build_commit,step_key,job_id,agent_id" \
     > "${_OIDC_TOKEN_FILE}"
 

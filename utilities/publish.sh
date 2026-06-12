@@ -37,9 +37,9 @@ fi
 echo "--- Verify this is a trusted release commit"
 bash .buildkite/utilities/verify_trusted_commit.sh
 
-# Assume the trusted publish role once for the whole step.
-# shellcheck source=SCRIPTDIR/aws_oidc.sh
-source .buildkite/utilities/aws_oidc.sh publish
+# The trust guard above runs once; the publish role is (re-)assumed inside
+# the loop below, since Buildkite OIDC tokens live at most 2h and this
+# step can run longer across all triplets.
 export PUBLISH_PREAUTHED=1
 
 # Collect all triplets from the arches files.
@@ -60,6 +60,9 @@ echo "--- Publishing ${#TRIPLETS[@]} triplets: ${TRIPLETS[*]}"
 FAILED=()
 for triplet in "${TRIPLETS[@]}"; do
     echo "+++ Publish ${triplet}"
+    # Fresh OIDC token per triplet (2h max lifetime; see aws_oidc.sh)
+    # shellcheck source=SCRIPTDIR/aws_oidc.sh
+    source .buildkite/utilities/aws_oidc.sh publish
     if ! TRIPLET="${triplet}" bash .buildkite/utilities/upload_julia.sh publish; then
         echo "ERROR: publishing ${triplet} failed" >&2
         FAILED+=( "${triplet}" )

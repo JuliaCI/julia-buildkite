@@ -33,6 +33,7 @@ put() { # put <bucket> <key> -> 0 on success
 }
 
 echo "--- Assume the stage role"
+echo "  agent: $(buildkite-agent --version 2>/dev/null || echo unknown)"
 # shellcheck source=SCRIPTDIR/../aws_oidc.sh
 source .buildkite/utilities/aws_oidc.sh stage
 export AWS_EC2_METADATA_DISABLED=true
@@ -41,7 +42,11 @@ echo "  caller identity: ${IDENTITY}"
 if [[ "${IDENTITY}" == *"${MY_ROLE}"* ]]; then
     ok "assumed ${MY_ROLE}"
 else
-    bad "expected to assume ${MY_ROLE}, got '${IDENTITY}' (everything below will likely fail too)"
+    # Without credentials every later check is vacuous; abort hard rather
+    # than report misleading PASSes on the denial checks.
+    bad "expected to assume ${MY_ROLE}, got '${IDENTITY}'"
+    echo "+++ aborting: no credentials, the remaining checks would be meaningless"
+    exit 1
 fi
 
 echo "--- Write-once upload to own staging path"
