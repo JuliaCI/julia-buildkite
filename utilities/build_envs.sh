@@ -244,9 +244,13 @@ if [[ "${BUILDKITE_BRANCH}" == master ]] || [[ "${BUILDKITE_BRANCH}" == release-
     fi
 fi
 
-# If we're a pull request build, upload to a special `-prXXXX` location
+# If we're a pull request build, upload to a path containing the source git
+# sha. IAM only allows PR builds to write (once) below their own commit's
+# path (bin/pr/${aws:PrincipalTag/build_commit}/), so a PR can never clobber
+# release artifacts or another PR's binaries. Consumers (e.g. juliaup)
+# resolve PR number -> head sha via the GitHub API and fetch from here.
 if [[ "${BUILDKITE_PULL_REQUEST}" != "false" ]]; then
-    UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/${ARCH?}/julia-pr${BUILDKITE_PULL_REQUEST}-${OS?}-${ARCH?}" )
+    UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/pr/${LONG_COMMIT?}/julia-${TAR_VERSION?}-${OS?}-${ARCH?}" )
 fi
 
 # This is the "main" filename that is used.  We technically don't need this for uploading,

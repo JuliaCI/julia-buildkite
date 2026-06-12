@@ -48,11 +48,26 @@ while [ "$#" -gt 1 ]; do
 done
 DLIB_PATH="$(cygpath -w "${DLIB_PATH}")"
 
+# AZURE_TENANT_ID / AZURE_CLIENT_ID identify the Trusted Signing app
+# registration; they are not secrets and are set in the pipeline yml.
 if [[ -z "${AZURE_TENANT_ID:-}" ]] ||
-   [[ -z "${AZURE_CLIENT_ID:-}" ]] ||
-   [[ -z "${AZURE_CLIENT_SECRET:-}" ]]; then
-    echo "ERROR: Missing AZURE_* secret variables!" >&2
+   [[ -z "${AZURE_CLIENT_ID:-}" ]]; then
+    echo "ERROR: Missing AZURE_TENANT_ID / AZURE_CLIENT_ID variables!" >&2
     exit 1
+fi
+
+# Authenticate to Azure via workload identity federation: exchange a
+# Buildkite OIDC token for Azure credentials (no AZURE_CLIENT_SECRET).
+# The Azure.Identity credential chain used by the Trusted Signing dlib
+# picks up AZURE_FEDERATED_TOKEN_FILE automatically.
+# See ops/50_azure_trusted_signing_oidc.sh for the Azure-side setup.
+if [[ -z "${AZURE_FEDERATED_TOKEN_FILE:-}" ]]; then
+    AZURE_FEDERATED_TOKEN_FILE="$(mktemp)"
+    buildkite-agent oidc request-token \
+        --audience "api://AzureADTokenExchange" \
+        --lifetime 3600 \
+        > "${AZURE_FEDERATED_TOKEN_FILE}"
+    export AZURE_FEDERATED_TOKEN_FILE
 fi
 
 if [[ ! -f "${DLIB_PATH}" ]]; then

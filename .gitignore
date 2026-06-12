@@ -14,3 +14,5 @@ cryptic-buildkite-plugin/
 # Ignore IDE files
 .vscode/
 
+/apple-platform-rs/
+__pycache__/

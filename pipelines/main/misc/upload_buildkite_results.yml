@@ -13,12 +13,15 @@ steps:
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
-          - JuliaCI/cryptic#v2:
-              variables:
-                - BUILDKITE_ANALYTICS_TOKEN="U2FsdGVkX18BUSpNWNimRUOAh2ku0ugS7x3RRy1CfJBCxTLWArJpa1PXKoILfI7q"
         timeout_in_minutes: ${TIMEOUT?}
         soft_fail: true
         commands: |
+          echo "--- Obtain analytics token"
+          # Fetched from SSM Parameter Store with this job's OIDC identity;
+          # no static secrets exist in CI config.
+          source .buildkite/utilities/aws_oidc.sh tokens
+          export BUILDKITE_ANALYTICS_TOKEN="$$(aws ssm get-parameter --with-decryption --name /julia-ci/tokens/buildkite_analytics_token --query Parameter.Value --output text)"
+
           echo "--- Downloading test results from test step"
           if ! buildkite-agent artifact download --step "test_${TRIPLET?}${USE_RR-}${i686_LABEL-}" "results.tar.gz" .; then
             echo "No test results found from test_${TRIPLET?}${USE_RR-}${i686_LABEL-}"
@@ -70,8 +73,6 @@ steps:
         agents:
           queue: "test"
         env:
-          # Receive cryptic token from parent job
-          BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET: ${BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET?}
           TRIPLET: "${TRIPLET?}"
 
 

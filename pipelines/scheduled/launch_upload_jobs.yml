@@ -9,9 +9,6 @@ steps:
               version: "./.buildkite-external-version"
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
         commands: |
-          # Explicitly pass along the cryptic token to child pipelines
-          export BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET
-
           # Launch `upload_*` jobs to store tarballs into S3 once tests are done
           bash .buildkite/utilities/arches_pipeline_upload.sh \
               .buildkite/pipelines/scheduled/platforms/upload_linux.no_gpl.arches \
@@ -22,14 +19,7 @@ steps:
           bash .buildkite/utilities/arches_pipeline_upload.sh \
               .buildkite/pipelines/scheduled/platforms/upload_windows.no_gpl.arches \
               .buildkite/pipelines/scheduled/platforms/upload_windows.no_gpl.yml
-
-          # Don't share this with buildkite's env display
-          unset BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET
         agents:
-          cryptic_capable: "true"
-          queue: "launch"
+          queue: "build"
           os: "linux"
           arch: "x86_64" # prevent from running on PiBots
-        env:
-          # Receive cryptic token from parent job
-          BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET: ${BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET?}

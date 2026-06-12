@@ -30,12 +30,6 @@ steps:
               workspaces:
                 # Include `/cache/repos` so that our `git` version introspection works.
                 - "/cache/repos:/cache/repos"
-          - JuliaCI/cryptic#v2:
-              variables:
-                - AWS_ACCESS_KEY_ID="U2FsdGVkX184v87+NPs3j9r/JoIuOrYt4/Z4wnRdklnY17NP8C8AMZvWYLJfT9t1"
-                - AWS_SECRET_ACCESS_KEY="U2FsdGVkX1+qptnxR/Mo5jZdH8OQfflRPiQBEhjgZIiTpn8KNCJYh/Cb8xxaUWazlcM9ceOlo0InDubL+J8zdg=="
-              files:
-                - .buildkite/secrets/tarball_signing.gpg
         timeout_in_minutes: ${TIMEOUT?}
         soft_fail: ${ALLOW_FAIL?}
         commands: "bash .buildkite/utilities/upload_julia.sh"
@@ -46,6 +40,4 @@ steps:
           os: "linux"
           arch: "x86_64"
         env:
-          # Receive cryptic token from parent job
-          BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET: ${BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET?}
           TRIPLET: "${TRIPLET?}"

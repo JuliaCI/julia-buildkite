@@ -2,10 +2,18 @@
 
 set -euo pipefail
 
+THIS_DIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+
 DMG_PATH="dmg"
 mkdir -p "${DMG_PATH}"
 APP_PATH="${DMG_PATH}/Julia-${MAJMIN?}.app"
 DMG_NAME="${UPLOAD_FILENAME?}.dmg"
+
+# The Developer ID private key lives in AWS KMS; signing + notarization
+# happen via rcodesign (see utilities/macos/rcodesign/). AWS credentials
+# must already be available (source utilities/aws_oidc.sh upload).
+MACOS_CODESIGN_KMS_KEY="${MACOS_CODESIGN_KMS_KEY:?}"
+NOTARY_API_KEY_FILE="${THIS_DIR}/notary_api_key.json"
 
 # Start by compiling an applescript into a `.app`, which creates the skeleton, which we will fill out
 osacompile -o "${APP_PATH}" "contrib/mac/app/startup.applescript"
@@ -31,9 +39,8 @@ ln -s /Applications "${DMG_PATH}/Applications"
 cp -aR "${JULIA_INSTALL_DIR?}" "${APP_PATH}/Contents/Resources/julia"
 
 # Sign the `.app` launcher
-.buildkite/utilities/macos/codesign.sh \
-    --keychain "${KEYCHAIN_PATH}" \
-    --identity "${MACOS_CODESIGN_IDENTITY}" \
+"${THIS_DIR}/codesign.sh" \
+    --kms-key "${MACOS_CODESIGN_KMS_KEY}" \
     "${APP_PATH}/Contents/MacOS/applet"
 
 # Create `.dmg`.  We create it with 1TB size, but since that is
@@ -51,25 +58,24 @@ function create_dmg() {
         -srcfolder "${DMG_PATH}"
 
     # Sign the `.dmg` itself
-    .buildkite/utilities/macos/codesign.sh \
-        --keychain "${KEYCHAIN_PATH}" \
-        --identity "${MACOS_CODESIGN_IDENTITY}" \
+    "${THIS_DIR}/codesign.sh" \
+        --kms-key "${MACOS_CODESIGN_KMS_KEY}" \
         "${DMG_NAME}"
 }
 create_dmg
 
-# Upload the `.dmg` for notarization
+# Notarize the `.dmg`. The App Store Connect API key also lives in KMS;
+# notary_api_key.json contains no secret material (see ops/21_import_notary_key.sh),
+# so it is committed in this repository in plaintext.
+RCODESIGN="$("${THIS_DIR}/get_rcodesign.sh")"
 
-xcrun notarytool \
-    submit \
-    --apple-id "${NOTARIZATION_APPLE_ID}" \
-    --password "${NOTARIZATION_APPLE_KEY}" \
-    --team-id "A427R7F42H" \
+"${RCODESIGN}" notary-submit \
+    --api-key-file "${NOTARY_API_KEY_FILE}" \
     --wait \
     "${DMG_NAME}"
 
-# Staple the notarization to the app
-xcrun stapler staple "${APP_PATH}"
+# Staple the notarization ticket to the app
+"${RCODESIGN}" staple "${APP_PATH}"
 
 # Re-build the .dmg from the app now that it's notarized
 create_dmg
