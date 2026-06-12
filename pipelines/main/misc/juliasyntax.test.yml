@@ -175,7 +175,7 @@ steps:
               persist_depot_dirs: packages,artifacts,compiled
               version: '1.10' # current LTS. It doesn't really matter what version we pick here.
               # arch: '{{matrix.julia_arch}}' # no need to specify the julia_arch for this "outside" Julia.
-          - staticfloat/sandbox#v2:
+          - JuliaCI/sandbox#v2:
               rootfs_url: https://github.com/JuliaCI/rootfs-images/releases/download/v8.0/agent_linux.i686.tar.gz
               rootfs_treehash: "cba648ddb9ac0d292f9c8809652523806674a3d2"
               uid: 1000

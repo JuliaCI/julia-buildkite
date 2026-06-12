@@ -11,6 +11,7 @@
 #   23_put_tokens.sh codecov_token             # prompts for the value
 #   23_put_tokens.sh coveralls_token
 #   23_put_tokens.sh buildkite_analytics_token
+set -euo pipefail
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 source "${SCRIPT_DIR}/common.sh"
 

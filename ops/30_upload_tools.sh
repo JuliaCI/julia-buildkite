@@ -10,6 +10,7 @@
 #
 # After uploading, update RCODESIGN_VERSION / RCODESIGN_SHA256_<triplet> in
 # utilities/macos/get_rcodesign.sh with the printed values.
+set -euo pipefail
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 source "${SCRIPT_DIR}/common.sh"
 

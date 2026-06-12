@@ -8,6 +8,7 @@
 # Apple generates ASC API keys, so the existing key must be imported (we
 # cannot register our own public key with Apple). Run from a trusted
 # machine; securely delete the .p8 afterwards.
+set -euo pipefail
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 source "${SCRIPT_DIR}/common.sh"
 

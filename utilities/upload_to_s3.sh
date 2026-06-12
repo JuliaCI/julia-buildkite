@@ -7,6 +7,8 @@
 # that disable ACLs and grant public read via bucket policy instead (the
 # ephemeral staging buckets): there an ACL'd PUT would be rejected, and
 # the stage roles deliberately lack s3:PutObjectAcl.
+# (Sourced file: deliberately no `set` of shell options here -- they would
+# leak into the calling script; strict mode belongs to the entrypoints.)
 
 # Tell the AWS CLI not to contact the metadata service; credentials come
 # from OIDC web identity (AWS_WEB_IDENTITY_TOKEN_FILE / AWS_ROLE_ARN).

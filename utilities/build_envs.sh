@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# (Sourced file: deliberately no `set` of shell options here -- they would
+# leak into the calling script; strict mode belongs to the entrypoints.)
 
 # First, extract information from our triplet
 # shellcheck source=SCRIPTDIR/extract_triplet.sh

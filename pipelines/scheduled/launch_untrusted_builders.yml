@@ -1,10 +1,10 @@
-# This file launches all the build jobs that _don't_ require secrets access.
-# These jobs can pass their output off to jobs that do require secrets access,
-# but those privileged steps require signing before they can be run.
+# This file launches all the UNTRUSTED build + test jobs; no job in the
+# build pipelines holds secrets or signing rights (the trusted work happens
+# in the separate julia-publish Buildkite pipeline).
 #
 # Yes, this is creating another layer of indirection; the flow now looks like:
 #
-#   [webui] -> launch_unsigned_builders.yml -> misc/llvmpasses.yml
+#   [webui] -> launch_untrusted_builders.yml -> misc/llvmpasses.yml
 #
 # when we could theoretically just have the `webui` launch `misc/llvmpasses.yml`,
 # however this raises the bar for contributors to add new (unsigned) steps to

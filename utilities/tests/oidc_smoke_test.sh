@@ -8,6 +8,8 @@
 # this build's own staging path.
 # Negative checks (must FAIL): overwrite; other pipeline's bucket; foreign
 # commit path; bearer tokens on julia-pr; the trusted publish role.
+# No -e: this is a check harness -- failures are counted and reported, not
+# fatal; -u and pipefail still catch genuine script bugs.
 set -uo pipefail
 
 PASS=0

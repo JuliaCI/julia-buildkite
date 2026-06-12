@@ -4,7 +4,7 @@
 # itself stages the unsigned tarball into the commit-sha-gated staging
 # bucket) and every test job has passed before publish runs.
 #
-# This file is uploaded (by launch_signed_jobs.yml) in both julia-ci and
+# This file is uploaded (by launch_coverage_and_publish_trigger.yml) in both julia-ci and
 # julia-pr build flows, but the `if:` restricts the trigger to julia-ci --
 # the pipeline that only builds trusted refs. julia-pr (pull requests)
 # never triggers publish. This is layered with: julia-publish not building

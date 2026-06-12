@@ -25,6 +25,9 @@
 # SDK and the AWS CLI use to assume the role automatically (and refresh
 # as needed). The token carries AWS session tags (step_key, build_commit,
 # ...) that IAM policies match against.
+# (Sourced file: deliberately no `set -euo pipefail` here -- shell options
+# set in a sourced file leak into the calling script; strict mode belongs
+# to the entrypoints.)
 
 # AWS account that holds the Julia CI roles (not a secret).
 JULIA_CI_AWS_ACCOUNT_ID="${JULIA_CI_AWS_ACCOUNT_ID:-873569884612}"

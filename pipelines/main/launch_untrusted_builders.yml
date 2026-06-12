@@ -1,10 +1,11 @@
-# This file launches all the build + test jobs. (The historical name is
-# from the cryptic era; no job here -- or anywhere in the build pipelines --
-# holds secrets anymore.)
+# This file launches all the UNTRUSTED build + test jobs -- which in the
+# post-cryptic setup is every job of the julia-pr / julia-ci pipelines:
+# none of them hold secrets or signing rights (the trusted work happens in
+# the separate julia-publish Buildkite pipeline).
 #
 # Yes, this is creating another layer of indirection; the flow now looks like:
 #
-#   [webui] -> launch_unsigned_builders.yml -> misc/llvmpasses.yml
+#   [webui] -> launch_untrusted_builders.yml -> misc/llvmpasses.yml
 #
 # when we could theoretically just have the `webui` launch `misc/llvmpasses.yml`,
 # however this raises the bar for contributors to add new steps to our CI

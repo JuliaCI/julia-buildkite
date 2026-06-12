@@ -1,10 +1,12 @@
-# This file represents what is put into the webUI.
-# It is purely for keeping track of the changes we make to the webUI configuration; modifying this file has no effect.
+# This file records the steps configured in the Buildkite webUI; modifying
+# this file has no effect -- paste it into the webUI when it changes.
 #
 # There is no secrets management here anymore: jobs that need credentials
 # obtain them at runtime via Buildkite OIDC (see utilities/aws_oidc.sh),
-# and AWS IAM decides what each job identity may do. Consequently there is
-# no distinction between "signed" and "unsigned" pipelines.
+# and AWS IAM decides what each job identity may do. The signed/unsigned
+# split between pipeline FILES is therefore gone; the trust split lives at
+# the level of Buildkite PIPELINES instead (untrusted julia-pr / julia-ci
+# vs the trusted julia-publish -- see ops/README.md).
 steps:
   - group: "Launch scheduled jobs"
     steps:
@@ -17,5 +19,5 @@ steps:
               version: "./.buildkite-external-version"
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
         commands: |
-          buildkite-agent pipeline upload .buildkite/pipelines/scheduled/launch_unsigned_jobs.yml
-          buildkite-agent pipeline upload .buildkite/pipelines/scheduled/launch_signed_jobs.yml
+          buildkite-agent pipeline upload .buildkite/pipelines/scheduled/launch_untrusted_builders.yml
+          buildkite-agent pipeline upload .buildkite/pipelines/scheduled/launch_coverage.yml

@@ -9,6 +9,7 @@
 #
 # Requires the patched rcodesign (utilities/macos/rcodesign/build_rcodesign.sh)
 # and AWS credentials with kms:GetPublicKey + kms:Sign on the key.
+set -euo pipefail
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 source "${SCRIPT_DIR}/common.sh"
 
