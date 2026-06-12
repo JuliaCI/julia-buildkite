@@ -59,10 +59,11 @@ variable "staging_subprefix" {
   default     = "staging"
 }
 
-# Key spec of the existing GPG release signing key (RSA_4096 for the Julia
-# release key; check with `gpg --list-packets` if unsure).
+# RSA matching the strength of the previous (pre-KMS) release signing key.
+# Must be an RSA spec: the OpenPGP signature assembly in
+# utilities/kms_gpg_sign.py only supports RSA.
 variable "tarball_key_spec" {
-  description = "KMS key spec matching the imported GPG release signing key"
+  description = "KMS key spec for the GPG release tarball signing key"
   type        = string
   default     = "RSA_4096"
 }

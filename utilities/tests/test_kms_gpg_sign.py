@@ -1,23 +1,23 @@
 #!/usr/bin/env python3
 # This file is a part of Julia. License is MIT: https://julialang.org/license
 """Interop test for kms_gpg_sign.py against an independent OpenPGP
-implementation (rsop, https://crates.io/crates/rsop, backed by rPGP).
+implementation (gpg, or rsop as fallback).
 
 Generates a fresh RSA key with openssl, constructs a minimal OpenPGP
 certificate (public key + uid + self-certification) and a detached
 signature using the packet construction code under test, then verifies
-the result with rsop.
+the result with gpg (which also validates the self-certification on
+import) or rsop (https://crates.io/crates/rsop, backed by rPGP).
 
 The local openssl signer exercises the exact code path used in
 production with AWS KMS: both consume a SHA-256 digest and produce a
 raw RSASSA-PKCS1-v1_5 signature.
 
-Requires: openssl, rsop on PATH.
+Requires: openssl, and gpg or rsop on PATH.
 """
 
-import hashlib
 import os
-import struct
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -50,40 +50,47 @@ def openssl_rsa_components(key_path):
 
 
 def build_test_certificate(key_path, uid, timestamp):
-    """Build a minimal transferable public key (certificate) for the key."""
+    """Build a certificate for the key via the production helper
+    (the same code path ops/20_export_gpg_pubkey.py uses)."""
     n, e = openssl_rsa_components(key_path)
-
-    key_body = (
-        bytes([4])
-        + struct.pack(">I", timestamp)
-        + bytes([K.ALGO_RSA])
-        + K.encode_mpi(n)
-        + K.encode_mpi(e)
-    )
-    pubkey = K.PublicKeyInfo(key_body)
-
-    uid_body = uid.encode()
-
-    # Self-certification (positive certification, sig type 0x13) over
-    # key + uid, per RFC 4880 section 5.2.4.
-    hasher = hashlib.sha256()
-    hasher.update(b"\x99" + struct.pack(">H", len(key_body)) + key_body)
-    hasher.update(b"\xb4" + struct.pack(">I", len(uid_body)) + uid_body)
-
-    signer = K.LocalOpensslSigner(key_path)
-    # Key flags: certify + sign
-    key_flags = K.encode_subpacket(27, b"\x03")
-    cert_sig = K.build_signature_packet(
-        signer, pubkey, hasher, sig_type=0x13, timestamp=timestamp,
-        extra_hashed_subpkts=key_flags,
-    )
-
-    cert = (
-        K.encode_packet(K.PKT_PUBLIC_KEY, key_body)
-        + K.encode_packet(13, uid_body)
-        + cert_sig
+    key_body = K.build_rsa_key_body(n, e, timestamp)
+    pubkey, cert = K.build_certificate(
+        K.LocalOpensslSigner(key_path), key_body, uid, timestamp
     )
     return pubkey, K.armor(cert, "PUBLIC KEY BLOCK")
+
+
+def make_verifier(tmp, cert_path):
+    """Return verify(sig_path, data_path) -> bool using gpg or rsop."""
+    if shutil.which("gpg"):
+        homedir = os.path.join(tmp, "gnupg")
+        os.makedirs(homedir, mode=0o700)
+        base = ["gpg", "--homedir", homedir, "--batch"]
+        # Import validates the self-certification; a bad one is fatal here.
+        subprocess.run(base + ["--import", cert_path],
+                       check=True, capture_output=True)
+        out = subprocess.run(base + ["--check-sigs"],
+                             check=True, capture_output=True, text=True)
+        assert "sig!" in out.stdout, f"self-certification not valid:\n{out.stdout}"
+
+        def verify(sig_path, data_path):
+            return subprocess.run(
+                base + ["--verify", sig_path, data_path],
+                capture_output=True,
+            ).returncode == 0
+        return "gpg", verify
+
+    if shutil.which("rsop"):
+        def verify(sig_path, data_path):
+            with open(data_path, "rb") as f:
+                return subprocess.run(
+                    ["rsop", "verify", sig_path, cert_path],
+                    stdin=f, capture_output=True,
+                ).returncode == 0
+        return "rsop", verify
+
+    print("SKIP: neither gpg nor rsop on PATH")
+    sys.exit(0)
 
 
 def main():
@@ -114,19 +121,12 @@ def main():
         K.LocalOpensslSigner(key_path), pubkey, data_path
     )
 
-    # Independent verification with rsop (rPGP)
-    with open(data_path, "rb") as f:
-        result = subprocess.run(
-            ["rsop", "verify", sig_path, cert_path],
-            stdin=f, capture_output=True, text=True,
-        )
-    if result.returncode != 0:
-        print("rsop verify FAILED")
-        print(result.stdout)
-        print(result.stderr)
+    # Independent verification
+    name, verify = make_verifier(tmp, cert_path)
+    if not verify(sig_path, data_path):
+        print(f"{name} verify FAILED")
         sys.exit(1)
-
-    print("rsop verify OK:", result.stdout.strip())
+    print(f"{name} verify OK")
 
     # Negative test: corrupted data must not verify
     bad_path = os.path.join(tmp, "bad.tar.gz")
@@ -135,12 +135,7 @@ def main():
     bad[0] ^= 0xFF
     with open(bad_path, "wb") as f:
         f.write(bad)
-    with open(bad_path, "rb") as f:
-        result = subprocess.run(
-            ["rsop", "verify", sig_path, cert_path],
-            stdin=f, capture_output=True, text=True,
-        )
-    assert result.returncode != 0, "corrupted data verified?!"
+    assert not verify(sig_path, bad_path), "corrupted data verified?!"
     print("negative test OK (corrupted data rejected)")
 
     print("PASS")

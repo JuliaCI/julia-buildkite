@@ -4,10 +4,11 @@
 
 This replaces `gpg --detach-sig` for tarball signing. The OpenPGP packet
 structure is assembled locally, but the raw RSA signature is produced by
-AWS KMS (`kms:Sign` with RSASSA_PKCS1_V1_5_SHA_256), so the private key
-never leaves KMS. The existing GPG private key material is imported into
-KMS (see ops/ in this repository), which means signatures continue to
-verify against the long-published Julia release signing public key.
+AWS KMS (`kms:Sign` with RSASSA_PKCS1_V1_5_SHA_256). The signing key is
+generated inside KMS and never leaves it; the matching OpenPGP public
+key (including its self-certification, built with the certificate
+helpers below) is exported once with ops/20_export_gpg_pubkey.py and
+published as the Julia release signing key.
 
 The public half of the signing key is read from a normal GPG public key
 file (armored or binary) and is only used to derive the issuer
@@ -18,8 +19,8 @@ AWS credentials are resolved by the AWS CLI; in CI they come from
 Buildkite OIDC web identity federation (see utilities/aws_oidc.sh).
 
 Usage:
-    kms_gpg_sign.py --public-key juliareleases.asc \
-        --kms-key-id alias/julia-release-tarball-signing \
+    kms_gpg_sign.py --public-key tarball_signing.pub.asc \
+        --kms-key-id alias/julia-tarball-signing \
         FILE [FILE...]
 
 Produces FILE.asc for each FILE.
@@ -44,11 +45,14 @@ import time
 # OpenPGP constants (RFC 4880)
 PKT_SIGNATURE = 2
 PKT_PUBLIC_KEY = 6
+PKT_USER_ID = 13
 SIG_BINARY = 0x00
+SIG_POSITIVE_CERT = 0x13
 ALGO_RSA = 1  # also accept 3 (RSA sign-only); 2 (encrypt-only) is rejected
 HASH_SHA256 = 8
 SUBPKT_CREATION_TIME = 2
 SUBPKT_ISSUER_KEY_ID = 16
+SUBPKT_KEY_FLAGS = 27
 SUBPKT_ISSUER_FINGERPRINT = 33
 
 
@@ -309,6 +313,49 @@ def build_signature_packet(signer, pubkey, data_hasher, sig_type=SIG_BINARY,
         + encode_mpi(int.from_bytes(raw_signature, "big"))
     )
     return encode_packet(PKT_SIGNATURE, body)
+
+
+def build_rsa_key_body(n, e, timestamp):
+    """Build a v4 public key packet body for an RSA key.
+
+    The fingerprint (and thus key ID) covers the creation timestamp, so
+    the same (n, e, timestamp) always yields the same key identity.
+    """
+    return (
+        bytes([4])
+        + struct.pack(">I", timestamp)
+        + bytes([ALGO_RSA])
+        + encode_mpi(n)
+        + encode_mpi(e)
+    )
+
+
+def build_certificate(signer, key_body, uid, timestamp):
+    """Build a minimal transferable public key (certificate): public key
+    packet + user ID packet + positive self-certification (RFC 4880
+    section 5.2.4), signed via signer. Returns (PublicKeyInfo, binary
+    certificate); wrap with armor(..., "PUBLIC KEY BLOCK") to publish.
+    """
+    pubkey = PublicKeyInfo(key_body)
+    uid_body = uid.encode()
+
+    hasher = hashlib.sha256()
+    hasher.update(b"\x99" + struct.pack(">H", len(key_body)) + key_body)
+    hasher.update(b"\xb4" + struct.pack(">I", len(uid_body)) + uid_body)
+
+    # Key flags: certify + sign
+    key_flags = encode_subpacket(SUBPKT_KEY_FLAGS, b"\x03")
+    cert_sig = build_signature_packet(
+        signer, pubkey, hasher, sig_type=SIG_POSITIVE_CERT,
+        timestamp=timestamp, extra_hashed_subpkts=key_flags,
+    )
+
+    cert = (
+        encode_packet(PKT_PUBLIC_KEY, key_body)
+        + encode_packet(PKT_USER_ID, uid_body)
+        + cert_sig
+    )
+    return pubkey, cert
 
 
 def sign_file_detached(signer, pubkey, path, output_path=None):

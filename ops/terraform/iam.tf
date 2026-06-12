@@ -215,7 +215,7 @@ data "aws_iam_policy_document" "publish" {
     resources = [
       aws_kms_key.macos_codesign.arn,
       aws_kms_external_key.notary_api.arn,
-      aws_kms_external_key.tarball_signing.arn,
+      aws_kms_key.tarball_signing.arn,
     ]
 
     condition {

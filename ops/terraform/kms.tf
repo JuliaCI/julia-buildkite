@@ -1,14 +1,14 @@
 # The KMS keys used by Julia CI. No private key ever exists outside KMS
-# (or, for the BYOK keys, outside the one-time trusted import machine).
+# (or, for the BYOK notary key, outside the one-time trusted import
+# machine).
 #
-# The two EXTERNAL-origin keys are created here *without* key material;
-# import the existing material out-of-band (it must never enter the
-# Terraform state) with:
+# The EXTERNAL-origin notary key is created here *without* key material;
+# import the existing .p8 out-of-band (it must never enter the Terraform
+# state) with:
 #
-#   ops/20_import_gpg_key.sh     -> alias/julia-tarball-signing
 #   ops/21_import_notary_key.sh  -> alias/julia-notary-api
 #
-# Until then they sit in the PendingImport state and cannot sign.
+# Until then it sits in the PendingImport state and cannot sign.
 
 # Fresh key; a new Developer ID certificate must be issued for it
 # (see ops/22_generate_macos_csr.sh).
@@ -36,17 +36,19 @@ resource "aws_kms_alias" "notary_api" {
   target_key_id = aws_kms_external_key.notary_api.id
 }
 
-# The existing GPG release signing key material is imported so published
-# signatures keep verifying against https://julialang.org/juliareleases.asc.
-resource "aws_kms_external_key" "tarball_signing" {
-  description = "Julia release tarball GPG signing key (imported GPG key material)"
-  key_usage   = "SIGN_VERIFY"
-  key_spec    = var.tarball_key_spec
+# Fresh key generated inside KMS; the OpenPGP public key for it is
+# exported with ops/20_export_gpg_pubkey.py and must be published as the
+# new Julia releases signing key (signatures do NOT verify against the
+# pre-migration juliareleases.asc).
+resource "aws_kms_key" "tarball_signing" {
+  description              = "Julia release tarball GPG signing key"
+  key_usage                = "SIGN_VERIFY"
+  customer_master_key_spec = var.tarball_key_spec
 }
 
 resource "aws_kms_alias" "tarball_signing" {
   name          = "alias/julia-tarball-signing"
-  target_key_id = aws_kms_external_key.tarball_signing.id
+  target_key_id = aws_kms_key.tarball_signing.key_id
 }
 
 # The SSH key used to push to docs.julialang.org. SSH signs via the

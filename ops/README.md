@@ -23,7 +23,7 @@ remote KMS operation, authorized by the job's OIDC identity:
 | S3 uploads               | static `AWS_ACCESS_KEY_ID/SECRET` in yml   | OIDC → `julia-oidc-stage` (untrusted) + `julia-oidc-publish` (trusted) roles |
 | macOS codesigning        | keychain file w/ Developer ID key          | KMS RSA key + patched `rcodesign` (`utilities/macos/rcodesign`) |
 | macOS notarization       | Apple ID + app-specific password           | App Store Connect API key in KMS (ES256 JWTs via `kms:Sign`)  |
-| Linux/source GPG signing | raw GPG private key file                   | GPG key material imported into KMS, `utilities/kms_gpg_sign.py` |
+| Linux/source GPG signing | raw GPG private key file                   | fresh key generated in KMS, `utilities/kms_gpg_sign.py` (new public key published) |
 | Windows codesigning      | `AZURE_CLIENT_SECRET`                      | Azure workload identity federation (Buildkite OIDC)           |
 | Docs deploy SSH key      | cryptic-encrypted key file                 | SSH key in KMS, ssh signs via [aws-kms-pkcs11](https://github.com/JackOfMostTrades/aws-kms-pkcs11) |
 | Telemetry bearer tokens  | cryptic-encrypted variables                | SSM Parameter Store (SecureString), OIDC-gated `ssm:GetParameter` |
@@ -118,17 +118,24 @@ are Terraform variables with the production defaults):
 
 1. `terraform -chdir=ops/terraform init && terraform -chdir=ops/terraform apply`
    — creates the OIDC provider for `agent.buildkite.com`, the four KMS
-   keys (the notary + tarball keys as `EXTERNAL`-origin, pending import),
-   and the four IAM roles + policies. Re-apply any time trust patterns or
+   keys (the notary key as `EXTERNAL`-origin, pending import), and the
+   four IAM roles + policies. Re-apply any time trust patterns or
    policies change. Configure a state backend of your choice first (the
    state contains no secrets).
-2. Import existing key material (from a trusted workstation; obtain the
-   plaintexts once via the legacy cryptic agent key):
-   * `./20_import_gpg_key.sh /path/to/tarball_signing.gpg`
-   * `./21_import_notary_key.sh AuthKey_X.p8 <issuer-id> <key-id>`
-     (writes `utilities/macos/notary_api_key.json` — commit it; it
-     contains no secret material)
-   * securely delete the plaintexts afterwards.
+2. Key material:
+   * `./20_export_gpg_pubkey.py --created <today>` — exports the OpenPGP
+     public half of the KMS-generated tarball signing key to
+     `secrets/tarball_signing.pub.asc`. Commit it, and publish it as the
+     new Julia releases signing key (it **replaces** the pre-migration
+     `juliareleases.asc`; old signatures keep verifying against the old
+     key, new signatures only against this one). `--created` is part of
+     the key fingerprint: pin it and never change it.
+   * `./21_import_notary_key.sh AuthKey_X.p8 <issuer-id> <key-id>` — the
+     App Store Connect API key is Apple-generated and must be imported
+     (from a trusted workstation; obtain the .p8 once via the legacy
+     cryptic agent key, securely delete it afterwards). Writes
+     `utilities/macos/notary_api_key.json` — commit it; it contains no
+     secret material.
 3. Telemetry tokens into SSM:
    * `./23_put_tokens.sh codecov_token`
    * `./23_put_tokens.sh coveralls_token`
@@ -171,7 +178,9 @@ are Terraform variables with the production defaults):
     agent keys from the agents, decommission `cryptic_capable` queues,
     revoke the old Apple Developer ID certificate, the Apple ID
     app-specific password, the old SSH deploy key, and the
-    `AZURE_CLIENT_SECRET`.
+    `AZURE_CLIENT_SECRET`. Revoke the old GPG release signing key (its
+    private half lived on agents) and securely delete all copies; keep
+    its revoked public key published so old releases remain verifiable.
 
 ## Agent/rootfs prerequisites
 
@@ -183,9 +192,13 @@ are Terraform variables with the production defaults):
 
 ## Notes
 
-* KMS `EXTERNAL` (BYOK) keys mean published GPG signatures keep verifying
-  against the existing `juliareleases.asc` public key, and notarization
-  keeps using the existing App Store Connect API key.
+* The GPG tarball signing key is **generated inside KMS** and never
+  exists anywhere else; a new public key must therefore be published
+  (`ops/20_export_gpg_pubkey.py`), and signatures made after the
+  migration do not verify against the pre-migration `juliareleases.asc`.
+  Only the notary key uses KMS `EXTERNAL` (BYOK) import, because Apple
+  generates App Store Connect API keys and we cannot register our own
+  public key with Apple.
 * Retried upload jobs hitting an existing identical object are handled in
   `utilities/upload_julia.sh` (412 + ETag comparison), not by allowing
   overwrites.

@@ -14,11 +14,11 @@ output "role_arns" {
 }
 
 output "kms_key_arns" {
-  description = "KMS signing keys (the two EXTERNAL ones need material imported)"
+  description = "KMS signing keys (the EXTERNAL notary key needs material imported)"
   value = {
     macos_codesign  = aws_kms_key.macos_codesign.arn
     notary_api      = aws_kms_external_key.notary_api.arn
-    tarball_signing = aws_kms_external_key.tarball_signing.arn
+    tarball_signing = aws_kms_key.tarball_signing.arn
     docs_deploy     = aws_kms_key.docs_deploy.arn
   }
 }

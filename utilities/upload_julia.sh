@@ -219,8 +219,9 @@ fi
 
 echo "--- GPG-sign the tarball"
 # The OpenPGP signature is assembled locally but the raw RSA signature
-# comes from AWS KMS, which holds the (imported) release signing key.
-# Signatures verify against the long-published juliareleases.asc.
+# comes from AWS KMS, where the release signing key was generated and
+# never leaves. Signatures verify against the committed public key,
+# exported from KMS with ops/20_export_gpg_pubkey.py.
 python3 .buildkite/utilities/kms_gpg_sign.py \
     --public-key .buildkite/secrets/tarball_signing.pub.asc \
     --kms-key-id "${TARBALL_SIGNING_KMS_KEY}" \
