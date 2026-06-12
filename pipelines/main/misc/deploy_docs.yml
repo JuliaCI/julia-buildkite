@@ -34,12 +34,12 @@ steps:
         commands: |
           echo "--- Download built docs from staging"
           # TODO(publish-split): the build pipeline's doctest step must stage
-          # julia-*-htmldocs.tar.gz to s3://<bucket>/<prefix>/staging/<sha>/ via
-          # the untrusted `stage` role (same handoff as the binaries). This
-          # job then downloads it from there. Until that staging step exists,
+          # julia-*-htmldocs.tar.gz to the julia-ci staging bucket via the
+          # untrusted `stage` role (same handoff as the binaries). This job
+          # then downloads it from there. Until that staging step exists,
           # this download has no source.
           source .buildkite/utilities/aws_oidc.sh docs-deploy
-          aws s3 cp "s3://${S3_BUCKET:-julialangnightlies}/${S3_BUCKET_PREFIX:-bin}/staging/${BUILDKITE_COMMIT}/" . \
+          aws s3 cp "s3://${STAGING_BUCKET:-julialang-ephemeral-ci}/${S3_BUCKET_PREFIX:-bin}/${BUILDKITE_COMMIT}/" . \
               --recursive --exclude "*" --include "*-htmldocs.tar.gz"
 
           echo "--- Configure SSH signing via AWS KMS"

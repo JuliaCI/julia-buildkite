@@ -1,15 +1,20 @@
-# Launch the upload + coverage pipelines.
+# Launch the coverage pipeline and the publish trigger.
 #
-# Historically these were "signed pipelines" (treehash-verified by the
+# Historically this launched "signed pipelines" (treehash-verified by the
 # cryptic plugin) because they carried decryption rights for static
 # secrets. There are no pipeline-held secrets anymore: jobs obtain
 # credentials at runtime via Buildkite OIDC, and AWS IAM decides what each
-# job identity (pipeline/ref/step) may do. Pipeline signing is therefore
-# no longer needed.
+# job identity (pipeline/ref/step) may do.
+#
+# There are no upload relay jobs anymore either: the build step stages its
+# unsigned tarball directly to the per-pipeline ephemeral staging bucket,
+# and the test step posts its results directly to Test Analytics. All that
+# is left to launch here is the coverage pipeline and -- after a `wait` for
+# everything above -- the trigger of the trusted julia-publish pipeline.
 steps:
   - group: "Upload"
     steps:
-      - label: "Launch upload jobs"
+      - label: "Launch coverage + publish trigger"
         plugins:
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"
@@ -18,8 +23,9 @@ steps:
           # Launch the code coverage job (runs when "needs full CI" label is applied)
           buildkite-agent pipeline upload .buildkite/pipelines/scheduled/coverage/coverage.yml
 
-          # Launch the upload jobs
-          buildkite-agent pipeline upload .buildkite/pipelines/main/launch_upload_jobs.yml
+          # Once everything is done, trigger the trusted publish pipeline
+          # (no-op on julia-pr; see the `if:` inside)
+          buildkite-agent pipeline upload .buildkite/pipelines/main/trigger_publish.yml
         agents:
           queue: "build"
           os: "linux"

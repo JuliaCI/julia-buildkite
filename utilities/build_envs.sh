@@ -167,9 +167,15 @@ fi
 export JULIA_INSTALL_DIR="julia-${TAR_VERSION}"
 JULIA_BINARY="${JULIA_INSTALL_DIR}/bin/julia${EXE}"
 
-# By default, we upload to `julialangnightlies/bin`, but we allow this to be overridden
-S3_BUCKET="${S3_BUCKET:-julialangnightlies}"
-S3_BUCKET_PREFIX="${S3_BUCKET_PREFIX:-bin}"
+# By default, we upload to `julialangnightlies/bin` (no-GPL builds to
+# `julialang-nogpl/bin-nogpl`), but we allow this to be overridden
+if [[ "${OS?}" == *nogpl ]]; then
+    S3_BUCKET="${S3_BUCKET:-julialang-nogpl}"
+    S3_BUCKET_PREFIX="${S3_BUCKET_PREFIX:-bin-nogpl}"
+else
+    S3_BUCKET="${S3_BUCKET:-julialangnightlies}"
+    S3_BUCKET_PREFIX="${S3_BUCKET_PREFIX:-bin}"
+fi
 
 # We generally upload to multiple upload targets
 UPLOAD_TARGETS=()
@@ -248,15 +254,30 @@ fi
 # but it's very convenient for shuttling binaries between buildkite steps.
 export UPLOAD_FILENAME="julia-${TAR_VERSION?}-${OS?}-${ARCH?}"
 
-# Staging target: a commit-sha-gated path that the UNTRUSTED build pipeline
-# writes the unsigned tarball to (write-once). IAM only lets a build write
-# below its own commit's staging path, so it can never clobber release
-# artifacts or another build's binaries. This serves two purposes:
-#  - For pull requests it is the final consumable location (juliaup resolves
-#    PR number -> head sha via the GitHub API and fetches from here).
-#  - For master/release/tag builds it is the input the TRUSTED publish
-#    pipeline reads, signs, and promotes to the canonical UPLOAD_TARGETS.
-export STAGING_TARGET="${S3_BUCKET}/${S3_BUCKET_PREFIX}/staging/${LONG_COMMIT?}/${UPLOAD_FILENAME}"
+# Staging target: the build step writes the unsigned tarball (write-once,
+# directly from the build job) to a commit-sha-gated path in a per-pipeline
+# EPHEMERAL bucket (lifecycle-expired; created by ops/terraform). julia-pr
+# and julia-ci stage to SEPARATE buckets, and the trusted publish pipeline
+# only ever reads the julia-ci bucket -- so a pull-request build can never
+# place (or, since paths are write-once, pre-claim) anything the publish
+# pipeline would consume. IAM additionally only lets a build write below
+# its own commit's staging path within its own pipeline's bucket.
+#  - For pull requests the pr bucket is the final consumable location
+#    (juliaup resolves PR number -> head sha via the GitHub API and
+#    fetches from here).
+#  - For master/release/tag builds the ci bucket is the input the TRUSTED
+#    publish pipeline reads, signs, and promotes to the canonical
+#    UPLOAD_TARGETS.
+# The prefix separates the normal / no-GPL / julia-buildkite-self-test
+# artifact families within each bucket.
+if [[ "${BUILDKITE_PIPELINE_SLUG:-}" == "julia-pr" ]]; then
+    STAGING_BUCKET="${STAGING_BUCKET:-julialang-ephemeral-pr}"
+else
+    # julia-ci stages here; julia-publish reads its staged artifacts back
+    STAGING_BUCKET="${STAGING_BUCKET:-julialang-ephemeral-ci}"
+fi
+export STAGING_BUCKET
+export STAGING_TARGET="${STAGING_BUCKET}/${S3_BUCKET_PREFIX}/${LONG_COMMIT?}/${UPLOAD_FILENAME}"
 
 echo "--- Print the full and short commit hashes"
 echo "The full commit is:                      ${LONG_COMMIT}"

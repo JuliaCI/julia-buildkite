@@ -114,4 +114,16 @@ if [[ "${JULIA_BINARYDIST_FILENAME}.tar.gz" != "${UPLOAD_FILENAME}.tar.gz" ]]; t
 fi
 
 echo "--- Upload build artifacts to buildkite"
+# Other jobs in this build (tests, misc checks) consume the tarball as a
+# buildkite artifact.
 buildkite-agent artifact upload "${UPLOAD_FILENAME}.tar.gz"
+
+echo "--- Stage unsigned tarball to s3://${STAGING_TARGET}.tar.gz"
+# Stage straight from the build job (no relay through buildkite artifacts):
+# a write-once upload to this pipeline's ephemeral staging bucket, gated by
+# this build's commit sha. The untrusted `stage` role can do nothing else.
+# shellcheck source=SCRIPTDIR/aws_oidc.sh
+source .buildkite/utilities/aws_oidc.sh stage
+# shellcheck source=SCRIPTDIR/upload_to_s3.sh
+source .buildkite/utilities/upload_to_s3.sh
+upload_to_s3 "${UPLOAD_FILENAME}.tar.gz" "${STAGING_TARGET}.tar.gz"

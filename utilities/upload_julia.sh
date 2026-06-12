@@ -1,25 +1,22 @@
 #!/usr/bin/env bash
 
-# Stage or publish a Julia build that was previously produced as a `.tar.gz`.
-#
-# Two modes, matching the trusted/untrusted pipeline split:
-#
-#   upload_julia.sh stage     (UNTRUSTED, runs in the build pipeline)
-#       Uploads the UNSIGNED tarball to a commit-sha-gated staging path
-#       using the `stage` role. No signing, no secrets, no final-location
-#       write. For pull requests this is the end of the line (the staged
-#       artifact is the consumable PR binary).
+# Publish a Julia build that was previously staged as an unsigned `.tar.gz`.
 #
 #   upload_julia.sh publish   (TRUSTED, runs in the julia-publish pipeline)
 #       Verifies the commit is a real release commit, then signs (macOS
 #       codesign + notarize, Windows Trusted Signing, GPG tarball) and
-#       promotes the artifacts to the canonical release locations using the
-#       `publish` role. Never runs on pull requests.
+#       promotes the artifacts from the julia-ci staging bucket to the
+#       canonical release locations using the `publish` role. Never runs
+#       on pull requests.
+#
+# (The untrusted counterpart -- staging the unsigned tarball write-once to
+# the per-pipeline ephemeral staging bucket -- happens directly in the
+# build step, see build_julia.sh.)
 #
 # Requires TRIPLET to be defined.
 set -euo pipefail
 
-MODE="${1:?usage: upload_julia.sh <stage|publish>}"
+MODE="${1:?usage: upload_julia.sh publish}"
 
 # First, get things like `SHORT_COMMIT`, `UPLOAD_TARGETS`, `STAGING_TARGET`, etc...
 # shellcheck source=SCRIPTDIR/build_envs.sh
@@ -27,9 +24,8 @@ source .buildkite/utilities/build_envs.sh
 
 THIS_DIR="$(realpath "$(dirname "${BASH_SOURCE[0]}")")"
 
-# Tell the AWS CLI not to contact the metadata service; credentials come
-# from OIDC web identity (AWS_WEB_IDENTITY_TOKEN_FILE / AWS_ROLE_ARN).
-export AWS_EC2_METADATA_DISABLED=true
+# shellcheck source=SCRIPTDIR/upload_to_s3.sh
+source .buildkite/utilities/upload_to_s3.sh
 
 # KMS keys used for release signing (aliases resolve in the CI account)
 MACOS_CODESIGN_KMS_KEY="${MACOS_CODESIGN_KMS_KEY:-alias/julia-macos-codesigning}"
@@ -43,72 +39,8 @@ wait_pids() {
     done
 }
 
-# Upload a local file to `s3://${BUCKET}/${KEY}`, write-once.
-#
-# IAM denies unconditional puts, so a build can never overwrite an existing
-# object (S3 conditional write, If-None-Match: *). If the object already
-# exists (e.g. a retried job) we accept it iff its content matches what we
-# have locally. `julia-latest-*` pointer objects are intentionally
-# overwritten (and only the publish role is allowed to do so).
-upload_to_s3() {
-    local file="$1" target="$2"
-    local bucket="${target%%/*}"
-    local key="${target#*/}"
-
-    if [[ "$(basename "${key}")" == julia-latest-* ]]; then
-        aws s3api put-object \
-            --bucket "${bucket}" --key "${key}" \
-            --body "${file}" --acl public-read >/dev/null
-        echo "uploaded (latest pointer): s3://${target}"
-        return 0
-    fi
-
-    local output
-    if output="$(aws s3api put-object \
-            --bucket "${bucket}" --key "${key}" \
-            --body "${file}" --acl public-read \
-            --if-none-match '*' 2>&1)"; then
-        echo "uploaded (write-once): s3://${target}"
-        return 0
-    fi
-
-    if [[ "${output}" == *"PreconditionFailed"* || "${output}" == *"412"* ]]; then
-        local local_md5 remote_etag
-        local_md5="$(openssl dgst -md5 -r "${file}" | cut -d' ' -f1)"
-        remote_etag="$(aws s3api head-object --bucket "${bucket}" --key "${key}" \
-            --query ETag --output text | tr -d '"')"
-        if [[ "${local_md5}" == "${remote_etag}" ]]; then
-            echo "already exists with identical content, skipping: s3://${target}"
-            return 0
-        fi
-        echo "ERROR: s3://${target} already exists with DIFFERENT content; refusing to overwrite" >&2
-        return 1
-    fi
-
-    echo "${output}" >&2
-    return 1
-}
-
-# ============================================================================
-# STAGE (untrusted)
-# ============================================================================
-if [[ "${MODE}" == "stage" ]]; then
-    # shellcheck source=SCRIPTDIR/aws_oidc.sh
-    source .buildkite/utilities/aws_oidc.sh stage
-
-    echo "--- Download ${UPLOAD_FILENAME}.tar.gz from the build step"
-    buildkite-agent artifact download "${UPLOAD_FILENAME}.tar.gz" .
-
-    echo "--- Stage unsigned tarball to s3://${STAGING_TARGET}.tar.gz"
-    upload_to_s3 "${UPLOAD_FILENAME}.tar.gz" "${STAGING_TARGET}.tar.gz"
-
-    echo "+++ Staged"
-    echo " -> s3://${STAGING_TARGET}.tar.gz"
-    exit 0
-fi
-
 if [[ "${MODE}" != "publish" ]]; then
-    echo "ERROR: unknown mode '${MODE}' (expected 'stage' or 'publish')" >&2
+    echo "ERROR: unknown mode '${MODE}' (expected 'publish')" >&2
     exit 1
 fi
 

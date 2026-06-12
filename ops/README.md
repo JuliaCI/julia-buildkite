@@ -45,16 +45,16 @@ only trust the publish pipeline's slug. There are three pipelines:
 - **`julia-publish`** — the trusted pipeline that signs + promotes.
 
 ```
- julia-pr  (pull requests)          julia-ci  (master / release-* / tags / scheduled)
-   build + test                        build + test
-        │                                   │
-        ▼                                   ▼
-   stage_<triplet>  ──►  s3://<bucket>/<prefix>/staging/<commit>/julia-*.tar.gz
-   (UNTRUSTED: role julia-oidc-stage, write-once to its own commit's staging path; no KMS)
-   PRs stop here.                          │  julia-ci only: trigger
-                                           ▼
+ julia-pr  (pull requests)            julia-ci  (master / release-* / tags / scheduled)
+   build ──► s3://julialang-ephemeral-pr/      build ──► s3://julialang-ephemeral-ci/
+               <prefix>/<commit>/julia-*                   <prefix>/<commit>/julia-*
+   (UNTRUSTED: the build step stages directly -- write-once, own pipeline's
+    ephemeral bucket, own commit's path; role julia-oidc-stage, no KMS)
+   PRs stop here (juliaup reads               │  tests pass, julia-ci only:
+   the -pr bucket).                           ▼  trigger
                               julia-publish  ──►  publish_all (single step)
-   (TRUSTED: role julia-oidc-publish, kms:Sign + read staging + write final)
+   (TRUSTED: role julia-oidc-publish, kms:Sign + read julia-ci staging bucket
+    ONLY + write final)
    verify_trusted_commit.sh → sign (rcodesign / Trusted Signing / KMS-GPG) → promote → deploy docs
 ```
 
@@ -104,13 +104,19 @@ and which carry AWS session tags (`step_key`, `build_commit`, `pipeline_slug`, .
   why these (like `step_key`) travel as AWS session tags requested in
   `utilities/aws_oidc.sh`; the claims are attested by Buildkite, and a
   token requested without the tags fails the trust conditions outright.
-* **Staging** (`julia-oidc-stage`) may be assumed from any ref of `julia-ci`
-  or `julia-pr`, but can *only* write to
-  `<prefix>/staging/${aws:PrincipalTag/build_commit}/*` — a path containing
-  the source git sha, tagged by the (trusted) agent itself. Build / PR jobs
-  cannot touch release paths, sign anything, or read tokens.
-  (Consumers, e.g. juliaup, map PR number → head sha via the GitHub API and
-  fetch from the sha path.)
+* **Staging** (`julia-oidc-stage`) may be assumed from any job of `julia-ci`
+  or `julia-pr` (the build step assumes it directly; there is no step
+  restriction on the untrusted roles), but can *only* write to
+  `<own pipeline's staging bucket>/<prefix>/${aws:PrincipalTag/build_commit}/*`
+  — the path contains the source git sha and the bucket is selected by the
+  pipeline UUID, both attested session tags the job cannot influence. Each
+  untrusted pipeline has its own ephemeral, lifecycle-expired staging
+  bucket (`julialang-ephemeral-pr` / `julialang-ephemeral-ci`), and publish
+  reads **only** the `julia-ci` one — so a PR build can never place, or
+  pre-claim (paths are write-once), anything that publish would consume.
+  Build / PR jobs cannot touch release paths, sign anything, or read
+  tokens. (Consumers, e.g. juliaup, map PR number → head sha via the
+  GitHub API and fetch from the sha path in the `-pr` bucket.)
 * **No overwrites**: all roles must use S3 conditional writes
   (`If-None-Match: *`, enforced via the `s3:if-none-match` policy condition);
   uploads of already-existing objects fail. The only exception is the
@@ -204,11 +210,16 @@ are Terraform variables with the production defaults):
 
 ## Agent/rootfs prerequisites
 
-* AWS CLI recent enough for `aws s3api put-object --if-none-match`
-  (conditional writes) on all upload agents, and available in the
-  `package_linux` rootfs (coverage jobs) + windows package docker image.
+* AWS CLI on **all build agents/rootfs images** (the build step itself
+  stages to S3 now), recent enough for
+  `aws s3api put-object --if-none-match` (conditional writes). For linux
+  builds that means inside the build rootfs images (`package_*`); also the
+  macOS / Windows / FreeBSD build agents.
+* AWS CLI on test agents/rootfs images too (the test step fetches the
+  Test Analytics token from SSM itself). This one is soft: test_julia.sh
+  skips the analytics upload with a warning when `aws` is missing.
 * `aws_kms_pkcs11.so` in the `aws_uploader` rootfs (docs deploy).
-* python3 (stdlib only) on upload agents for `kms_gpg_sign.py`.
+* python3 (stdlib only) on publish agents for `kms_gpg_sign.py`.
 
 ## Notes
 
@@ -223,5 +234,6 @@ are Terraform variables with the production defaults):
   `utilities/upload_julia.sh` (412 + ETag comparison), not by allowing
   overwrites.
 * juliaup needs a change to consume PR binaries: resolve PR number → head
-  sha via the GitHub API, then fetch `bin/staging/<sha>/julia-*` (this
-  replaces the old `julia-prNNNN-` upload filenames).
+  sha via the GitHub API, then fetch
+  `s3://julialang-ephemeral-pr/bin/<sha>/julia-*` (this replaces the old
+  `julia-prNNNN-` upload filenames).

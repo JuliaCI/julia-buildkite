@@ -102,13 +102,31 @@ variable "s3_nogpl_prefix" {
   default     = "bin-nogpl"
 }
 
-# Sub-path (under each bucket prefix) that unsigned, commit-sha-gated
-# artifacts are staged to. The publish pipeline reads from here; PR
-# consumers (juliaup) also read from here.
-variable "staging_subprefix" {
-  description = "Sub-path for unsigned commit-sha-gated staging artifacts"
-  type        = string
-  default     = "staging"
+# Per-pipeline EPHEMERAL staging buckets (created by this module, with
+# lifecycle expiry). The build step of each untrusted pipeline writes its
+# unsigned artifacts write-once to <bucket>/<prefix>/<commit-sha>/...
+# julia-pr and julia-ci get SEPARATE buckets: the trusted publish pipeline
+# only reads the julia-ci bucket, so a pull-request build can never place
+# (or, since paths are write-once, pre-claim) anything publish would
+# consume. PR consumers (juliaup) read from the julia-pr bucket.
+variable "s3_staging_buckets" {
+  description = "Ephemeral staging bucket per untrusted pipeline, keyed by pipeline slug"
+  type        = map(string)
+  default = {
+    "julia-pr" = "julialang-ephemeral-pr"
+    "julia-ci" = "julialang-ephemeral-ci"
+  }
+}
+
+variable "staging_expiry_days" {
+  description = "Days before staged objects expire, keyed by pipeline slug"
+  type        = map(number)
+  default = {
+    # PR binaries are consumed by juliaup while the PR is open
+    "julia-pr" = 90
+    # publish promotes within hours of staging
+    "julia-ci" = 30
+  }
 }
 
 # RSA matching the strength of the previous (pre-KMS) release signing key.

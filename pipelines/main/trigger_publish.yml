@@ -1,13 +1,15 @@
 # Trigger the trusted julia-publish pipeline once all staging is complete.
 #
-# The `wait` barrier ensures every stage_* job has finished (so all unsigned
-# artifacts are in the commit-sha-gated staging area) before publish runs.
+# The `wait` barrier ensures every build job has finished (the build step
+# itself stages the unsigned tarball into the commit-sha-gated staging
+# bucket) and every test job has passed before publish runs.
 #
-# This file is uploaded by both julia-ci and julia-pr build flows, but the
-# `if:` restricts the trigger to julia-ci -- the pipeline that only builds
-# trusted refs. julia-pr (pull requests) never triggers publish. This is
-# layered with: julia-publish not building PRs at all, and its jobs running
-# verify_trusted_commit.sh.
+# This file is uploaded (by launch_signed_jobs.yml) in both julia-ci and
+# julia-pr build flows, but the `if:` restricts the trigger to julia-ci --
+# the pipeline that only builds trusted refs. julia-pr (pull requests)
+# never triggers publish. This is layered with: julia-publish not building
+# PRs at all, its IAM trust being pinned to the julia-publish pipeline and
+# cluster UUIDs, and its jobs running verify_trusted_commit.sh.
 steps:
   - wait: ~
 

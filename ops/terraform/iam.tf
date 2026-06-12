@@ -3,13 +3,16 @@
 # Trust is split into an untrusted tier and a trusted tier so that pull
 # request builds can never reach signing keys or release locations:
 #
-#   julia-oidc-stage    UNTRUSTED. Assumable from any ref of the build
-#                     pipelines (PRs included). May only write unsigned
+#   julia-oidc-stage    UNTRUSTED. Assumable from any job of the build
+#                     pipelines (PRs included; the build step assumes it to
+#                     stage its tarball directly). May only write unsigned
 #                     artifacts, write-once, to a path gated by the build's
-#                     own commit sha (bin/staging/<commit>/...). No KMS, no
-#                     final-location write. Because its permissions are
-#                     harmless, the spoofable `ref` component of the sub
-#                     claim does not matter here.
+#                     own commit sha, inside the calling pipeline's OWN
+#                     ephemeral staging bucket (julia-pr and julia-ci have
+#                     separate ones; publish only reads julia-ci's). No
+#                     KMS, no final-location write. Because its permissions
+#                     are harmless, the spoofable `ref` component of the
+#                     sub claim does not matter here.
 #   julia-oidc-publish  TRUSTED. kms:Sign with the signing keys, read the
 #                     staging area, and write the final release locations.
 #                     Assumable ONLY from the `julia-publish` pipeline slug.
@@ -60,13 +63,16 @@ locals {
   ]
 
   # Per-role trust: which pipelines (by slug pattern in `sub` AND by
-  # unforgeable UUID session tag) and which steps (aws:RequestTag/step_key,
-  # attested by the agent) may assume it.
+  # unforgeable UUID session tag) and -- for the trusted roles -- which
+  # steps (aws:RequestTag/step_key, attested by the agent) may assume it.
+  # The untrusted roles have no step restriction (null): build steps stage
+  # artifacts directly, test steps post results directly, and the
+  # permissions are deliberately harmless anyway.
   oidc_trust = {
     stage = {
       pipelines         = ["julia-pr", "julia-ci"]
       sub_patterns      = local.build_sub_patterns
-      step_key_patterns = ["stage_*"]
+      step_key_patterns = null
     }
     publish = {
       pipelines         = ["julia-publish"]
@@ -81,7 +87,7 @@ locals {
     tokens = {
       pipelines         = ["julia-pr", "julia-ci"]
       sub_patterns      = local.build_sub_patterns
-      step_key_patterns = ["coverage-*", "upload_results_*"]
+      step_key_patterns = null
     }
   }
 
@@ -92,13 +98,17 @@ locals {
     role => distinct(compact([for p in t.pipelines : lookup(var.buildkite_cluster_ids, p, "")]))
   }
 
-  # The staging areas (one per bucket) and the corresponding final
-  # release locations.
-  staging_paths = [
-    "arn:aws:s3:::${var.s3_bucket}/${var.s3_bucket_prefix}/${var.staging_subprefix}",
-    "arn:aws:s3:::${var.s3_nogpl_bucket}/${var.s3_nogpl_prefix}/${var.staging_subprefix}",
-    "arn:aws:s3:::${var.s3_ephemeral_bucket}/${var.s3_ephemeral_prefix}/${var.staging_subprefix}",
+  # Artifact-family prefixes inside each staging bucket (normal release /
+  # no-GPL / julia-buildkite self-test; see S3_BUCKET_PREFIX selection in
+  # utilities/build_envs.sh) and the final release locations.
+  staging_prefixes = [
+    var.s3_bucket_prefix,
+    var.s3_nogpl_prefix,
+    var.s3_ephemeral_prefix,
   ]
+  staging_bucket_arns = {
+    for slug, bucket in var.s3_staging_buckets : slug => "arn:aws:s3:::${bucket}"
+  }
   final_paths = [
     "arn:aws:s3:::${var.s3_bucket}/${var.s3_bucket_prefix}",
     "arn:aws:s3:::${var.s3_nogpl_bucket}/${var.s3_nogpl_prefix}",
@@ -128,10 +138,13 @@ data "aws_iam_policy_document" "trust" {
       variable = "${local.bk_oidc_host}:sub"
       values   = each.value.sub_patterns
     }
-    condition {
-      test     = "StringLike"
-      variable = "aws:RequestTag/step_key"
-      values   = each.value.step_key_patterns
+    dynamic "condition" {
+      for_each = each.value.step_key_patterns != null ? [1] : []
+      content {
+        test     = "StringLike"
+        variable = "aws:RequestTag/step_key"
+        values   = each.value.step_key_patterns
+      }
     }
 
     # Pin the Buildkite UUIDs, not just the slugs in `sub`: slugs are
@@ -160,35 +173,49 @@ data "aws_iam_policy_document" "trust" {
 }
 
 # ---- julia-oidc-stage (UNTRUSTED) -------------------------------------------
-# Write-once, to bin/staging/<own commit sha>/ only. The build_commit tag is
-# attested by Buildkite (not settable by the job), so a build can only ever
-# write under its own source commit.
+# Write-once, to <own pipeline's staging bucket>/<prefix>/<own commit sha>/
+# only. The build_commit and pipeline_id tags are attested by Buildkite
+# (not settable by the job), so a build can only ever write under its own
+# source commit, and only inside its own pipeline's bucket -- julia-pr can
+# never touch the julia-ci bucket that publish reads from.
 
 resource "aws_iam_role" "stage" {
   name                 = "julia-oidc-stage"
-  description          = "Buildkite staging upload: write-once to <bucket>/staging/<commit>/ (via OIDC)"
+  description          = "Buildkite staging upload: write-once to own pipeline's staging bucket, own commit path (via OIDC)"
   assume_role_policy   = data.aws_iam_policy_document.trust["stage"].json
   max_session_duration = 3600
 }
 
 data "aws_iam_policy_document" "stage" {
-  statement {
-    sid     = "WriteOnceToOwnCommitStagingPath"
-    actions = ["s3:PutObject", "s3:PutObjectAcl"]
-    # $${...} is the literal IAM policy variable, not Terraform interpolation.
-    resources = [for p in local.staging_paths : "${p}/$${aws:PrincipalTag/build_commit}/*"]
+  dynamic "statement" {
+    for_each = var.s3_staging_buckets
 
-    condition {
-      test     = "StringEquals"
-      variable = "s3:if-none-match"
-      values   = ["*"]
+    content {
+      sid     = "WriteOnceToOwnCommitPath${replace(title(statement.key), "-", "")}"
+      actions = ["s3:PutObject", "s3:PutObjectAcl"]
+      # $${...} is the literal IAM policy variable, not Terraform interpolation.
+      resources = [
+        for p in local.staging_prefixes :
+        "${local.staging_bucket_arns[statement.key]}/${p}/$${aws:PrincipalTag/build_commit}/*"
+      ]
+
+      condition {
+        test     = "StringEquals"
+        variable = "s3:if-none-match"
+        values   = ["*"]
+      }
+      condition {
+        test     = "StringEquals"
+        variable = "aws:PrincipalTag/pipeline_id"
+        values   = [var.buildkite_pipeline_ids[statement.key]]
+      }
     }
   }
 
   statement {
     sid       = "ReadStagingForRetryChecks"
     actions   = ["s3:GetObject"]
-    resources = [for p in local.staging_paths : "${p}/*"]
+    resources = [for arn in values(local.staging_bucket_arns) : "${arn}/*"]
   }
 }
 
@@ -211,9 +238,11 @@ resource "aws_iam_role" "publish" {
 
 data "aws_iam_policy_document" "publish" {
   statement {
-    sid       = "ReadStagedArtifacts"
-    actions   = ["s3:GetObject"]
-    resources = [for p in local.staging_paths : "${p}/*"]
+    sid     = "ReadStagedArtifacts"
+    actions = ["s3:GetObject"]
+    # Only the julia-ci staging bucket: artifacts staged by pull-request
+    # builds (julia-pr's bucket) are not publishable inputs.
+    resources = ["${local.staging_bucket_arns["julia-ci"]}/*"]
   }
 
   statement {

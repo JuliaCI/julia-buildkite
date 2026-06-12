@@ -6,7 +6,7 @@
 #
 # Source this script with the desired role:
 #
-#     source .buildkite/utilities/aws_oidc.sh stage       # untrusted: write-once to staging/<sha>/
+#     source .buildkite/utilities/aws_oidc.sh stage       # untrusted: write-once to own pipeline's staging bucket, <sha>/ path
 #     source .buildkite/utilities/aws_oidc.sh publish     # trusted: sign + promote to final (publish pipeline only)
 #     source .buildkite/utilities/aws_oidc.sh docs-deploy # trusted: docs deploy SSH signing via KMS
 #     source .buildkite/utilities/aws_oidc.sh tokens      # CI telemetry tokens from SSM
