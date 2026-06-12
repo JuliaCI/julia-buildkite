@@ -1,0 +1,23 @@
+# OIDC/IAM trust smoke test -- validates role assumption and every trust
+# boundary from inside a build pipeline, WITHOUT building julia.
+#
+# Usage (see also "Validation" in ops/README.md): temporarily replace the
+# webUI steps of julia-pr (or julia-ci) with this file's steps and start a
+# new build (any recent julia commit); restore the real webUI
+# (pipelines/main/0_webui.yml) afterwards.
+#
+# NOTE: while validating a julia-buildkite revision that julia's
+# `.buildkite-external-version` does not point to yet, replace the
+# `version:` below with the julia-buildkite commit sha under test.
+steps:
+  - label: ":mag: OIDC trust smoke test"
+    plugins:
+      - JuliaCI/external-buildkite#v1:
+          version: "./.buildkite-external-version"
+          repo_url: "https://github.com/JuliaCI/julia-buildkite"
+    commands: "bash .buildkite/utilities/tests/oidc_smoke_test.sh"
+    timeout_in_minutes: 10
+    agents:
+      queue: "build"
+      os: "linux"
+      arch: "x86_64"

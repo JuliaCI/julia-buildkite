@@ -277,7 +277,14 @@ else
     STAGING_BUCKET="${STAGING_BUCKET:-julialang-ephemeral-ci}"
 fi
 export STAGING_BUCKET
-export STAGING_TARGET="${STAGING_BUCKET}/${S3_BUCKET_PREFIX}/${LONG_COMMIT?}/${UPLOAD_FILENAME}"
+# Keyed by BUILDKITE_COMMIT: IAM only allows writing below the
+# Buildkite-attested build_commit session tag, and BUILDKITE_COMMIT is
+# that same attested value (the pipelines build JuliaLang/julia, so it is
+# the julia commit). `git rev-parse HEAD` would normally agree, but the
+# attested value is the one that cannot drift from the IAM condition.
+# The publish trigger and deploy_docs pass BUILDKITE_COMMIT along, so
+# reads agree with what was staged.
+export STAGING_TARGET="${STAGING_BUCKET}/${S3_BUCKET_PREFIX}/${BUILDKITE_COMMIT?}/${UPLOAD_FILENAME}"
 
 echo "--- Print the full and short commit hashes"
 echo "The full commit is:                      ${LONG_COMMIT}"
