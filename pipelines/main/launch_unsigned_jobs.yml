@@ -66,7 +66,7 @@ steps:
               .buildkite/pipelines/main/platforms/build_windows.arches \
               .buildkite/pipelines/main/platforms/build_windows.yml
         agents:
-          queue: "test"
+          queue: "build"
           os: "linux"
           arch: "x86_64" # prevent from running on PiBots
   - group: "Check"
@@ -98,7 +98,7 @@ steps:
             echo "./JuliaSyntax/Project.toml file does NOT exist. Will not launch JuliaSyntax test jobs"
           fi
         agents:
-          queue: "test"
+          queue: "build"
           os: "linux"
           arch: "x86_64" # prevent from running on PiBots
   - group: "Test"
@@ -145,7 +145,7 @@ steps:
               .buildkite/pipelines/main/platforms/test_windows.yml
           echo "+++ Finished launching test jobs"
         agents:
-          queue: "test"
+          queue: "build"
           os: "linux"
           arch: "x86_64" # prevent from running on PiBots
   - group: "Allow Fail"
@@ -168,7 +168,7 @@ steps:
               .buildkite/pipelines/main/platforms/build_macos.soft_fail.arches \
               .buildkite/pipelines/main/platforms/build_macos.yml
         agents:
-          queue: "test"
+          queue: "build"
           os: "linux"
           arch: "x86_64" # prevent from running on PiBots
       - label: "Launch allowed-to-fail test jobs"
@@ -216,6 +216,6 @@ steps:
               .buildkite/pipelines/main/platforms/test_windows.soft_fail.arches \
               .buildkite/pipelines/main/platforms/test_windows.yml
         agents:
-          queue: "test"
+          queue: "build"
           os: "linux"
           arch: "x86_64" # prevent from running on PiBots

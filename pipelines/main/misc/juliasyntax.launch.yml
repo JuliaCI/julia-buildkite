@@ -26,6 +26,6 @@ steps:
         commands: |
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/juliasyntax.test.yml
         agents:
-          queue: "test"
+          queue: "build"
           os: "linux"
           arch: "x86_64" # prevent from running on PiBots
