@@ -38,40 +38,60 @@ export KMS_ALIAS_DOCS_DEPLOY="alias/julia-docs-deploy"
 export SSM_TOKEN_PREFIX="/julia-ci/tokens"
 
 # IAM role names
-export ROLE_UPLOAD="julia-ci-upload"
-export ROLE_UPLOAD_PR="julia-ci-upload-pr"
+#
+# Trust is split into an UNTRUSTED tier (anything that runs on PR builds)
+# and a TRUSTED tier (only the dedicated publish pipeline, which never
+# builds pull requests):
+#   julia-ci-stage    untrusted: write unsigned artifacts to a commit-sha
+#                     gated staging path only. No KMS, no final-location
+#                     write. Runs on every build, PRs included.
+#   julia-ci-publish  trusted: kms:Sign + read staging + write final
+#                     location. Assumable ONLY from the julia-publish
+#                     pipeline slug, which is not connected to PR builds.
+#   julia-ci-docs-deploy trusted docs SSH signing (publish pipeline only).
+#   julia-ci-tokens   low-value telemetry tokens (build pipelines).
+export ROLE_STAGE="julia-ci-stage"
+export ROLE_PUBLISH="julia-ci-publish"
 export ROLE_DOCS_DEPLOY="julia-ci-docs-deploy"
 export ROLE_TOKENS="julia-ci-tokens"
+
+# Sub-path (under each bucket prefix) that unsigned, commit-sha-gated
+# artifacts are staged to. The publish pipeline reads from here; PR
+# consumers (juliaup) also read from here.
+export S3_STAGING_SUBPREFIX="staging"
 
 # Buildkite OIDC issuer host
 export BK_OIDC_HOST="agent.buildkite.com"
 
-# `sub` claim patterns for trusted (release) builds. These identify
-# pipelines/refs whose jobs may sign + publish release binaries.
+# `sub` patterns for the UNTRUSTED build pipelines. Any ref (PRs included);
+# the stage/token roles these map to are deliberately harmless, so we do
+# not (and must not) rely on the ref component for trust here.
 # sub format: organization:ORG:pipeline:PIPELINE:ref:REF:commit:SHA:step:STEP
-RELEASE_SUB_PATTERNS=(
-    "organization:${BK_ORG}:pipeline:julia-master:ref:refs/heads/master:*"
-    "organization:${BK_ORG}:pipeline:julia-master-scheduled:ref:refs/heads/master:*"
-    "organization:${BK_ORG}:pipeline:julia-release-*:ref:refs/heads/release-*:*"
-    "organization:${BK_ORG}:pipeline:julia-release-*:ref:refs/tags/v*:*"
-    # The julia-buildkite repo's own CI exercises the upload pipeline
-    "organization:${BK_ORG}:pipeline:julia-buildkite:ref:refs/heads/main:*"
-    "organization:${BK_ORG}:pipeline:julia-buildkite-scheduled:ref:refs/heads/main:*"
-)
-
-# `sub` claim patterns for PR builds (any ref on the main pipelines;
-# the scheduled pipelines also run "needs full CI"-labeled PR uploads)
-PR_SUB_PATTERNS=(
+BUILD_SUB_PATTERNS=(
     "organization:${BK_ORG}:pipeline:julia-master:*"
     "organization:${BK_ORG}:pipeline:julia-master-scheduled:*"
+    "organization:${BK_ORG}:pipeline:julia-release-*:*"
     "organization:${BK_ORG}:pipeline:julia-buildkite:*"
     "organization:${BK_ORG}:pipeline:julia-buildkite-scheduled:*"
 )
 
+# `sub` patterns for the TRUSTED publish pipelines. These pipeline slugs
+# MUST be configured in Buildkite with pull-request builds disabled and
+# branch-limited to the protected refs (see ops/README.md); a PR can then
+# never produce a build under these slugs, so the slug itself is the trust
+# boundary. The ref patterns below are belt-and-braces only.
+PUBLISH_SUB_PATTERNS=(
+    "organization:${BK_ORG}:pipeline:julia-publish:ref:refs/heads/master:*"
+    "organization:${BK_ORG}:pipeline:julia-publish:ref:refs/heads/release-*:*"
+    "organization:${BK_ORG}:pipeline:julia-publish:ref:refs/tags/v*:*"
+    # julia-buildkite's own end-to-end publish test (ephemeral bucket only)
+    "organization:${BK_ORG}:pipeline:julia-buildkite-publish:ref:refs/heads/main:*"
+)
+
 # Pipelines whose jobs may read CI telemetry tokens (coverage uploads,
 # buildkite test analytics). These steps also run on "needs full CI"-labeled
-# PRs (as they always have), so this includes any ref of the main pipelines;
-# the tokens are deliberately low-value.
+# PRs (as they always have), so this includes any ref of the build
+# pipelines; the tokens are deliberately low-value.
 TOKEN_SUB_PATTERNS=(
     "organization:${BK_ORG}:pipeline:julia-master:*"
     "organization:${BK_ORG}:pipeline:julia-master-scheduled:*"

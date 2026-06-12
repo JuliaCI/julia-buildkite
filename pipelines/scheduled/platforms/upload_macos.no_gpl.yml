@@ -23,7 +23,7 @@ steps:
               version: "./.buildkite-external-version"
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
         timeout_in_minutes: ${TIMEOUT?}
-        commands: "bash .buildkite/utilities/upload_julia.sh"
+        commands: "bash .buildkite/utilities/upload_julia.sh stage"
         agents:
           queue: "build"
           os: "macos"

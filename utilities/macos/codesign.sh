@@ -18,7 +18,7 @@ usage() {
     echo
     echo "When a KMS key is used, signing is performed with rcodesign (apple-codesign"
     echo "with the AWS KMS backend; see utilities/macos/rcodesign/). AWS credentials"
-    echo "must be available, e.g. via 'source utilities/aws_oidc.sh upload'."
+    echo "must be available, e.g. via 'source utilities/aws_oidc.sh publish'."
 }
 
 THIS_DIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"

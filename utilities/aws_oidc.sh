@@ -6,10 +6,14 @@
 #
 # Source this script with the desired role:
 #
-#     source .buildkite/utilities/aws_oidc.sh upload      # release uploads + signing
-#     source .buildkite/utilities/aws_oidc.sh upload-pr   # PR uploads (write-once, sha path)
-#     source .buildkite/utilities/aws_oidc.sh docs-deploy # docs deploy SSH signing via KMS
+#     source .buildkite/utilities/aws_oidc.sh stage       # untrusted: write-once to staging/<sha>/
+#     source .buildkite/utilities/aws_oidc.sh publish     # trusted: sign + promote to final (publish pipeline only)
+#     source .buildkite/utilities/aws_oidc.sh docs-deploy # trusted: docs deploy SSH signing via KMS
 #     source .buildkite/utilities/aws_oidc.sh tokens      # CI telemetry tokens from SSM
+#
+# The `publish` and `docs-deploy` roles are only assumable from the
+# `julia-publish` pipeline (PR builds disabled there); callers should also
+# run verify_trusted_commit.sh first as defense in depth.
 #
 # It exports AWS_WEB_IDENTITY_TOKEN_FILE / AWS_ROLE_ARN, which every AWS
 # SDK and the AWS CLI use to assume the role automatically (and refresh
@@ -26,7 +30,25 @@ if [[ "${JULIA_CI_AWS_ACCOUNT_ID}" == "000000000000" ]]; then
     return 1 2>/dev/null || exit 1
 fi
 
-_OIDC_ROLE_SUFFIX="${1:?usage: source aws_oidc.sh <upload|upload-pr|docs-deploy|tokens>}"
+_OIDC_ROLE_SUFFIX="${1:?usage: source aws_oidc.sh <stage|publish|docs-deploy|tokens>}"
+
+# The trusted roles must only ever be requested from the dedicated publish
+# pipeline. The IAM trust policy already enforces this (it only trusts the
+# julia-publish* slug), but refuse early here too so a misconfiguration
+# surfaces loudly rather than as a confusing AccessDenied. Pull request
+# builds never run in a publish pipeline.
+case "${_OIDC_ROLE_SUFFIX}" in
+    publish|docs-deploy)
+        if [[ "${BUILDKITE_PIPELINE_SLUG:-}" != *publish* ]]; then
+            echo "ERROR: ${_OIDC_ROLE_SUFFIX} role requested from non-publish pipeline '${BUILDKITE_PIPELINE_SLUG:-}'" >&2
+            return 1 2>/dev/null || exit 1
+        fi
+        if [[ "${BUILDKITE_PULL_REQUEST:-false}" != "false" ]]; then
+            echo "ERROR: ${_OIDC_ROLE_SUFFIX} role must not be requested on a pull request build" >&2
+            return 1 2>/dev/null || exit 1
+        fi
+        ;;
+esac
 
 _OIDC_TOKEN_FILE="$(mktemp)"
 buildkite-agent oidc request-token \

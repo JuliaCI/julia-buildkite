@@ -35,7 +35,7 @@ steps:
                 # Include `/cache/repos` so that our `git` version introspection works.
                 - "/cache/repos:/cache/repos"
         timeout_in_minutes: ${TIMEOUT?}
-        commands: "bash .buildkite/utilities/upload_julia.sh"
+        commands: "bash .buildkite/utilities/upload_julia.sh stage"
         agents:
           queue: "build"
           # Only run on `sandbox.jl` machines (not `docker`-isolated ones) since we need nestable sandboxing

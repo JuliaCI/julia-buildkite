@@ -20,6 +20,46 @@ there is no public-key operation to delegate — so they live in the AWS
 secrets store and are fetched at runtime; they are never stored in the
 repository in any form.)
 
+## Trusted / untrusted pipeline split
+
+The single most important control is that **pull request builds and release
+publishing run in different Buildkite pipelines**, and the trusted IAM roles
+only trust the publish pipeline's slug:
+
+```
+ build pipelines (julia-master, julia-release-*, julia-buildkite, ...)
+   build + test  ──►  stage_<triplet>  ──►  s3://<bucket>/<prefix>/staging/<commit>/julia-*.tar.gz
+   (UNTRUSTED: role julia-ci-stage, write-once to its own commit's staging path; no KMS)
+                              │  on protected refs only
+                              ▼   (trigger; PRs can't enter the publish pipeline)
+ julia-publish pipeline  ──►  publish_all (single step)
+   (TRUSTED: role julia-ci-publish, kms:Sign + read staging + write final)
+   verify_trusted_commit.sh → sign (rcodesign / Trusted Signing / KMS-GPG) → promote → deploy docs
+```
+
+Why this is safe where branch-pinning was not: Buildkite reports a pull
+request build's `sub` ref as the PR head branch, with no PR-vs-push
+discriminator, so a fork PR whose branch is named `master` would match a
+`ref:refs/heads/master` trust pattern. We therefore do **not** trust any
+build-pipeline slug for signing. The trusted roles trust only the
+`julia-publish` slug, and a PR cannot produce a build under that slug.
+
+**Required Buildkite configuration for the `julia-publish` pipeline** (this
+is load-bearing — the IAM trust depends on it):
+- "Build pull requests" OFF, and "Build pull requests from third-party
+  forked repositories" OFF.
+- Branch limiting to `master release-*` (plus build tags `v*`).
+- Its webUI step loads launch steps from a pinned julia-buildkite (the
+  external-buildkite plugin), never from the triggered build's tree.
+- Backstop: every publish job runs `utilities/verify_trusted_commit.sh`,
+  which aborts unless `BUILDKITE_COMMIT` is reachable from a protected ref
+  of the canonical upstream — so even a mis-triggered build cannot publish.
+
+The publish step runs on a `queue: publish` agent whose image must carry the
+full signing toolchain: `rcodesign` (cross-platform Apple signing + dmg +
+notarize), InnoSetup + a cross-platform Authenticode signer (e.g. jsign /
+azuresigntool) for Windows, the KMS-GPG python signer, and the AWS CLI.
+
 ## Trust model
 
 Buildkite agents mint OIDC tokens (`buildkite-agent oidc request-token`)

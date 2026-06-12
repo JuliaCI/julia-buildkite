@@ -1,32 +1,36 @@
 steps:
-  - group: "Upload"
+  - group: "${GROUP?}"
     steps:
-      - label: ":freebsd: upload ${TRIPLET?}"
-        key:   "upload_${TRIPLET?}"
+      - label: ":outbox_tray: stage ${TRIPLET?}"
+        key:   "stage_${TRIPLET?}"
         depends_on:
           # Wait for the builder to finish
           - "build_${TRIPLET?}"
           # Wait for the tester to finish
           - step: "test_${TRIPLET?}"
             allow_failure: "${UPLOAD_EVEN_IF_TEST_FAILURES?}"
-        # Prevent multiple pipelines from uploading to S3 simultaneously
-        # It is okay for two different triplets to upload simultaneously
+        # One stage job per triplet may touch its staging path at a time
         concurrency: 1
-        concurrency_group: 'upload/julialangnightlies/${TRIPLET?}'
+        concurrency_group: 'stage/julialangnightlies/${TRIPLET?}'
         concurrency_method: eager
         plugins:
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
         timeout_in_minutes: ${TIMEOUT?}
+        soft_fail: ${ALLOW_FAIL?}
         retry:
           automatic:
             - exit_status: "*"
               limit: 3
-        commands: "bash .buildkite/utilities/upload_julia.sh"
+        # Staging is platform-agnostic: it just downloads the build step's
+        # unsigned tarball artifact and writes it to the commit-sha-gated
+        # staging path (no signing, untrusted `stage` role). So it runs on a
+        # generic linux uploader regardless of the artifact's target OS.
+        commands: "bash .buildkite/utilities/upload_julia.sh stage"
         agents:
           queue: "build"
-          os: "freebsd"
-          arch: "${ARCH}"
+          os: "linux"
+          arch: "x86_64"
         env:
           TRIPLET: "${TRIPLET?}"

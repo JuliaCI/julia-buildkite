@@ -1,9 +1,12 @@
-# This file launches upload jobs that wait upon previous jobs, then upload their artifacts to S3
+# Launches the UNTRUSTED staging jobs: once each build+test finishes, the
+# corresponding stage job uploads the unsigned tarball to the commit-sha
+# gated staging area in S3. On protected refs it then triggers the trusted
+# julia-publish pipeline, which signs + promotes to the final locations.
 
 steps:
-  - group: "Upload"
+  - group: "Stage"
     steps:
-      - label: "Launch upload jobs"
+      - label: "Launch stage jobs"
         plugins:
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"
@@ -24,67 +27,68 @@ steps:
           # Upload even if tests fail for PR builds only.
           # For tags, release branches, and main branch: don't upload if tests fail.
           export UPLOAD_EVEN_IF_TEST_FAILURES=$(([[ "${BUILDKITE_BRANCH?}" == release-* ]] || [[ "${BUILDKITE_TAG:-}" == v* ]] || [[ "${BUILDKITE_BRANCH?}" == "main" ]] || [[ "${BUILDKITE_BRANCH?}" == "master" ]]) && echo "false" || echo "true")
-          ##### Launch `upload_*` jobs to store tarballs into S3 once tests are done
+
+          ##### Launch `stage_*` jobs to store unsigned tarballs into S3 staging once tests are done
           ### Linux:
-          # Regular Linux upload jobs:
-          GROUP="Upload" \
+          GROUP="Stage" \
               bash .buildkite/utilities/arches_pipeline_upload.sh \
               .buildkite/pipelines/main/platforms/upload_linux.arches \
-              .buildkite/pipelines/main/platforms/upload_linux.yml
-          # PowerPC Linux upload jobs, which we only run for Julia prior to 1.12:
-          GROUP="Upload" \
+              .buildkite/pipelines/main/platforms/stage.yml
+          # PowerPC Linux, which we only run for Julia prior to 1.12:
+          GROUP="Stage" \
               julia .buildkite/pipelines/main/platforms/launch_powerpc.jl \
               .buildkite/pipelines/main/platforms/upload_linux.powerpc.arches \
-              .buildkite/pipelines/main/platforms/upload_linux.yml
+              .buildkite/pipelines/main/platforms/stage.yml
           ### macOS:
-          GROUP="Upload" \
+          GROUP="Stage" \
               bash .buildkite/utilities/arches_pipeline_upload.sh \
               .buildkite/pipelines/main/platforms/upload_macos.arches \
-              .buildkite/pipelines/main/platforms/upload_macos.yml
+              .buildkite/pipelines/main/platforms/stage.yml
           ### FreeBSD:
-          GROUP="Upload" \
+          GROUP="Stage" \
               bash .buildkite/utilities/arches_pipeline_upload.sh \
               .buildkite/pipelines/main/platforms/upload_freebsd.arches \
-              .buildkite/pipelines/main/platforms/upload_freebsd.yml
+              .buildkite/pipelines/main/platforms/stage.yml
           ### Windows:
-          GROUP="Upload" \
+          GROUP="Stage" \
               bash .buildkite/utilities/arches_pipeline_upload.sh \
               .buildkite/pipelines/main/platforms/upload_windows.arches \
-              .buildkite/pipelines/main/platforms/upload_windows.yml
+              .buildkite/pipelines/main/platforms/stage.yml
 
           ### Upload test results.json files to buildkite
           for OS in linux linux.i686 macos freebsd windows; do \
-              GROUP="Upload" \
+              GROUP="Stage" \
                 bash .buildkite/utilities/arches_pipeline_upload.sh \
                 .buildkite/pipelines/main/platforms/test_$${OS}.arches \
                 .buildkite/pipelines/main/misc/upload_buildkite_results.yml
           done
 
-          # Launch doctest deploy job
-          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/deploy_docs.yml
+          ### Once all staging is done, trigger the trusted publish pipeline
+          ### (it signs + promotes, and deploys docs).
+          buildkite-agent pipeline upload .buildkite/pipelines/main/trigger_publish.yml
         agents:
           queue: "build"
           os: "linux"
           arch: "x86_64" # prevent from running on PiBots
-  - group: "Allow Fail (Upload)"
+  - group: "Allow Fail (Stage)"
     steps:
-      - label: "Launch allowed-to-fail upload jobs"
+      - label: "Launch allowed-to-fail stage jobs"
         plugins:
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
         commands: |
           export ALLOW_FAIL="true"
-          
+
           # Upload even if tests fail for PR builds only.
           # For tags, release branches, and main branch: don't upload if tests fail.
           export UPLOAD_EVEN_IF_TEST_FAILURES=$(([[ "${BUILDKITE_BRANCH?}" == release-* ]] || [[ "${BUILDKITE_TAG:-}" == v* ]] || [[ "${BUILDKITE_BRANCH?}" == "main" ]] || [[ "${BUILDKITE_BRANCH?}" == "master" ]]) && echo "false" || echo "true")
 
-          # Launch Linux allowed-to-fail upload jobs
-          GROUP="Allow Fail (Upload)" \
+          # Launch Linux allowed-to-fail stage jobs
+          GROUP="Allow Fail (Stage)" \
               bash .buildkite/utilities/arches_pipeline_upload.sh \
               .buildkite/pipelines/main/platforms/upload_linux.soft_fail.arches \
-              .buildkite/pipelines/main/platforms/upload_linux.yml
+              .buildkite/pipelines/main/platforms/stage.yml
         agents:
           queue: "build"
           os: "linux"

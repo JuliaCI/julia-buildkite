@@ -244,18 +244,19 @@ if [[ "${BUILDKITE_BRANCH}" == master ]] || [[ "${BUILDKITE_BRANCH}" == release-
     fi
 fi
 
-# If we're a pull request build, upload to a path containing the source git
-# sha. IAM only allows PR builds to write (once) below their own commit's
-# path (bin/pr/${aws:PrincipalTag/build_commit}/), so a PR can never clobber
-# release artifacts or another PR's binaries. Consumers (e.g. juliaup)
-# resolve PR number -> head sha via the GitHub API and fetch from here.
-if [[ "${BUILDKITE_PULL_REQUEST}" != "false" ]]; then
-    UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/pr/${LONG_COMMIT?}/julia-${TAR_VERSION?}-${OS?}-${ARCH?}" )
-fi
-
 # This is the "main" filename that is used.  We technically don't need this for uploading,
 # but it's very convenient for shuttling binaries between buildkite steps.
 export UPLOAD_FILENAME="julia-${TAR_VERSION?}-${OS?}-${ARCH?}"
+
+# Staging target: a commit-sha-gated path that the UNTRUSTED build pipeline
+# writes the unsigned tarball to (write-once). IAM only lets a build write
+# below its own commit's staging path, so it can never clobber release
+# artifacts or another build's binaries. This serves two purposes:
+#  - For pull requests it is the final consumable location (juliaup resolves
+#    PR number -> head sha via the GitHub API and fetches from here).
+#  - For master/release/tag builds it is the input the TRUSTED publish
+#    pipeline reads, signs, and promotes to the canonical UPLOAD_TARGETS.
+export STAGING_TARGET="${S3_BUCKET}/${S3_BUCKET_PREFIX}/staging/${LONG_COMMIT?}/${UPLOAD_FILENAME}"
 
 echo "--- Print the full and short commit hashes"
 echo "The full commit is:                      ${LONG_COMMIT}"

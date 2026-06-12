@@ -3,16 +3,12 @@ steps:
     steps:
       - label: "upload docs"
         # The step key is part of the job's OIDC identity: the
-        # julia-ci-docs-deploy IAM role only trusts this step.
-        key: "deploy_docs"
-        depends_on:
-          - "doctest"
-        # We only upload if one of the following criteria are true:
-        # 1. The branch is `master`.
-        # 2. The branch is `release-*`.
-        # 3. The build is a tag build AND the tag is `v*`.
-        # 4. The pipeline is `julia-buildkite`.
-        if: ((build.branch == "master") || (build.branch =~ /^release-/) || (build.tag =~ /^v/)) || (pipeline.slug == "julia-buildkite")
+        # julia-ci-docs-deploy IAM role only trusts this step, and only from
+        # the trusted julia-publish pipeline (this file is launched by the
+        # publish pipeline, not the build pipeline). There is no `depends_on`
+        # doctest here: the html docs tarball is read from the commit-sha
+        # gated S3 staging area (the build pipeline's doctest step stages it),
+        # the same cross-pipeline handoff used for the binaries.
         # Prevent multiple pipelines from pushing to the `git@github.com:JuliaLang/docs.julialang.org` repo simultaneously
         concurrency: 1
         concurrency_group: 'upload/julialang/upload_docs/docs_julialang_org'
@@ -36,14 +32,21 @@ steps:
                 # Include `/cache/repos` so that our `git` version introspection works.
                 - "/cache/repos:/cache/repos"
         commands: |
-          buildkite-agent artifact download --step "doctest" "julia-*-htmldocs.tar.gz" .
+          echo "--- Download built docs from staging"
+          # TODO(publish-split): the build pipeline's doctest step must stage
+          # julia-*-htmldocs.tar.gz to s3://<bucket>/<prefix>/staging/<sha>/ via
+          # the untrusted `stage` role (same handoff as the binaries). This
+          # job then downloads it from there. Until that staging step exists,
+          # this download has no source.
+          source .buildkite/utilities/aws_oidc.sh docs-deploy
+          aws s3 cp "s3://${S3_BUCKET:-julialangnightlies}/${S3_BUCKET_PREFIX:-bin}/staging/${BUILDKITE_COMMIT}/" . \
+              --recursive --exclude "*" --include "*-htmldocs.tar.gz"
 
           echo "--- Configure SSH signing via AWS KMS"
           # The deploy key private half lives in AWS KMS and never leaves
           # it: ssh performs each signature through the aws-kms-pkcs11
-          # provider, authorized by this job's OIDC identity (master /
-          # release refs, step deploy_docs). No secrets are involved.
-          source .buildkite/utilities/aws_oidc.sh docs-deploy
+          # provider, authorized by this job's OIDC identity (the docs-deploy
+          # role assumed above). No secrets are involved.
           mkdir -p ~/.config/aws-kms-pkcs11
           echo '{"slots": [{"kms_key_id": "alias/julia-docs-deploy"}]}' > ~/.config/aws-kms-pkcs11/config.json
           export GIT_SSH_COMMAND="ssh -o PKCS11Provider=$${AWS_KMS_PKCS11_PROVIDER:-/usr/lib/x86_64-linux-gnu/pkcs11/aws_kms_pkcs11.so}"

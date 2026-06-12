@@ -1,27 +1,38 @@
 #!/usr/bin/env bash
 # Create / update the IAM roles assumed by Buildkite jobs via OIDC.
 #
-# Trust model:
-#   * All roles trust only tokens issued by agent.buildkite.com for our
-#     Buildkite organization, with audience sts.amazonaws.com.
-#   * The `sub` claim pins pipeline + ref, so only release refs
-#     (master / release-* / v* tags) can assume the release roles.
-#   * Tokens carry AWS session tags (step_key, build_commit, ...);
-#     trust policies require the expected step_key at assume time and
-#     permission policies use ${aws:PrincipalTag/...} to scope resources.
+# Trust is split into an untrusted tier and a trusted tier so that pull
+# request builds can never reach signing keys or release locations:
 #
-# Roles:
-#   julia-ci-upload      release uploads + signing (S3 put, kms:Sign)
-#   julia-ci-upload-pr   PR uploads, write-once, only to a path containing
-#                        the source git sha (bin/pr/<commit>/...)
-#   julia-ci-docs-deploy kms:Sign with the SSH docs deploy key (SSH via
-#                        the aws-kms-pkcs11 provider; key never leaves KMS)
-#   julia-ci-tokens      read CI telemetry bearer tokens from SSM
+#   julia-ci-stage    UNTRUSTED. Assumable from any ref of the build
+#                     pipelines (PRs included). May only write unsigned
+#                     artifacts, write-once, to a path gated by the build's
+#                     own commit sha (bin/staging/<commit>/...). No KMS, no
+#                     final-location write. Because its permissions are
+#                     harmless, the spoofable `ref` component of the sub
+#                     claim does not matter here.
+#   julia-ci-publish  TRUSTED. kms:Sign with the signing keys, read the
+#                     staging area, and write the final release locations.
+#                     Assumable ONLY from the `julia-publish` pipeline slug.
+#                     That pipeline must have pull-request builds DISABLED
+#                     and be branch-limited to master/release-*/v* (see
+#                     ops/README.md). Since a PR can never produce a build
+#                     under that slug, the slug is the trust boundary -- not
+#                     the (PR-spoofable) branch name.
+#   julia-ci-docs-deploy  TRUSTED. kms:Sign with the docs SSH key; publish
+#                     pipeline only.
+#   julia-ci-tokens   Low-value telemetry bearer tokens from SSM; build
+#                     pipelines.
 #
-# Overwrite protection: roles may only PutObject with the S3 conditional
-# write header (If-None-Match: *), i.e. uploads fail if the object already
-# exists. The only exception is `julia-latest-*` pointer objects, which are
-# intentionally repointed by every release build.
+# Defense in depth: trusted publish jobs additionally run
+# utilities/verify_trusted_commit.sh before assuming this role, which
+# refuses unless BUILDKITE_COMMIT is reachable from a protected ref of the
+# canonical JuliaLang/julia repository.
+#
+# Overwrite protection: every PutObject must use the S3 conditional write
+# header (s3:if-none-match = "*"), i.e. uploads fail if the object already
+# exists. The only exception is `julia-latest-*` pointer objects, which the
+# publish pipeline intentionally repoints.
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 source "${SCRIPT_DIR}/common.sh"
 
@@ -73,52 +84,105 @@ EPHEMERAL_ARN="arn:aws:s3:::${S3_EPHEMERAL_BUCKET}"
 EPHEMERAL_PREFIX="${S3_EPHEMERAL_PREFIX}"
 NOGPL_ARN="arn:aws:s3:::${S3_NOGPL_BUCKET}"
 NOGPL_PREFIX="${S3_NOGPL_PREFIX}"
+STAGE="${S3_STAGING_SUBPREFIX}"
 
-# ---- julia-ci-upload ---------------------------------------------------------
+# ---- julia-ci-stage (UNTRUSTED) ----------------------------------------------
+# Write-once, to bin/staging/<own commit sha>/ only. The build_commit tag is
+# attested by Buildkite (not settable by the job), so a build can only ever
+# write under its own source commit.
 
-trust_policy "${WORK}/upload-trust.json" "upload_*" "${RELEASE_SUB_PATTERNS[@]}"
-ensure_role "${ROLE_UPLOAD}" "${WORK}/upload-trust.json" \
-    "Buildkite release upload + signing (via OIDC; managed by julia-buildkite/ops)"
+trust_policy "${WORK}/stage-trust.json" "stage_*" "${BUILD_SUB_PATTERNS[@]}"
+ensure_role "${ROLE_STAGE}" "${WORK}/stage-trust.json" \
+    "Buildkite staging upload: write-once to <bucket>/staging/<commit>/ (via OIDC)"
 
-cat > "${WORK}/upload-policy.json" <<EOF
+cat > "${WORK}/stage-policy.json" <<EOF
 {
   "Version": "2012-10-17",
   "Statement": [
     {
-      "Sid": "WriteOncePuts",
+      "Sid": "WriteOnceToOwnCommitStagingPath",
       "Effect": "Allow",
       "Action": ["s3:PutObject", "s3:PutObjectAcl"],
       "Resource": [
-        "${BUCKET_ARN}/${PREFIX}/*",
-        "${EPHEMERAL_ARN}/${EPHEMERAL_PREFIX}/*",
-        "${NOGPL_ARN}/${NOGPL_PREFIX}/*"
+        "${BUCKET_ARN}/${PREFIX}/${STAGE}/\${aws:PrincipalTag/build_commit}/*",
+        "${NOGPL_ARN}/${NOGPL_PREFIX}/${STAGE}/\${aws:PrincipalTag/build_commit}/*",
+        "${EPHEMERAL_ARN}/${EPHEMERAL_PREFIX}/${STAGE}/\${aws:PrincipalTag/build_commit}/*"
       ],
       "Condition": { "StringEquals": { "s3:if-none-match": "*" } }
     },
     {
-      "Sid": "LatestPointerPuts",
+      "Sid": "ReadStagingForRetryChecks",
+      "Effect": "Allow",
+      "Action": ["s3:GetObject"],
+      "Resource": [
+        "${BUCKET_ARN}/${PREFIX}/${STAGE}/*",
+        "${NOGPL_ARN}/${NOGPL_PREFIX}/${STAGE}/*",
+        "${EPHEMERAL_ARN}/${EPHEMERAL_PREFIX}/${STAGE}/*"
+      ]
+    }
+  ]
+}
+EOF
+aws iam put-role-policy --role-name "${ROLE_STAGE}" \
+    --policy-name stage --policy-document "file://${WORK}/stage-policy.json"
+
+# ---- julia-ci-publish (TRUSTED) ----------------------------------------------
+# Sign + promote staged artifacts to the final release locations. Assumable
+# only from the julia-publish pipeline slug (PR builds disabled there).
+
+trust_policy "${WORK}/publish-trust.json" "publish_*" "${PUBLISH_SUB_PATTERNS[@]}"
+ensure_role "${ROLE_PUBLISH}" "${WORK}/publish-trust.json" \
+    "Buildkite publish: sign + promote staged artifacts to release (via OIDC)"
+
+cat > "${WORK}/publish-policy.json" <<EOF
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ReadStagedArtifacts",
+      "Effect": "Allow",
+      "Action": ["s3:GetObject"],
+      "Resource": [
+        "${BUCKET_ARN}/${PREFIX}/${STAGE}/*",
+        "${NOGPL_ARN}/${NOGPL_PREFIX}/${STAGE}/*",
+        "${EPHEMERAL_ARN}/${EPHEMERAL_PREFIX}/${STAGE}/*"
+      ]
+    },
+    {
+      "Sid": "WriteOnceToFinalLocations",
+      "Effect": "Allow",
+      "Action": ["s3:PutObject", "s3:PutObjectAcl"],
+      "Resource": [
+        "${BUCKET_ARN}/${PREFIX}/*",
+        "${NOGPL_ARN}/${NOGPL_PREFIX}/*",
+        "${EPHEMERAL_ARN}/${EPHEMERAL_PREFIX}/*"
+      ],
+      "Condition": { "StringEquals": { "s3:if-none-match": "*" } }
+    },
+    {
+      "Sid": "RepointLatestPointers",
       "Effect": "Allow",
       "Action": ["s3:PutObject", "s3:PutObjectAcl"],
       "Resource": [
         "${BUCKET_ARN}/${PREFIX}/*/julia-latest-*",
         "${BUCKET_ARN}/${PREFIX}/*/*/julia-latest-*",
         "${BUCKET_ARN}/${PREFIX}/*/*/*/julia-latest-*",
-        "${EPHEMERAL_ARN}/${EPHEMERAL_PREFIX}/*/julia-latest-*",
-        "${EPHEMERAL_ARN}/${EPHEMERAL_PREFIX}/*/*/julia-latest-*",
-        "${EPHEMERAL_ARN}/${EPHEMERAL_PREFIX}/*/*/*/julia-latest-*",
         "${NOGPL_ARN}/${NOGPL_PREFIX}/*/julia-latest-*",
         "${NOGPL_ARN}/${NOGPL_PREFIX}/*/*/julia-latest-*",
-        "${NOGPL_ARN}/${NOGPL_PREFIX}/*/*/*/julia-latest-*"
+        "${NOGPL_ARN}/${NOGPL_PREFIX}/*/*/*/julia-latest-*",
+        "${EPHEMERAL_ARN}/${EPHEMERAL_PREFIX}/*/julia-latest-*",
+        "${EPHEMERAL_ARN}/${EPHEMERAL_PREFIX}/*/*/julia-latest-*",
+        "${EPHEMERAL_ARN}/${EPHEMERAL_PREFIX}/*/*/*/julia-latest-*"
       ]
     },
     {
-      "Sid": "ReadForRetryChecks",
+      "Sid": "ReadFinalForRetryChecks",
       "Effect": "Allow",
       "Action": ["s3:GetObject"],
       "Resource": [
         "${BUCKET_ARN}/${PREFIX}/*",
-        "${EPHEMERAL_ARN}/${EPHEMERAL_PREFIX}/*",
-        "${NOGPL_ARN}/${NOGPL_PREFIX}/*"
+        "${NOGPL_ARN}/${NOGPL_PREFIX}/*",
+        "${EPHEMERAL_ARN}/${EPHEMERAL_PREFIX}/*"
       ]
     },
     {
@@ -131,71 +195,18 @@ cat > "${WORK}/upload-policy.json" <<EOF
         "${TARBALL_KEY_ARN}"
       ],
       "Condition": {
-        "StringLike": { "aws:PrincipalTag/step_key": "upload_*" }
+        "StringLike": { "aws:PrincipalTag/step_key": "publish_*" }
       }
     }
   ]
 }
 EOF
-aws iam put-role-policy --role-name "${ROLE_UPLOAD}" \
-    --policy-name upload --policy-document "file://${WORK}/upload-policy.json"
+aws iam put-role-policy --role-name "${ROLE_PUBLISH}" \
+    --policy-name publish --policy-document "file://${WORK}/publish-policy.json"
 
-# ---- julia-ci-upload-pr ------------------------------------------------------
+# ---- julia-ci-docs-deploy (TRUSTED) ------------------------------------------
 
-trust_policy "${WORK}/upload-pr-trust.json" "upload_*" "${PR_SUB_PATTERNS[@]}"
-ensure_role "${ROLE_UPLOAD_PR}" "${WORK}/upload-pr-trust.json" \
-    "Buildkite PR upload: write-once to bin/pr/<commit>/ only (via OIDC)"
-
-cat > "${WORK}/upload-pr-policy.json" <<EOF
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Sid": "WriteOncePutsToOwnCommitPath",
-      "Effect": "Allow",
-      "Action": ["s3:PutObject", "s3:PutObjectAcl"],
-      "Resource": [
-        "${BUCKET_ARN}/${PREFIX}/pr/\${aws:PrincipalTag/build_commit}/*",
-        "${NOGPL_ARN}/${NOGPL_PREFIX}/pr/\${aws:PrincipalTag/build_commit}/*"
-      ],
-      "Condition": { "StringEquals": { "s3:if-none-match": "*" } }
-    },
-    {
-      "Sid": "WriteOncePutsToEphemeralTestBucket",
-      "Effect": "Allow",
-      "Action": ["s3:PutObject", "s3:PutObjectAcl"],
-      "Resource": "${EPHEMERAL_ARN}/${EPHEMERAL_PREFIX}/*",
-      "Condition": { "StringEquals": { "s3:if-none-match": "*" } }
-    },
-    {
-      "Sid": "EphemeralLatestPointerPuts",
-      "Effect": "Allow",
-      "Action": ["s3:PutObject", "s3:PutObjectAcl"],
-      "Resource": [
-        "${EPHEMERAL_ARN}/${EPHEMERAL_PREFIX}/*/julia-latest-*",
-        "${EPHEMERAL_ARN}/${EPHEMERAL_PREFIX}/*/*/julia-latest-*",
-        "${EPHEMERAL_ARN}/${EPHEMERAL_PREFIX}/*/*/*/julia-latest-*"
-      ]
-    },
-    {
-      "Sid": "ReadForRetryChecks",
-      "Effect": "Allow",
-      "Action": ["s3:GetObject"],
-      "Resource": [
-        "${BUCKET_ARN}/${PREFIX}/pr/*",
-        "${NOGPL_ARN}/${NOGPL_PREFIX}/pr/*",
-        "${EPHEMERAL_ARN}/${EPHEMERAL_PREFIX}/*"
-      ]
-    }
-  ]
-}
-EOF
-aws iam put-role-policy --role-name "${ROLE_UPLOAD_PR}" \
-    --policy-name upload-pr --policy-document "file://${WORK}/upload-pr-policy.json"
-
-# ---- julia-ci-docs-deploy ----------------------------------------------------
-
-trust_policy "${WORK}/docs-trust.json" "deploy_docs" "${RELEASE_SUB_PATTERNS[@]}"
+trust_policy "${WORK}/docs-trust.json" "deploy_docs" "${PUBLISH_SUB_PATTERNS[@]}"
 ensure_role "${ROLE_DOCS_DEPLOY}" "${WORK}/docs-trust.json" \
     "Buildkite docs deploy: SSH signing via KMS (aws-kms-pkcs11, via OIDC)"
 
@@ -255,6 +266,6 @@ aws iam put-role-policy --role-name "${ROLE_TOKENS}" \
 
 echo
 echo "Roles configured:"
-for role in "${ROLE_UPLOAD}" "${ROLE_UPLOAD_PR}" "${ROLE_DOCS_DEPLOY}" "${ROLE_TOKENS}"; do
+for role in "${ROLE_STAGE}" "${ROLE_PUBLISH}" "${ROLE_DOCS_DEPLOY}" "${ROLE_TOKENS}"; do
     aws iam get-role --role-name "${role}" --query Role.Arn --output text
 done

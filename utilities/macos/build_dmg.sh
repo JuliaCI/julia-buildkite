@@ -11,7 +11,7 @@ DMG_NAME="${UPLOAD_FILENAME?}.dmg"
 
 # The Developer ID private key lives in AWS KMS; signing + notarization
 # happen via rcodesign (see utilities/macos/rcodesign/). AWS credentials
-# must already be available (source utilities/aws_oidc.sh upload).
+# must already be available (source utilities/aws_oidc.sh publish).
 MACOS_CODESIGN_KMS_KEY="${MACOS_CODESIGN_KMS_KEY:?}"
 NOTARY_API_KEY_FILE="${THIS_DIR}/notary_api_key.json"
 

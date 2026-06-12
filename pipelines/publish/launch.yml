@@ -1,0 +1,39 @@
+# Launched by the julia-publish pipeline. A single trusted step signs and
+# promotes every staged build to its final release location, then deploys
+# docs. This is the only place release secrets (KMS signing keys) are used.
+steps:
+  - group: "Publish"
+    steps:
+      - label: ":lock: publish all"
+        key: "publish_all"
+        # No in-pipeline build dependency: reads the unsigned tarballs from
+        # the commit-sha-gated staging area in S3 (written by the build
+        # pipeline). One job, all triplets.
+        concurrency: 1
+        concurrency_group: 'publish/julialangnightlies'
+        concurrency_method: eager
+        plugins:
+          - JuliaCI/external-buildkite#v1:
+              version: "./.buildkite-external-version"
+              repo_url: "https://github.com/JuliaCI/julia-buildkite"
+        timeout_in_minutes: 180
+        commands: "bash .buildkite/utilities/publish.sh"
+        agents:
+          # Requires an image carrying the full signing toolchain (rcodesign,
+          # InnoSetup + cross-platform Authenticode signer, gpg-via-KMS python,
+          # AWS CLI). See ops/README.md.
+          queue: "publish"
+          os: "linux"
+          arch: "x86_64"
+
+      - label: "deploy docs"
+        key: "deploy_docs"
+        plugins:
+          - JuliaCI/external-buildkite#v1:
+              version: "./.buildkite-external-version"
+              repo_url: "https://github.com/JuliaCI/julia-buildkite"
+        commands: "buildkite-agent pipeline upload .buildkite/pipelines/main/misc/deploy_docs.yml"
+        agents:
+          queue: "publish"
+          os: "linux"
+          arch: "x86_64"

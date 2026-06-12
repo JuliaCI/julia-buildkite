@@ -25,7 +25,7 @@ steps:
               # We always use `x86_64` here, as it doesn't matter what the compiler is for uploading
               image: "juliapackaging/package-windows-x86_64:${DOCKER_TAG?}"
               always-pull: true
-              command: ["bash", ".buildkite/utilities/upload_julia.sh"]
+              command: ["bash", ".buildkite/utilities/upload_julia.sh", "stage"]
               propagate-environment: true
               volumes:
                 # Mount buildkite-agent as well
