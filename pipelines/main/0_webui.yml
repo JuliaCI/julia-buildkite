@@ -1,10 +1,27 @@
-# This file represents what is put into the webUI.
-# It is purely for keeping track of the changes we make to the webUI configuration; modifying this file has no effect.
+# This file records the steps configured in the Buildkite webUI; modifying
+# this file has no effect -- paste it into the webUI when it changes.
 #
-# There is no secrets management here anymore: jobs that need credentials
-# obtain them at runtime via Buildkite OIDC (see utilities/aws_oidc.sh),
-# and AWS IAM decides what each job identity may do. Consequently there is
-# no distinction between "signed" and "unsigned" pipelines.
+# These steps are pasted VERBATIM into BOTH untrusted build pipelines:
+#
+#   julia-pr  -- builds pull requests, and nothing else. Settings:
+#                  * Trigger builds after pushing code: OFF
+#                  * Build pull requests: ON (including from third-party
+#                    forked repositories)
+#   julia-ci  -- builds trusted refs only. Settings:
+#                  * Trigger builds after pushing code: ON,
+#                    branch limit: master release-*
+#                  * Build tags: ON (v*)
+#                  * Build pull requests: OFF
+#                  * the nightly build schedule lives here
+#
+# Keeping the two configurations identical is deliberate: the only
+# difference in behavior is downstream, where trigger_publish.yml gates the
+# julia-publish trigger on `pipeline.slug == "julia-ci"`. Neither pipeline
+# holds any secrets or signing rights: jobs obtain credentials at runtime
+# via Buildkite OIDC (see utilities/aws_oidc.sh), and AWS IAM decides what
+# each job identity may do (PR builds: write-once staging uploads only).
+# The trusted signing/promotion steps run in julia-publish (see
+# pipelines/publish/0_webui.yml), never here.
 steps:
   - group: "Launch"
     steps:

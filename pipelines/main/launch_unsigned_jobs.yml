@@ -1,16 +1,16 @@
-# This file launches all the build jobs that _don't_ require secrets access.
-# These jobs can pass their output off to jobs that do require secrets access,
-# but those privileged steps require signing before they can be run.
+# This file launches all the build + test jobs. (The historical name is
+# from the cryptic era; no job here -- or anywhere in the build pipelines --
+# holds secrets anymore.)
 #
 # Yes, this is creating another layer of indirection; the flow now looks like:
 #
 #   [webui] -> launch_unsigned_builders.yml -> misc/llvmpasses.yml
 #
 # when we could theoretically just have the `webui` launch `misc/llvmpasses.yml`,
-# however this raises the bar for contributors to add new (unsigned) steps to
-# our CI configuration, so I'd rather live with an extra layer of indirection
-# and only need to touch the webui configuration when we need to alter
-# something about the privileged steps.
+# however this raises the bar for contributors to add new steps to our CI
+# configuration, so I'd rather live with an extra layer of indirection and
+# only need to touch the webui configuration when something about the
+# launch flow itself changes.
 
 steps:
   - group: "Build"

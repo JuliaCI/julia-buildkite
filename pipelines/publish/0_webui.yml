@@ -1,13 +1,15 @@
-# This file represents what is put into the julia-publish pipeline's webUI
-# configuration. It is for tracking changes only; editing it has no effect.
+# This file records the steps configured in the julia-publish pipeline's
+# webUI; modifying this file has no effect -- paste it into the webUI when
+# it changes.
 #
 # SECURITY: the julia-publish pipeline is the trust boundary. It MUST be
-# configured in Buildkite to:
-#   * NOT build pull requests (disable "Build pull requests" and "Build pull
-#     requests from third-party forked repositories").
-#   * Be branch-limited to: master release-* (and build tags v*).
-#   * Be triggered only by trusted release builds (a `trigger` step at the end
-#     of the build pipeline) and/or the canonical-repo push webhook.
+# configured in Buildkite with:
+#   * Trigger builds after pushing code: OFF
+#   * Build pull requests: OFF (including from third-party forked
+#     repositories)
+#   * Branch limiting: master release-* (and build tags v*)
+# Builds are created only by the `trigger` step at the end of julia-ci
+# (pipelines/main/trigger_publish.yml).
 # Because a pull request can never produce a build under this pipeline slug,
 # the slug itself is what the julia-oidc-publish / julia-oidc-docs-deploy IAM
 # roles trust -- not the (PR-spoofable) branch name. The publish jobs also
