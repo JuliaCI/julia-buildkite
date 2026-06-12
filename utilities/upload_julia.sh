@@ -80,7 +80,9 @@ if [[ "${OS}" == "macos" || "${OS}" == "macosnogpl" ]]; then
         "${JULIA_INSTALL_DIR}"
 
     echo "--- [mac] Update checksums for stdlib cachefiles"
-    "${JULIA_INSTALL_DIR}/bin/julia" .buildkite/utilities/update_stdlib_pkgimage_checksums.jl
+    # Cross mode: the freshly signed macOS binaries cannot run on this
+    # linux agent, so the host julia patches the target tree in place.
+    julia .buildkite/utilities/update_stdlib_pkgimage_checksums.jl "${JULIA_INSTALL_DIR}" dylib
 
     # Immediately re-compress that tarball for upload
     echo "--- [mac] Re-compress codesigned tarball"
@@ -99,53 +101,55 @@ elif [[ "${OS}" == "windows" || "${OS}" == "windowsnogpl" ]]; then
     mkdir -p "${JULIA_INSTALL_DIR}"
     tar zxf "${UPLOAD_FILENAME}.tar.gz" -C "${JULIA_INSTALL_DIR}" --strip-components 1
 
-    echo "--- [windows] install innosetup"
-    mkdir -p dist-extras
-    curl --fail -L -o 'dist-extras/is.exe' 'https://cache.julialang.org/https://www.jrsoftware.org/download.php/is.exe' || curl --fail -L -o 'dist-extras/is.exe' 'https://www.jrsoftware.org/download.php/is.exe'
-    chmod a+x dist-extras/is.exe
-    MSYS2_ARG_CONV_EXCL='*' ./dist-extras/is.exe \
-        /DIR="$(cygpath -w "$(pwd)/dist-extras/inno")" \
-        /PORTABLE=1 \
-        /CURRENTUSER \
-        /VERYSILENT
-    rm -f dist-extras/is.exe
-
-    echo "--- [windows] make exe"
-    # Codesigning happens in Azure Trusted Signing, authenticated via
-    # Buildkite OIDC workload identity federation (no client secret);
-    # see utilities/windows/codesign.sh.
+    echo "--- [windows] make exe (Inno Setup under Wine)"
+    # The whole Windows packaging path runs on this linux agent: Inno Setup
+    # is preinstalled in the publish image's Wine prefix (no installer
+    # download at publish time), and Authenticode signing happens host-side
+    # via jsign + Azure Trusted Signing (Buildkite OIDC workload identity
+    # federation, no client secret; see utilities/windows/codesign.sh).
+    # ISCC's compile-time SignTool (installer + embedded uninstaller)
+    # bridges back to the host signer through wine_signtool.cmd.
     codesign_script="$THIS_DIR/windows/codesign.sh"
     iss_file="$THIS_DIR/windows/build-installer.iss"
+    WINE="${WINE:-wine}"
+    ISCC_EXE="${ISCC_EXE:-C:\\Program Files (x86)\\Inno Setup 6\\ISCC.exe}"
+    export CODESIGN_SH="${codesign_script}"
 
-    MSYS2_ARG_CONV_EXCL='*' ./dist-extras/inno/iscc.exe \
+    "${WINE}" "${ISCC_EXE}" \
         /DAppVersion="${JULIA_VERSION}" \
-        /DSourceDir="$(cygpath -w "$(pwd)/${JULIA_INSTALL_DIR}")" \
-        /DRepoDir="$(cygpath -w "$(pwd)")" \
+        /DSourceDir="$("${WINE}" winepath -w "$(pwd)/${JULIA_INSTALL_DIR}")" \
+        /DRepoDir="$("${WINE}" winepath -w "$(pwd)")" \
         /F"${UPLOAD_FILENAME}" \
-        /O"$(cygpath -w "$(pwd)")" \
+        /O"$("${WINE}" winepath -w "$(pwd)")" \
         /Dsign=true \
-        /Smysigntool="bash.exe '${codesign_script}' \$f" \
-        "$(cygpath -w "${iss_file}")"
+        /Smysigntool="cmd.exe /c $("${WINE}" winepath -w "${THIS_DIR}/windows/wine_signtool.cmd") \$f" \
+        "$("${WINE}" winepath -w "${iss_file}")"
+
+    # Tripwire: if the Wine->host signing bridge failed silently, the
+    # installer would come out unsigned; refuse to publish it.
+    echo "--- [windows] Verify the installer is Authenticode-signed"
+    python3 "$THIS_DIR/windows/check_signed.py" "${UPLOAD_FILENAME}.exe"
 
     # Add the `.exe` to our upload targets
     UPLOAD_EXTENSIONS+=( "exe" )
 
-    # Next, directly codesign every executable file in the install dir
+    # Next, directly codesign every PE file in the install dir
     echo "--- [windows] Codesign everything in the install directory"
     "${codesign_script}" "${JULIA_INSTALL_DIR}"
 
     echo "--- [windows] Update checksums for stdlib cachefiles"
-    "${JULIA_INSTALL_DIR}/bin/julia" .buildkite/utilities/update_stdlib_pkgimage_checksums.jl
+    # Cross mode: the signed Windows binaries cannot run on this linux
+    # agent, so the host julia patches the target tree in place.
+    julia .buildkite/utilities/update_stdlib_pkgimage_checksums.jl "${JULIA_INSTALL_DIR}" dll
 
     # Immediately re-compress that tarball for upload
     echo "--- [windows] Re-compress codesigned tarball"
     rm -f "${UPLOAD_FILENAME}.tar.gz"
     tar zcf "${UPLOAD_FILENAME}.tar.gz" "${JULIA_INSTALL_DIR}"
 
-    # Use 7z to create a `.zip` file to upload as well
+    # Use 7z (p7zip) to create a `.zip` file to upload as well
     echo "--- [windows] make zip"
-    PATH="${JULIA_INSTALL_DIR}/libexec:${JULIA_INSTALL_DIR}/libexec/julia:${PATH}" \
-    7z.exe a "${UPLOAD_FILENAME}.zip" "$(cygpath -w "$(pwd)/${JULIA_INSTALL_DIR}")"
+    7z a "${UPLOAD_FILENAME}.zip" "${JULIA_INSTALL_DIR}"
     UPLOAD_EXTENSIONS+=( "zip" )
 fi
 

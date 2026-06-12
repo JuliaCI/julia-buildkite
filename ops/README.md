@@ -81,10 +81,12 @@ depends on it):
   which aborts unless `BUILDKITE_COMMIT` is reachable from a protected ref
   of the canonical upstream — so even a mis-triggered build cannot publish.
 
-The publish step runs on a `queue: publish` agent whose image must carry the
-full signing toolchain: `rcodesign` (cross-platform Apple signing + dmg +
-notarize), InnoSetup + a cross-platform Authenticode signer (e.g. jsign /
-azuresigntool) for Windows, the KMS-GPG python signer, and the AWS CLI.
+The publish step runs on a single linux `queue: publish` agent: every
+signature is remote-key (KMS / Trusted Signing) and all packaging tooling
+is ported to linux (see "Publish image prerequisites" below). The only
+artifact that still requires a Mac is the one-time .app launcher skeleton
+(AppleScript can only be compiled by `osacompile`), which is committed to
+this repository.
 
 ## Trust model
 
@@ -194,10 +196,15 @@ are Terraform variables with the production defaults):
      deploy key with write access on JuliaLang/docs.julialang.org.
    * Ensure the `aws_uploader` rootfs image (JuliaCI/rootfs-images)
      ships `aws_kms_pkcs11.so` (https://github.com/JackOfMostTrades/aws-kms-pkcs11).
-8. Build + publish rcodesign binaries (on a macOS machine):
-   * `utilities/macos/rcodesign/build_rcodesign.sh` (per arch)
-   * `./30_upload_tools.sh <binary> <arch>`; update the pinned sha256s in
+8. Build + publish the patched rcodesign binary (on any x86_64 linux
+   machine -- the publish job runs on linux):
+   * `utilities/macos/rcodesign/build_rcodesign.sh`
+   * `./30_upload_tools.sh <binary>`; update the pinned sha256 in
      `utilities/macos/get_rcodesign.sh`.
+   And the one Mac-only artifact, the .app launcher skeleton (only needs
+   redoing if `contrib/mac/app/startup.applescript` ever changes):
+   * `./31_build_app_skeleton.sh /path/to/julia-checkout` (on a Mac) and
+     commit `utilities/macos/julia-app-skeleton.tar.gz`.
 9. `terraform -chdir=ops/terraform/azure apply -var azure_app_id=<client-id>`
    (with Azure credentials that may manage the Trusted Signing app
    registration) — federated credentials for Windows Trusted Signing
@@ -228,7 +235,24 @@ are Terraform variables with the production defaults):
   Test Analytics token from SSM itself). This one is soft: test_julia.sh
   skips the analytics upload with a warning when `aws` is missing.
 * `aws_kms_pkcs11.so` in the `aws_uploader` rootfs (docs deploy).
-* python3 (stdlib only) on publish agents for `kms_gpg_sign.py`.
+
+### Publish image prerequisites (linux, `queue: publish`)
+
+The single publish step signs and packages for every OS on linux:
+
+* AWS CLI; python3 (stdlib only; `kms_gpg_sign.py`, plist editing, PE
+  signature checks); a host julia (provided by the JuliaCI/julia plugin;
+  patches pkgimage checksums in the foreign install trees).
+* macOS: `rcodesign` is fetched at runtime (pinned sha256, see
+  `utilities/macos/get_rcodesign.sh`); for the `.dmg`: `mkfs.hfsplus`
+  (hfsprogs) and the `hfsplus` + `dmg` tools from
+  [mozilla/libdmg-hfsplus](https://github.com/mozilla/libdmg-hfsplus)
+  (the same tools Mozilla uses to package Firefox DMGs on linux; the
+  mozilla fork carries the `symlink` and `attr` subcommands we use).
+* Windows: Wine (64-bit) with Inno Setup 6 installed in the prefix at
+  `C:\Program Files (x86)\Inno Setup 6` (or set `ISCC_EXE`); `jsign`
+  >= 6.0 on PATH (Azure Trusted Signing storetype) + a JRE; `7z` (p7zip)
+  for the .zip.
 
 ## Notes
 

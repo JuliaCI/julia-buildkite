@@ -16,12 +16,20 @@ steps:
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
+          - JuliaCI/julia#v1:
+              # A HOST julia, used to patch the pkgimage checksums inside
+              # the (foreign-platform) signed install trees -- the target
+              # binaries cannot run here. Not the julia being published.
+              persist_depot_dirs: packages,artifacts,compiled
+              version: '1.10' # GREP_ME: Keep this updated to LTS. Do not set it to '1' or 'stable' or 'latest'.
         timeout_in_minutes: 180
         commands: "bash .buildkite/utilities/publish.sh"
         agents:
-          # Requires an image carrying the full signing toolchain (rcodesign,
-          # InnoSetup + cross-platform Authenticode signer, gpg-via-KMS python,
-          # AWS CLI). See ops/README.md.
+          # Requires an image carrying the full (linux) signing/packaging
+          # toolchain: rcodesign; Wine + Inno Setup (in the prefix) + jsign
+          # + p7zip for Windows; mkfs.hfsplus + mozilla/libdmg-hfsplus
+          # (hfsplus, dmg) for the .dmg; python3; the AWS CLI.
+          # See ops/README.md.
           queue: "publish"
           os: "linux"
           arch: "x86_64"

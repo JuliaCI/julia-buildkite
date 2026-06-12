@@ -8,12 +8,13 @@
 # KMS) and promoting each from the commit-sha-gated staging path to the
 # canonical locations.
 #
-# A single step (rather than one job per platform) is feasible because all
-# signing is now remote-key (KMS / Trusted Signing) and rcodesign signs
-# Apple artifacts cross-platform. This step must therefore run on an agent
-# whose image carries the full signing/packaging toolchain (rcodesign;
-# InnoSetup + a cross-platform Authenticode signer for Windows; gpg-via-KMS
-# python; the AWS CLI). See ops/README.md.
+# A single LINUX step (rather than one job per platform) is feasible
+# because all signing is remote-key (KMS / Trusted Signing) and every
+# packaging tool is linux-capable: rcodesign signs/notarizes Apple
+# artifacts cross-platform, the .dmg is built with mozilla/libdmg-hfsplus,
+# the Windows installer is compiled by Inno Setup under Wine with
+# Authenticode signatures from jsign, and pkgimage checksums are patched
+# by a host julia. See "Publish image prerequisites" in ops/README.md.
 set -euo pipefail
 
 # The set of arches to publish. Mirrors what the build pipeline staged.
