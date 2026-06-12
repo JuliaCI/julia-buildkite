@@ -24,7 +24,7 @@ steps:
           # upload jobs, run inside the `aws_uploader` rootfs, which exists
           # to provide aws/git/ssh.
           rootfs_url: "https://github.com/JuliaCI/rootfs-images/releases/download/v8.1/aws_uploader.x86_64.tar.gz"
-          rootfs_treehash: "610c5058b455426f59c8c2fd2648aca31b367a13"
+          rootfs_treehash: "c031b94d209e3e86507aaa9998c1fa3544f32c72"
           uid: 1000
           gid: 1000
           workspaces:
