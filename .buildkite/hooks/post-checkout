@@ -30,12 +30,36 @@ if [[ "${DISABLE_UPSTREAM_CACHE}" != "true" ]]; then
     fi
 fi
 # Clear out current directory
-## On Windows we cannot remove ourselves, the post-checkout script
+# The deliciously complicated `rm` invocation is thanks to https://unix.stackexchange.com/a/77313/29688
 if [[ "${OSTYPE:-}" == "msys"* || "${OSTYPE:-}" == "cygwin"* ]]; then
-    mv -f .buildkite/hooks/post-checkout "../post-checkout-running.$$"
+    # On Windows a just-checked-out file is intermittently still held open by
+    # another process *without* FILE_SHARE_DELETE, so `rm` dies on
+    # `.buildkite/hooks/post-checkout` with "Device or resource busy".  The
+    # holder is transient (build jobs that spend ~2.5 min cloning the Julia
+    # mirror first always get past it), and `rm` deletes everything it CAN on
+    # each pass, so just retry until the file is gone.  We can't tolerate a
+    # leftover: a non-empty `.buildkite/` makes the external-buildkite plugin's
+    # later `git clone ... .buildkite` fail.  (mv/rename of the file fares worse
+    # than delete here, so don't go that route.)
+    rm -rf ..?* .[!.]* * 2>/dev/null || true
+    if [[ -e .buildkite/hooks/post-checkout ]]; then
+        # One-shot diagnostic: who is holding it open?  (best-effort)
+        echo "--- post-checkout busy after first rm; handle holders:"
+        handle64.exe -accepteula -nobanner post-checkout 2>&1 \
+            || handle.exe -accepteula -nobanner post-checkout 2>&1 || true
+    fi
+    deadline=$(( SECONDS + 300 ))
+    while [[ -e .buildkite/hooks/post-checkout ]]; do
+        if (( SECONDS >= deadline )); then
+            echo "ERROR: .buildkite/hooks/post-checkout still held open after 300s" >&2
+            exit 1
+        fi
+        sleep 2
+        rm -rf ..?* .[!.]* * 2>/dev/null || true
+    done
+else
+    rm -rf ..?* .[!.]* *
 fi
-## The deliciously complicated `rm` invocation is thanks to https://unix.stackexchange.com/a/77313/29688
-rm -rf ..?* .[!.]* *
 
 # git clone, then force checkout the given gitref
 UPSTREAM_GITREF="$(buildkite-agent meta-data get --default "origin/${UPSTREAM_BRANCH}" BUILDKITE_JULIA_VERSION)"
