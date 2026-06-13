@@ -22,7 +22,7 @@ steps:
         echo "--- Build julia-debug runtime with TSAN"
         VERBOSE=1 contrib/tsan/build.sh ./tmp/test-tsan -j$${JULIA_CPU_THREADS:?} julia-src-debug
       agents:
-        queue: "test"
+        queue: "build"
         sandbox_capable: "true"
         os: "linux"
         arch: "x86_64"
