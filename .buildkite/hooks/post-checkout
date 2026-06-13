@@ -29,9 +29,12 @@ if [[ "${DISABLE_UPSTREAM_CACHE}" != "true" ]]; then
         git -C "${UPSTREAM_CACHE}" fetch
     fi
 fi
-
 # Clear out current directory
-# The deliciously complicated `rm` invocation is thanks to https://unix.stackexchange.com/a/77313/29688
+## On Windows we cannot remove ourselves, the post-checkout script
+if [[ "${OSTYPE:-}" == "msys"* || "${OSTYPE:-}" == "cygwin"* ]]; then
+    mv -f .buildkite/hooks/post-checkout "../post-checkout-running.$$"
+fi
+## The deliciously complicated `rm` invocation is thanks to https://unix.stackexchange.com/a/77313/29688
 rm -rf ..?* .[!.]* *
 
 # git clone, then force checkout the given gitref
