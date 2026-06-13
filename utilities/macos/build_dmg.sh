@@ -8,8 +8,9 @@
 #                   a Mac by ops/31_build_app_skeleton.sh; AppleScript can
 #                   only be compiled there)
 #   plutil      ->  python3 plistlib (stdlib)
-#   hdiutil     ->  mkfshfs + the `hfsplus` and `dmg` tools (all three
-#                   from mozilla/libdmg-hfsplus)
+#   hdiutil     ->  newfs_hfs (the `mkfs.hfsplus` from hfsprogs/diskdev_cmds)
+#                   to create the HFS+ filesystem, plus the `hfsplus` and `dmg`
+#                   tools from mozilla/libdmg-hfsplus to populate and convert it
 # Code signing and notarization were already linux-capable: rcodesign signs
 # cross-platform with the Developer ID key in AWS KMS, and notarization is
 # an App Store Connect API call (key also in KMS).
@@ -31,10 +32,11 @@ HFS_IMAGE="$(mktemp -u "${TMPDIR:-/tmp}/julia-dmg-XXXXXX.hfs")"
 MACOS_CODESIGN_KMS_KEY="${MACOS_CODESIGN_KMS_KEY:?}"
 NOTARY_API_KEY_FILE="${THIS_DIR}/notary_api_key.json"
 
-# Tools from mozilla/libdmg-hfsplus (must be in the publish image). We use
-# libdmg-hfsplus's own `mkfshfs` to create the HFS+ filesystem rather than
-# `mkfs.hfsplus` from hfsprogs, which was dropped from Debian after bullseye.
-MKFSHFS_TOOL="${MKFSHFS_TOOL:-mkfshfs}"
+# HFS+/DMG tools (must be in the publish image). `newfs_hfs` creates the HFS+
+# filesystem -- it is the `mkfs.hfsplus` from hfsprogs/diskdev_cmds, built from
+# source in the image because hfsprogs was dropped from Debian after bullseye.
+# `hfsplus` (populate) and `dmg` (convert to UDIF) come from libdmg-hfsplus.
+MKFSHFS_TOOL="${MKFSHFS_TOOL:-newfs_hfs}"
 HFSPLUS_TOOL="${HFSPLUS_TOOL:-hfsplus}"
 DMG_TOOL="${DMG_TOOL:-dmg}"
 
