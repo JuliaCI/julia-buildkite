@@ -67,7 +67,7 @@ steps:
               .buildkite/pipelines/main/platforms/build_windows.arches \
               .buildkite/pipelines/main/platforms/build_windows.yml
         agents:
-          queue: "launch"
+          queue: "build"
           os: "linux"
           arch: "x86_64" # prevent from running on PiBots
   - group: "Check"
@@ -169,7 +169,7 @@ steps:
               .buildkite/pipelines/main/platforms/build_macos.soft_fail.arches \
               .buildkite/pipelines/main/platforms/build_macos.yml
         agents:
-          queue: "launch"
+          queue: "build"
           os: "linux"
           arch: "x86_64" # prevent from running on PiBots
       - label: "Launch allowed-to-fail test jobs"
