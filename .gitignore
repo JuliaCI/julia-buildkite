@@ -30,3 +30,7 @@ __pycache__/
 /rootfs-images-7zip-PR.md
 /sandboxed-buildkite-agent-PR.md
 /sba/
+/.julia-ci-config-backup.yml
+/.julia-pr-config-backup.yml
+/rootfs-images-publish/
+/rootfs-images-publish-PR.md

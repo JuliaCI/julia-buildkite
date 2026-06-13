@@ -9,7 +9,7 @@
 #     repositories)
 #   * Branch limiting: master release-* (and build tags v*)
 # Builds are created only by the `trigger` step at the end of julia-ci
-# (pipelines/main/trigger_publish.yml).
+# (the inlined wait+trigger at the end of pipelines/main/launch_untrusted_builders.yml).
 # Because a pull request can never produce a build under this pipeline slug,
 # the slug itself is what the julia-oidc-publish / julia-oidc-docs-deploy IAM
 # roles trust -- not the (PR-spoofable) branch name. The publish jobs also

@@ -220,3 +220,31 @@ steps:
           queue: "launch"
           os: "linux"
           arch: "x86_64" # prevent from running on PiBots
+
+  # Barrier + trigger of the trusted julia-publish pipeline.
+  #
+  # This wait + trigger are INLINED here on purpose -- in the *same* pipeline
+  # upload as the Build/Check/Test/Allow-Fail groups above -- so the `wait`
+  # reliably barriers all of their dynamically-uploaded jobs. Previously the
+  # wait lived in a separately-uploaded file and raced the build jobs (it
+  # ended up positioned before them), so the trigger fired immediately,
+  # before anything was built or staged.
+  #
+  # Coverage is launched by a *separate* upload (launch_coverage.yml) and is
+  # therefore NOT behind this barrier -- a long scheduled coverage run never
+  # delays publish.
+  #
+  # The `if:` restricts the trigger to julia-ci. julia-pr (pull requests)
+  # never triggers publish; this is layered with julia-publish not building
+  # PRs at all, its IAM trust being pinned to the julia-publish pipeline +
+  # cluster UUIDs, the cross-cluster trigger rule (commit/branch must match),
+  # and verify_trusted_commit.sh in the publish jobs.
+  - wait: ~
+
+  - trigger: "julia-publish"
+    label: ":rocket: trigger publish"
+    if: pipeline.slug == "julia-ci"
+    build:
+      commit: "${BUILDKITE_COMMIT}"
+      branch: "${BUILDKITE_BRANCH}"
+      message: "publish: ${BUILDKITE_MESSAGE}"
