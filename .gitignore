@@ -28,3 +28,5 @@ __pycache__/
 /juliaup/
 /juliaup-PR.md
 /rootfs-images-7zip-PR.md
+/sandboxed-buildkite-agent-PR.md
+/sba/
