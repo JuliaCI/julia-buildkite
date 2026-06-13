@@ -8,8 +8,8 @@
 #                   a Mac by ops/31_build_app_skeleton.sh; AppleScript can
 #                   only be compiled there)
 #   plutil      ->  python3 plistlib (stdlib)
-#   hdiutil     ->  mkfs.hfsplus (hfsprogs) + the `hfsplus` and `dmg` tools
-#                   from mozilla/libdmg-hfsplus
+#   hdiutil     ->  mkfshfs + the `hfsplus` and `dmg` tools (all three
+#                   from mozilla/libdmg-hfsplus)
 # Code signing and notarization were already linux-capable: rcodesign signs
 # cross-platform with the Developer ID key in AWS KMS, and notarization is
 # an App Store Connect API call (key also in KMS).
@@ -31,7 +31,10 @@ HFS_IMAGE="$(mktemp -u "${TMPDIR:-/tmp}/julia-dmg-XXXXXX.hfs")"
 MACOS_CODESIGN_KMS_KEY="${MACOS_CODESIGN_KMS_KEY:?}"
 NOTARY_API_KEY_FILE="${THIS_DIR}/notary_api_key.json"
 
-# Tools from mozilla/libdmg-hfsplus (must be in the publish image)
+# Tools from mozilla/libdmg-hfsplus (must be in the publish image). We use
+# libdmg-hfsplus's own `mkfshfs` to create the HFS+ filesystem rather than
+# `mkfs.hfsplus` from hfsprogs, which was dropped from Debian after bullseye.
+MKFSHFS_TOOL="${MKFSHFS_TOOL:-mkfshfs}"
 HFSPLUS_TOOL="${HFSPLUS_TOOL:-hfsplus}"
 DMG_TOOL="${DMG_TOOL:-dmg}"
 
@@ -88,7 +91,7 @@ function create_dmg() {
     local size_mb
     size_mb="$(( $(du -sm "${DMG_PATH}" | cut -f1) * 11 / 10 + 64 ))"
     truncate -s "${size_mb}M" "${HFS_IMAGE}"
-    mkfs.hfsplus -v "${VOLUME_NAME}" "${HFS_IMAGE}"
+    "${MKFSHFS_TOOL}" -v "${VOLUME_NAME}" "${HFS_IMAGE}"
 
     "${HFSPLUS_TOOL}" "${HFS_IMAGE}" addall "${DMG_PATH}"
     "${HFSPLUS_TOOL}" "${HFS_IMAGE}" symlink "/Applications" "/Applications"
