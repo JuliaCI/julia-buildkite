@@ -99,7 +99,7 @@ steps:
             echo "./JuliaSyntax/Project.toml file does NOT exist. Will not launch JuliaSyntax test jobs"
           fi
         agents:
-          queue: "launch"
+          queue: "build"
           os: "linux"
           arch: "x86_64" # prevent from running on PiBots
   - group: "Test"
