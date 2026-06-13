@@ -23,7 +23,7 @@ steps:
     steps:
       - label: "Launch publish jobs"
         agents:
-          queue: "publish"
+          queue: "default"
           os: "linux"
         plugins:
           - JuliaCI/external-buildkite#v1:

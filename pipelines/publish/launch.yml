@@ -30,7 +30,7 @@ steps:
           # + p7zip for Windows; mkfs.hfsplus + mozilla/libdmg-hfsplus
           # (hfsplus, dmg) for the .dmg; python3; the AWS CLI.
           # See ops/README.md.
-          queue: "publish"
+          queue: "default"
           os: "linux"
           arch: "x86_64"
         env:
@@ -50,6 +50,6 @@ steps:
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
         commands: "buildkite-agent pipeline upload .buildkite/pipelines/main/misc/deploy_docs.yml"
         agents:
-          queue: "publish"
+          queue: "default"
           os: "linux"
           arch: "x86_64"
