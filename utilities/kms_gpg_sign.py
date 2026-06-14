@@ -34,6 +34,7 @@ Only RSA signing keys and SHA-256 are supported.
 
 import argparse
 import base64
+import datetime
 import hashlib
 import os
 import struct
@@ -330,6 +331,76 @@ def build_rsa_key_body(n, e, timestamp):
     )
 
 
+# ---- Deriving the public-key identity from the KMS key's public half --------
+# These let the signer reconstruct the OpenPGP public key (and thus the issuer
+# fingerprint embedded in signatures) at runtime from `kms:GetPublicKey`,
+# instead of reading a committed .asc -- useful for throwaway/test keys where
+# publishing a public key block is pointless. ops/20_export_gpg_pubkey.py reuses
+# these to build the full published certificate for the production key.
+
+def parse_der(data, offset=0):
+    """Parse one DER TLV; returns (tag, value, next_offset)."""
+    tag = data[offset]
+    length = data[offset + 1]
+    offset += 2
+    if length & 0x80:
+        nbytes = length & 0x7F
+        length = int.from_bytes(data[offset : offset + nbytes], "big")
+        offset += nbytes
+    return tag, data[offset : offset + length], offset + length
+
+
+def rsa_components_from_spki(der):
+    """Extract (n, e) from a SubjectPublicKeyInfo DER blob."""
+    _, spki, _ = parse_der(der)                  # SEQUENCE SubjectPublicKeyInfo
+    _, _, off = parse_der(spki)                  # SEQUENCE AlgorithmIdentifier
+    tag, bits, _ = parse_der(spki, off)          # BIT STRING subjectPublicKey
+    if tag != 0x03 or bits[0] != 0:
+        raise ValueError("unexpected SPKI structure (not an RSA key?)")
+    _, rsa, _ = parse_der(bits[1:])              # SEQUENCE RSAPublicKey
+    tag_n, n_bytes, off = parse_der(rsa)         # INTEGER n
+    tag_e, e_bytes, _ = parse_der(rsa, off)      # INTEGER e
+    if tag_n != 0x02 or tag_e != 0x02:
+        raise ValueError("unexpected RSAPublicKey structure")
+    return int.from_bytes(n_bytes, "big"), int.from_bytes(e_bytes, "big")
+
+
+def kms_public_key(key_id):
+    """Fetch a KMS key's SubjectPublicKeyInfo DER via kms:GetPublicKey."""
+    out = subprocess.run(
+        ["aws", "kms", "get-public-key", "--key-id", key_id,
+         "--output", "text", "--query", "PublicKey"],
+        check=True, capture_output=True,
+    )
+    return base64.b64decode(out.stdout.strip())
+
+
+def local_public_key(key_path):
+    """SubjectPublicKeyInfo DER for a local RSA private key (testing only)."""
+    out = subprocess.run(
+        ["openssl", "rsa", "-in", key_path, "-pubout", "-outform", "DER"],
+        check=True, capture_output=True,
+    )
+    return out.stdout
+
+
+def parse_created(value):
+    """A unix timestamp, or a YYYY-MM-DD date interpreted as UTC midnight."""
+    try:
+        return int(value)
+    except ValueError:
+        dt = datetime.datetime.strptime(value, "%Y-%m-%d")
+        return int(dt.replace(tzinfo=datetime.timezone.utc).timestamp())
+
+
+def public_key_info_from_kms(key_id, timestamp, local_key=None):
+    """Reconstruct the PublicKeyInfo (fingerprint, n, e) from the KMS key's
+    public half plus a pinned creation timestamp -- no committed file."""
+    spki = local_public_key(local_key) if local_key else kms_public_key(key_id)
+    n, e = rsa_components_from_spki(spki)
+    return PublicKeyInfo(build_rsa_key_body(n, e, timestamp))
+
+
 def build_certificate(signer, key_body, uid, timestamp):
     """Build a minimal transferable public key (certificate): public key
     packet + user ID packet + positive self-certification (RFC 4880
@@ -376,8 +447,21 @@ def sign_file_detached(signer, pubkey, path, output_path=None):
 def main():
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--public-key", required=True,
-                        help="GPG public key file (armored or binary) of the signing key")
+    pubgroup = parser.add_mutually_exclusive_group(required=True)
+    pubgroup.add_argument("--public-key",
+                          help="GPG public key file (armored or binary) of the signing key")
+    pubgroup.add_argument("--public-key-from-kms", action="store_true",
+                          help="derive the signer's OpenPGP public key identity from the "
+                               "KMS key's public half (kms:GetPublicKey) at runtime instead "
+                               "of a committed file; requires --created. Useful for throwaway "
+                               "keys where publishing a public key block is pointless.")
+    parser.add_argument("--created",
+                        help="key creation time (unix timestamp or YYYY-MM-DD UTC) for "
+                             "--public-key-from-kms. Part of the fingerprint; defaults to 0 "
+                             "(irrelevant unless these signatures are verified against a "
+                             "published pubkey, in which case pin it to match it).")
+    parser.add_argument("--uid", default=None,
+                        help="(unused for signing; accepted for symmetry with the exporter)")
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--kms-key-id",
                        help="AWS KMS key ID/ARN/alias holding the signing key")
@@ -386,7 +470,17 @@ def main():
     parser.add_argument("files", nargs="+", help="files to sign (creates FILE.asc)")
     args = parser.parse_args()
 
-    pubkey = load_public_key(args.public_key)
+    if args.public_key_from_kms:
+        # The OpenPGP fingerprint covers the key creation timestamp, so deriving
+        # the key identity needs one. For a throwaway key whose pubkey is never
+        # published for verification the exact value is irrelevant, so it
+        # defaults to 0 (the epoch). Pin --created only if something must verify
+        # these signatures against a matching published pubkey.
+        created = parse_created(args.created) if args.created else 0
+        pubkey = public_key_info_from_kms(
+            args.kms_key_id, created, local_key=args.local_key)
+    else:
+        pubkey = load_public_key(args.public_key)
     print(f"Signing as key {pubkey.fingerprint.hex().upper()}")
 
     if args.kms_key_id:

@@ -59,7 +59,11 @@ steps:
           MACOS_CODESIGN_KMS_KEY: "alias/julia-macos-codesigning-test"
           MACOS_CODESIGN_CERT: ".buildkite/utilities/macos/developer_id_test.pem"
           TARBALL_SIGNING_KMS_KEY: "alias/julia-tarball-signing-test"
-          TARBALL_SIGNING_PUBKEY: ".buildkite/secrets/tarball_signing_test.pub.asc"
+          # Derive the GPG pubkey identity from KMS at runtime (kms:GetPublicKey)
+          # instead of committing a throwaway test pubkey. Empty PUBKEY selects
+          # derive mode; the key-creation timestamp defaults to 0 (irrelevant
+          # since nothing verifies these throwaway signatures).
+          TARBALL_SIGNING_PUBKEY: ""
           # The two signers with no non-production equivalent are skipped:
           # Windows Authenticode (Azure Trusted Signing) and macOS notarization
           # (Apple App Store Connect). The .dmg is still built and codesigned.

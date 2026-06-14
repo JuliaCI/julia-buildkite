@@ -246,12 +246,13 @@ macOS `.dmg` is still built and codesigned. All of it lives in
 2. `terraform apply` — creates the two test keys (`alias/julia-{tarball-signing,
    macos-codesigning}-test`), the `julialang-test-publish` bucket, and the
    `julia-oidc-publish-test` role (test keys + test bucket only, no write-once).
-3. Generate + commit the self-signed material (AWS creds with kms:Sign on the
-   test keys):
-   * `./20_export_gpg_pubkey.py --created <YYYY-MM-DD> --kms-key-id
-     alias/julia-tarball-signing-test -o secrets/tarball_signing_test.pub.asc`
+3. Generate + commit the macOS test cert (AWS creds with kms:Sign on the test
+   key, plus a built rcodesign):
    * `./32_gen_test_codesign_cert.sh` → `utilities/macos/developer_id_test.pem`
    * (macOS `.dmg` also needs the shared `.app` skeleton from step 8 above.)
+   The GPG test pubkey is NOT committed: the test pipeline sets
+   `TARBALL_SIGNING_PUBKEY=""` and derives the key identity from KMS
+   (`kms:GetPublicKey`) at runtime (`kms_gpg_sign.py --public-key-from-kms`).
 4. Seed staged input for a real master commit:
    `./seed_test_staging.sh <full-40-char-commit>` (defaults to the 3 Linux +
    2 macOS tokens). Use a real master commit so `verify_trusted_commit.sh`

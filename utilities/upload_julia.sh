@@ -33,8 +33,12 @@ source .buildkite/utilities/upload_to_s3.sh
 MACOS_CODESIGN_KMS_KEY="${MACOS_CODESIGN_KMS_KEY:-alias/julia-macos-codesigning}"
 TARBALL_SIGNING_KMS_KEY="${TARBALL_SIGNING_KMS_KEY:-alias/julia-tarball-signing}"
 # OpenPGP public key matching TARBALL_SIGNING_KMS_KEY (used only to derive the
-# issuer fingerprint embedded in the signature; see kms_gpg_sign.py).
-TARBALL_SIGNING_PUBKEY="${TARBALL_SIGNING_PUBKEY:-.buildkite/secrets/tarball_signing.pub.asc}"
+# issuer fingerprint embedded in the signature; see kms_gpg_sign.py). Defaults
+# to the committed production key. Set it to EMPTY (with TARBALL_SIGNING_PUBKEY_CREATED)
+# to instead derive the key identity from KMS (kms:GetPublicKey) at runtime --
+# the throwaway test stack does this so it need not commit a test pubkey.
+# (`-` not `:-` so an explicit empty value is honored.)
+TARBALL_SIGNING_PUBKEY="${TARBALL_SIGNING_PUBKEY-.buildkite/secrets/tarball_signing.pub.asc}"
 
 # Because `wait` returns the exit code of the waited-upon PID, this (with
 # `set -e`) ends execution if any backgrounded task failed.
@@ -168,8 +172,17 @@ echo "--- GPG-sign the tarball"
 # comes from AWS KMS, where the release signing key was generated and
 # never leaves. Signatures verify against the committed public key,
 # exported from KMS with ops/20_export_gpg_pubkey.py.
+if [[ -n "${TARBALL_SIGNING_PUBKEY}" ]]; then
+    GPG_PUBKEY_ARGS=( --public-key "${TARBALL_SIGNING_PUBKEY}" )
+else
+    # Derive the key identity from KMS at runtime (no committed pubkey). The
+    # creation timestamp defaults to 0 (irrelevant for a throwaway key); set
+    # TARBALL_SIGNING_PUBKEY_CREATED only to pin it to a published pubkey.
+    GPG_PUBKEY_ARGS=( --public-key-from-kms )
+    [[ -n "${TARBALL_SIGNING_PUBKEY_CREATED:-}" ]] && GPG_PUBKEY_ARGS+=( --created "${TARBALL_SIGNING_PUBKEY_CREATED}" )
+fi
 python3 .buildkite/utilities/kms_gpg_sign.py \
-    --public-key "${TARBALL_SIGNING_PUBKEY}" \
+    "${GPG_PUBKEY_ARGS[@]}" \
     --kms-key-id "${TARBALL_SIGNING_KMS_KEY}" \
     "${UPLOAD_FILENAME}.tar.gz"
 UPLOAD_EXTENSIONS+=( "tar.gz.asc" )

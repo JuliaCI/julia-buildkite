@@ -27,79 +27,20 @@ Requires AWS credentials with kms:GetPublicKey + kms:Sign on the key.
 """
 
 import argparse
-import base64
-import datetime
 import os
-import subprocess
 import sys
-import tempfile
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(SCRIPT_DIR, "..", "utilities"))
 
 import kms_gpg_sign as K  # noqa: E402
 
+# The DER/SPKI parsing, kms:GetPublicKey fetch, and --created parsing live in
+# kms_gpg_sign.py (shared with its --public-key-from-kms signing mode).
+
 DEFAULT_KMS_KEY = "alias/julia-tarball-signing"
 DEFAULT_UID = "Julia Release Signing Key <buildbot@julialang.org>"
 DEFAULT_OUTPUT = os.path.join(SCRIPT_DIR, "..", "secrets", "tarball_signing.pub.asc")
-
-
-def parse_der(data, offset=0):
-    """Parse one DER TLV; returns (tag, value, next_offset)."""
-    tag = data[offset]
-    length = data[offset + 1]
-    offset += 2
-    if length & 0x80:
-        nbytes = length & 0x7F
-        length = int.from_bytes(data[offset : offset + nbytes], "big")
-        offset += nbytes
-    return tag, data[offset : offset + length], offset + length
-
-
-def rsa_components_from_spki(der):
-    """Extract (n, e) from a SubjectPublicKeyInfo DER blob."""
-    _, spki, _ = parse_der(der)                  # SEQUENCE SubjectPublicKeyInfo
-    _, _, off = parse_der(spki)                  # SEQUENCE AlgorithmIdentifier
-    tag, bits, _ = parse_der(spki, off)          # BIT STRING subjectPublicKey
-    if tag != 0x03 or bits[0] != 0:
-        raise ValueError("unexpected SPKI structure (not an RSA key?)")
-    _, rsa, _ = parse_der(bits[1:])              # SEQUENCE RSAPublicKey
-    tag_n, n_bytes, off = parse_der(rsa)         # INTEGER n
-    tag_e, e_bytes, _ = parse_der(rsa, off)      # INTEGER e
-    if tag_n != 0x02 or tag_e != 0x02:
-        raise ValueError("unexpected RSAPublicKey structure")
-    return int.from_bytes(n_bytes, "big"), int.from_bytes(e_bytes, "big")
-
-
-def kms_public_key(key_id):
-    out = subprocess.run(
-        [
-            "aws", "kms", "get-public-key",
-            "--key-id", key_id,
-            "--output", "text",
-            "--query", "PublicKey",
-        ],
-        check=True,
-        capture_output=True,
-    )
-    return base64.b64decode(out.stdout.strip())
-
-
-def local_public_key(key_path):
-    out = subprocess.run(
-        ["openssl", "rsa", "-in", key_path, "-pubout", "-outform", "DER"],
-        check=True,
-        capture_output=True,
-    )
-    return out.stdout
-
-
-def parse_created(value):
-    try:
-        return int(value)
-    except ValueError:
-        dt = datetime.datetime.strptime(value, "%Y-%m-%d")
-        return int(dt.replace(tzinfo=datetime.timezone.utc).timestamp())
 
 
 def main():
@@ -120,16 +61,16 @@ def main():
                        help="local RSA private key PEM (testing only)")
     args = parser.parse_args()
 
-    timestamp = parse_created(args.created)
+    timestamp = K.parse_created(args.created)
 
     if args.local_key:
-        spki = local_public_key(args.local_key)
+        spki = K.local_public_key(args.local_key)
         signer = K.LocalOpensslSigner(args.local_key)
     else:
-        spki = kms_public_key(args.kms_key_id)
+        spki = K.kms_public_key(args.kms_key_id)
         signer = K.KmsSigner(args.kms_key_id)
 
-    n, e = rsa_components_from_spki(spki)
+    n, e = K.rsa_components_from_spki(spki)
     key_body = K.build_rsa_key_body(n, e, timestamp)
     pubkey, cert = K.build_certificate(signer, key_body, args.uid, timestamp)
     armored = K.armor(cert, "PUBLIC KEY BLOCK")
