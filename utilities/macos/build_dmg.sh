@@ -1,95 +1,65 @@
 #!/bin/bash
-# Build, sign and notarize the Julia .dmg -- on LINUX.
+# Build, sign and notarize the Julia .dmg -- on LINUX -- from a PRE-ASSEMBLED,
+# already-codesigned Julia.app.
 #
-# Apple-only tooling is replaced as follows (the same approach Mozilla uses
-# to package Firefox DMGs on linux):
-#   osacompile  ->  a pre-built .app skeleton tarball, committed at
-#                   utilities/macos/julia-app-skeleton.tar.gz (built once on
-#                   a Mac by ops/31_build_app_skeleton.sh; AppleScript can
-#                   only be compiled there)
-#   plutil      ->  python3 plistlib (stdlib)
-#   hdiutil     ->  newfs_hfs (the `mkfs.hfsplus` from hfsprogs/diskdev_cmds)
-#                   to create the HFS+ filesystem, plus the `hfsplus` and `dmg`
-#                   tools from mozilla/libdmg-hfsplus to populate and convert it
-# Code signing and notarization were already linux-capable: rcodesign signs
-# cross-platform with the Developer ID key in AWS KMS, and notarization is
-# an App Store Connect API call (key also in KMS).
+# Separation of concerns: the build_ step (on a Mac) assembles the Julia.app
+# with all of contrib/mac/app's tooling, and upload_julia.sh codesigns every
+# mach-o in it (launcher + bundled julia tree) before this runs. So this step
+# only wraps the signed .app in a signed, notarized .dmg -- it needs no
+# app-building tooling and no Mac.
+#
+# Apple-only packaging is replaced as follows (the same approach Mozilla uses to
+# package Firefox DMGs on linux):
+#   hdiutil  ->  newfs_hfs (the mkfs.hfsplus from hfsprogs/diskdev_cmds) to
+#                create the HFS+ filesystem, plus the `hfsplus` (populate) and
+#                `dmg` (compressed UDIF) tools from mozilla/libdmg-hfsplus.
+# Code signing and notarization are linux-capable: rcodesign signs with the
+# Developer ID key in AWS KMS, and notarization is an App Store Connect API
+# call (key also in KMS).
 
 set -euo pipefail
 
 THIS_DIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 
+# The already-codesigned Julia.app to package (see upload_julia.sh).
+APP_PATH="${APP_PATH:?APP_PATH must point at the (codesigned) Julia.app}"
+
 DMG_PATH="dmg"
-mkdir -p "${DMG_PATH}"
-APP_PATH="${DMG_PATH}/Julia-${MAJMIN?}.app"
 DMG_NAME="${UPLOAD_FILENAME?}.dmg"
 VOLUME_NAME="Julia-${TAR_VERSION?}"
 HFS_IMAGE="$(mktemp -u "${TMPDIR:-/tmp}/julia-dmg-XXXXXX.hfs")"
 
-# The Developer ID private key lives in AWS KMS; signing + notarization
-# happen via rcodesign (see utilities/macos/rcodesign/). AWS credentials
-# must already be available (source utilities/aws_oidc.sh publish).
+# The Developer ID private key lives in AWS KMS; the .dmg itself is signed via
+# rcodesign (see utilities/macos/rcodesign/). AWS credentials must already be
+# available (source utilities/aws_oidc.sh publish).
 MACOS_CODESIGN_KMS_KEY="${MACOS_CODESIGN_KMS_KEY:?}"
 NOTARY_API_KEY_FILE="${THIS_DIR}/notary_api_key.json"
 
-# HFS+/DMG tools (must be in the publish image). `newfs_hfs` creates the HFS+
-# filesystem -- it is the `mkfs.hfsplus` from hfsprogs/diskdev_cmds, built from
-# source in the image because hfsprogs was dropped from Debian after bullseye.
-# `hfsplus` (populate) and `dmg` (convert to UDIF) come from libdmg-hfsplus.
+# HFS+/DMG tools. newfs_hfs creates the HFS+ filesystem (the mkfs.hfsplus from
+# hfsprogs/diskdev_cmds, built from source in the publish image because hfsprogs
+# was dropped from Debian after bullseye); hfsplus (populate) and dmg (convert
+# to UDIF) come from libdmg-hfsplus.
 MKFSHFS_TOOL="${MKFSHFS_TOOL:-newfs_hfs}"
 HFSPLUS_TOOL="${HFSPLUS_TOOL:-hfsplus}"
 DMG_TOOL="${DMG_TOOL:-dmg}"
 
-APP_SKELETON="${THIS_DIR}/julia-app-skeleton.tar.gz"
-if [[ ! -f "${APP_SKELETON}" ]]; then
-    echo "ERROR: ${APP_SKELETON} not found." >&2
-    echo "Build it once on a Mac with ops/31_build_app_skeleton.sh and commit it." >&2
-    exit 1
+# Lay out the .dmg contents: the signed .app, the /Applications symlink (added
+# below; addall cannot carry it) and the volume icon (taken from inside the .app).
+rm -rf "${DMG_PATH}"
+mkdir -p "${DMG_PATH}"
+cp -aR "${APP_PATH}" "${DMG_PATH}/"
+if [[ -f "${APP_PATH}/Contents/Resources/julia.icns" ]]; then
+    cp "${APP_PATH}/Contents/Resources/julia.icns" "${DMG_PATH}/.VolumeIcon.icns"
 fi
 
-# Unpack the pre-compiled .app launcher skeleton (Contents/MacOS/applet +
-# the compiled AppleScript), then fill out its Info.plist for this release.
-tar -xzf "${APP_SKELETON}" -C "${DMG_PATH}"
-mv "${DMG_PATH}/Julia.app" "${APP_PATH}"
-
-python3 - "${APP_PATH}/Contents/Info.plist" <<EOF
-import plistlib, sys
-path = sys.argv[1]
-with open(path, "rb") as f:
-    plist = plistlib.load(f)
-plist["CFBundleDevelopmentRegion"] = "en"
-plist["CFBundleDisplayName"] = "Julia"
-plist["CFBundleIconFile"] = "julia.icns"
-plist["CFBundleIdentifier"] = "org.julialang.launcherapp"
-plist["CFBundleName"] = "Julia"
-plist["CFBundleShortVersionString"] = "${MAJMINPAT?}"
-plist["CFBundleVersion"] = "${JULIA_VERSION?}-${SHORT_COMMIT?}"
-plist["NSHumanReadableCopyright"] = "$(date '+%Y') The Julia Project"
-with open(path, "wb") as f:
-    plistlib.dump(plist, f)
-EOF
-
-# Add icon file for the application and the .dmg
-cp "contrib/mac/app/julia.icns" "${APP_PATH}/Contents/Resources/"
-cp "contrib/mac/app/julia.icns" "${DMG_PATH}/.VolumeIcon.icns"
-
-# Copy our signed tarball into the `.dmg`
-cp -aR "${JULIA_INSTALL_DIR?}" "${APP_PATH}/Contents/Resources/julia"
-
-# Sign the `.app` launcher
-"${THIS_DIR}/codesign.sh" \
-    --kms-key "${MACOS_CODESIGN_KMS_KEY}" \
-    "${APP_PATH}/Contents/MacOS/applet"
-
-# Create the `.dmg`: an HFS+ filesystem image filled with the staged
-# directory (plus the /Applications symlink, which `addall` cannot carry),
-# converted to a compressed UDIF. We define this in a function because we
-# need to do it again after stapling.
+# Create the `.dmg`: an HFS+ filesystem image filled with the staged directory,
+# converted to a compressed UDIF, then signed. We define this in a function
+# because we need to do it again after stapling.
 function create_dmg() {
     rm -f "${DMG_NAME}" "${HFS_IMAGE}"
 
-    # Size the filesystem to the contents plus some breathing room; this
-    # only affects the uncompressed filesystem, not the download size.
+    # Size the filesystem to the contents plus some breathing room; this only
+    # affects the uncompressed filesystem, not the download size.
     local size_mb
     size_mb="$(( $(du -sm "${DMG_PATH}" | cut -f1) * 11 / 10 + 64 ))"
     truncate -s "${size_mb}M" "${HFS_IMAGE}"
@@ -111,14 +81,12 @@ function create_dmg() {
 create_dmg
 
 # Notarize the `.dmg`. The App Store Connect API key also lives in KMS;
-# notary_api_key.json contains no secret material (see ops/21_import_notary_key.sh),
-# so it is committed in this repository in plaintext.
+# notary_api_key.json contains no secret material (see ops/21_import_notary_key.sh).
 #
 # The non-production publish test stack sets PUBLISH_SKIP_NOTARIZATION=1:
-# notarization is a hosted Apple App Store Connect round-trip with no
-# self-signable / KMS-faked equivalent, so the test pipeline skips it. The
-# `.dmg`/`.app` are still KMS-codesigned above; only the Apple notarize+staple
-# (and the post-staple .dmg rebuild) are skipped.
+# notarization is a hosted Apple round-trip with no self-signable equivalent, so
+# the test pipeline skips it. The .dmg is still KMS-signed; only the Apple
+# notarize + staple (and the post-staple rebuild) are skipped.
 if [[ "${PUBLISH_SKIP_NOTARIZATION:-0}" != "1" ]]; then
     RCODESIGN="$("${THIS_DIR}/get_rcodesign.sh")"
 
@@ -127,13 +95,11 @@ if [[ "${PUBLISH_SKIP_NOTARIZATION:-0}" != "1" ]]; then
         --wait \
         "${DMG_NAME}"
 
-    # Staple the notarization ticket to the app
-    "${RCODESIGN}" staple "${APP_PATH}"
-
-    # Re-build the .dmg from the app now that it's notarized
+    # Staple the notarization ticket to the app, then re-build the .dmg.
+    "${RCODESIGN}" staple "${DMG_PATH}/$(basename "${APP_PATH}")"
     create_dmg
 else
-    echo "Skipping notarization (PUBLISH_SKIP_NOTARIZATION=1): .dmg is KMS-codesigned but not notarized/stapled." >&2
+    echo "Skipping notarization (PUBLISH_SKIP_NOTARIZATION=1): .dmg is KMS-signed but not notarized/stapled." >&2
 fi
 
 # Cleanup things we created here

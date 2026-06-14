@@ -77,34 +77,42 @@ aws s3 cp "s3://${STAGING_TARGET}.tar.gz" "${UPLOAD_FILENAME}.tar.gz"
 # These are the extensions that we will always upload
 UPLOAD_EXTENSIONS=( "tar.gz" )
 
-# If we're on macOS, we need to re-sign the tarball
+# macOS: the build_ step staged an assembled (unsigned) Julia.app. Unpack it,
+# codesign everything in it (the launcher + the bundled julia tree), then derive
+# both products from the signed bundle: the .tar.gz (the tree) and the .dmg.
 if [[ "${OS}" == "macos" || "${OS}" == "macosnogpl" ]]; then
-    echo "--- [mac] Codesign tarball contents"
-    # The Developer ID private key lives in AWS KMS; every signature is
-    # a kms:Sign call performed by rcodesign (no keychain, no key file).
-    mkdir -p "${JULIA_INSTALL_DIR}"
-    tar zxf "${UPLOAD_FILENAME}.tar.gz" -C "${JULIA_INSTALL_DIR}" --strip-components 1
+    APP_NAME="Julia-${MAJMIN?}.app"
+    echo "--- [mac] Download + unpack the staged unsigned .app"
+    aws s3 cp "s3://${STAGING_TARGET}.app.tar.gz" "${UPLOAD_FILENAME}.app.tar.gz"
+    rm -rf "${APP_NAME}"
+    tar zxf "${UPLOAD_FILENAME}.app.tar.gz"
+    chmod -R u+w "${APP_NAME}"
+
+    echo "--- [mac] Codesign the .app"
+    # The Developer ID private key lives in AWS KMS; every signature is a
+    # kms:Sign call performed by rcodesign (no keychain, no key file).
     .buildkite/utilities/macos/codesign.sh \
         --kms-key "${MACOS_CODESIGN_KMS_KEY}" \
-        "${JULIA_INSTALL_DIR}"
+        "${APP_NAME}"
 
     echo "--- [mac] Update checksums for stdlib cachefiles"
-    # Cross mode: the freshly signed macOS binaries cannot run on this
-    # linux agent, so the host julia patches the target tree in place.
-    julia .buildkite/utilities/update_stdlib_pkgimage_checksums.jl "${JULIA_INSTALL_DIR}" dylib
+    # Cross mode: the freshly signed macOS binaries cannot run on this linux
+    # agent, so the host julia patches the bundled target tree in place.
+    julia .buildkite/utilities/update_stdlib_pkgimage_checksums.jl \
+        "${APP_NAME}/Contents/Resources/julia" dylib
 
-    # Immediately re-compress that tarball for upload
-    echo "--- [mac] Re-compress codesigned tarball"
+    echo "--- [mac] Repackage the signed tree as the .tar.gz product"
+    rm -rf "${JULIA_INSTALL_DIR}"
+    cp -aR "${APP_NAME}/Contents/Resources/julia" "${JULIA_INSTALL_DIR}"
     rm -f "${UPLOAD_FILENAME}.tar.gz"
     tar zcf "${UPLOAD_FILENAME}.tar.gz" "${JULIA_INSTALL_DIR}"
 
-    # Make a `.dmg` out of those files (signs via KMS; notarization is gated by
+    # Build the `.dmg` from the signed .app (notarization gated by
     # PUBLISH_SKIP_NOTARIZATION inside build_dmg.sh).
     echo "--- [mac] Build .dmg"
-    MACOS_CODESIGN_KMS_KEY="${MACOS_CODESIGN_KMS_KEY}" \
+    MACOS_CODESIGN_KMS_KEY="${MACOS_CODESIGN_KMS_KEY}" APP_PATH="${APP_NAME}" \
         .buildkite/utilities/macos/build_dmg.sh
 
-    # Add the `.dmg` to our upload targets
     UPLOAD_EXTENSIONS+=( "dmg" )
 elif [[ "${OS}" == "windows" || "${OS}" == "windowsnogpl" ]]; then
     echo "--- [windows] Extract pre-built Julia"

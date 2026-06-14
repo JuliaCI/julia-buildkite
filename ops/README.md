@@ -83,10 +83,11 @@ depends on it):
 
 The publish step runs on a single linux `queue: publish` agent: every
 signature is remote-key (KMS / Trusted Signing) and all packaging tooling
-is ported to linux (see "Publish image prerequisites" below). The only
-artifact that still requires a Mac is the one-time .app launcher skeleton
-(AppleScript can only be compiled by `osacompile`), which is committed to
-this repository.
+is ported to linux (see "Publish image prerequisites" below). The macOS
+Julia.app is assembled by the build_ step (`make -C contrib/mac/app`, which
+already runs on a Mac so `osacompile` is available) and staged unsigned; the
+publish step only codesigns it and wraps it in the `.dmg`, so no Mac is
+needed there.
 
 ## Trust model
 
@@ -203,10 +204,9 @@ are Terraform variables with the production defaults):
    * `utilities/macos/rcodesign/build_rcodesign.sh`
    * `./30_upload_tools.sh <binary>`; update the pinned sha256 in
      `utilities/macos/get_rcodesign.sh`.
-   And the one Mac-only artifact, the .app launcher skeleton (only needs
-   redoing if `contrib/mac/app/startup.applescript` ever changes):
-   * `./31_build_app_skeleton.sh /path/to/julia-checkout` (on a Mac) and
-     commit `utilities/macos/julia-app-skeleton.tar.gz`.
+   (The macOS Julia.app is built + staged by the build_ step on the Mac
+   builder; the publish step only codesigns + packages it, so there is no
+   committed `.app` skeleton anymore.)
 9. `terraform -chdir=ops/terraform/azure apply -var azure_app_id=<client-id>`
    (with Azure credentials that may manage the Trusted Signing app
    registration) — federated credentials for Windows Trusted Signing
@@ -249,19 +249,19 @@ macOS `.dmg` is still built and codesigned. All of it lives in
 3. Generate + commit the macOS test cert (AWS creds with kms:Sign on the test
    key, plus a built rcodesign):
    * `./32_gen_test_codesign_cert.sh` → `utilities/macos/developer_id_test.pem`
-   * (macOS `.dmg` also needs the shared `.app` skeleton from step 8 above.)
    The GPG test pubkey is NOT committed: the test pipeline sets
    `TARBALL_SIGNING_PUBKEY=""` and derives the key identity from KMS at runtime
    (`kms_gpg_sign.py --public-key-from-kms`, using `kms:GetPublicKey` for the
    RSA public half and `kms:DescribeKey` for the key's creation date).
-4. Seed staged input for a real master commit:
-   `./seed_test_staging.sh <full-40-char-commit>` (defaults to the 3 Linux +
-   2 macOS tokens). Use a real master commit so `verify_trusted_commit.sh`
-   passes.
-5. Trigger a `julia-publish-test-nosecrets` build on that commit and watch it
-   download → KMS-sign (test keys) → promote into `julialang-test-publish`.
-   Re-run freely: the test role has no write-once condition. Tear down by
-   deleting `ops/terraform/test_publish.tf` (test keys have no prevent_destroy).
+4. Stage real input: run a `julia-ci` (or `julia-pr`) build so it stages the
+   unsigned tarballs (and the unsigned macOS Julia.app) for some commit into
+   its ephemeral bucket. The test pipeline reads `STAGING_BUCKET`
+   (`julialang-ephemeral-ci`, public-read) and only PROMOTES to the test
+   bucket, so no seeding is needed.
+5. Trigger a `julia-publish-test-nosecrets` build on that same commit and watch
+   it download the staged artifacts → KMS-sign (test keys) → build the `.dmg` →
+   promote into `julialang-test-publish`. Re-run freely (the test role has no
+   write-once condition). Tear down by deleting `ops/terraform/test_publish.tf`.
 
 ## Agent/rootfs prerequisites
 

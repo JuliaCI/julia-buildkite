@@ -128,3 +128,17 @@ source .buildkite/utilities/aws_oidc.sh stage
 source .buildkite/utilities/upload_to_s3.sh
 # The staging buckets disable object ACLs (public read via bucket policy)
 UPLOAD_TO_S3_ACL=none upload_to_s3 "${UPLOAD_FILENAME}.tar.gz" "${STAGING_TARGET}.tar.gz"
+
+# macOS: assemble the Julia.app here and stage it too. The build runs on a Mac,
+# so contrib/mac/app's tooling (osacompile, etc.) is available; the trusted
+# publish step then only has to codesign + repackage the .app into the signed
+# .dmg -- it needs no app-building tools and no Mac. The .app is staged
+# UNSIGNED (MACOS_CODESIGN_IDENTITY is unset) under a separate key; the tree
+# tarball above is unchanged (test jobs still consume it).
+if [[ "${OS}" == "macos" || "${OS}" == "macosnogpl" ]]; then
+    echo "--- [mac] Assemble the unsigned Julia.app"
+    MACOS_CODESIGN_IDENTITY="" ${MAKE} -C contrib/mac/app "dmg/Julia-${MAJMIN?}.app"
+    tar zcf "${UPLOAD_FILENAME}.app.tar.gz" -C contrib/mac/app/dmg "Julia-${MAJMIN?}.app"
+    echo "--- [mac] Stage the unsigned .app to s3://${STAGING_TARGET}.app.tar.gz"
+    UPLOAD_TO_S3_ACL=none upload_to_s3 "${UPLOAD_FILENAME}.app.tar.gz" "${STAGING_TARGET}.app.tar.gz"
+fi
