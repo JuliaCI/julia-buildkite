@@ -53,6 +53,22 @@ while [ "$#" -gt 1 ]; do
 done
 TARGET="${1}"
 
+# True if $1 begins with a Mach-O magic (thin LE/BE 32/64-bit, or a fat/universal
+# archive). rcodesign signs Mach-O binaries (and bundles/dmgs) only; the bundle
+# tree also holds executable *non*-Mach-O files (scripts, .jl, .tbd, Makefiles
+# with the +x bit) that `find -perm -0111` matches. rcodesign rejects those with
+# "specified path is not of a recognized type"; they are plain data and need no
+# code signature, so we skip them (see the directory loop below).
+is_macho() {
+    local magic
+    magic="$(od -An -tx1 -N4 -- "${1}" 2>/dev/null | tr -d ' \n')"
+    case "${magic}" in
+        # MH_MAGIC/CIGAM (32), MH_MAGIC_64/CIGAM_64, FAT_MAGIC/CIGAM (+_64)
+        feedface|cefaedfe|feedfacf|cffaedfe|cafebabe|bebafeca|cafebabf|bfbafeca) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
 do_adhoc_codesign() {
     # Ad-hoc signing needs no key; use the system codesign as before.
     codesign --sign "-" \
@@ -143,7 +159,17 @@ elif [ -d "${TARGET}" ]; then
     # rather than silently swallowed (never ship a partially-signed bundle).
     STATUS_DIR="$(mktemp -d)"
     NUM_CODESIGNS=0
+    NUM_SKIPPED=0
     while IFS= read -r -d '' exe_file; do
+        # rcodesign (the KMS signer) only signs Mach-O; skip executable
+        # non-Mach-O files (scripts, .jl, .tbd, Makefiles, ...) that `find`
+        # matched -- they need no signature. The ad-hoc `codesign` signs them
+        # fine, so only filter on the KMS path.
+        if [ -n "${KMS_KEY}" ] && ! is_macho "${exe_file}"; then
+            echo "Skipping non-Mach-O file: ${exe_file}"
+            NUM_SKIPPED="$((NUM_SKIPPED + 1))"
+            continue
+        fi
         # Block until a worker slot frees up before launching the next signer.
         while (( "$(jobs -rp | wc -l)" >= MAX_JOBS )); do wait -n 2>/dev/null || true; done
         { do_codesign "${exe_file}" || touch "${STATUS_DIR}/fail.${NUM_CODESIGNS}"; } &
@@ -157,7 +183,7 @@ elif [ -d "${TARGET}" ]; then
         echo "ERROR: ${NUM_FAILED} of ${NUM_CODESIGNS} codesign operations failed" >&2
         exit 1
     fi
-    echo "Codesigned ${NUM_CODESIGNS} files"
+    echo "Codesigned ${NUM_CODESIGNS} files (skipped ${NUM_SKIPPED} non-Mach-O)"
 else
     echo "Given codesigning target '${TARGET}' not a file or directory!" >&2
     usage
