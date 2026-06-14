@@ -8,7 +8,7 @@ steps:
     steps:
       - label: "Unlock secrets, launch pipelines"
         agents:
-          queue: "julia"
+          queue: "launch"
           os: "linux"
         plugins:
           - JuliaCI/external-buildkite#v1:

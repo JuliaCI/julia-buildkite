@@ -27,6 +27,6 @@ steps:
               .buildkite/pipelines/main/misc/juliac/test_juliac_windows.arches \
               .buildkite/pipelines/main/misc/juliac/test_juliac_windows.yml
         agents:
-          queue: "test"
+          queue: "launch"
           os: "linux"
           arch: "x86_64"

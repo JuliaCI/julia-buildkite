@@ -39,7 +39,7 @@ steps:
                     - .buildkite/pipelines/scheduled/platforms/upload_windows.no_gpl.arches
         agents:
           cryptic_capable: "true"
-          queue: "build"
+          queue: "launch"
           os: "linux"
           arch: "x86_64" # prevent from running on PiBots
         env:

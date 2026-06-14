@@ -42,7 +42,7 @@ steps:
                     - .buildkite/pipelines/main/misc/upload_buildkite_results.yml
         agents:
           cryptic_capable: "true"
-          queue: "build"
+          queue: "launch"
           os: "linux"
           arch: "x86_64" # prevent from running on PiBots
         env:
