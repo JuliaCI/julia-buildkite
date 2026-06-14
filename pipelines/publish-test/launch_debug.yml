@@ -15,6 +15,9 @@ steps:
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
+          - JuliaCI/julia#v1:
+              # The sandbox plugin requires a host Julia to function.
+              version: '1.10' # GREP_ME: Keep this updated to LTS.
           - JuliaCI/sandbox#v2:
               rootfs_url: https://github.com/JuliaCI/rootfs-images/releases/download/v8.3/julia_publish.x86_64.tar.gz
               rootfs_treehash: "e11a4f12b441b5201ba672077c000bbdea8df244"
