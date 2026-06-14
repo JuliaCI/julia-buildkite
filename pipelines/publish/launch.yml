@@ -34,6 +34,11 @@ steps:
               rootfs_treehash: "e11a4f12b441b5201ba672077c000bbdea8df244"
               uid: 1000
               gid: 1000
+              workspaces:
+                # Mount the git object cache so upload_julia.sh's version
+                # introspection (git describe) resolves cleanly inside the
+                # sandbox, same as the build_linux step.
+                - "/cache/repos:/cache/repos"
         timeout_in_minutes: 180
         commands: "bash .buildkite/utilities/publish.sh"
         agents:
