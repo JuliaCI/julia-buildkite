@@ -1,65 +1,62 @@
 #!/usr/bin/env bash
-# DEBUG ONLY (not part of the publish flow). Diagnoses why rcodesign's Rust AWS
-# SDK fails to resolve the Buildkite OIDC web-identity credentials with
-# "identity resolver timed out after 5s", while the aws CLI / boto3 resolve the
-# same token fine. Runs in the julia_publish sandbox via launch_debug.yml.
+# DEBUG ONLY (not part of the publish flow). The real publish (#3) failed with
+# rcodesign "identity resolver timed out after 5s" during codesign of the .app.
+# A single rcodesign resolves the OIDC web-identity creds fine, so the suspect
+# is codesign.sh's UNBOUNDED parallel signing: dozens of rcodesign processes
+# each independently AssumeRoleWithWebIdentity against the one (proxied) STS
+# endpoint, blowing the SDK's 5s credential-load budget.
+#
+# This isolates the variables: single vs parallel, IMDS-disabled or not, and
+# tests the fix (resolve the role ONCE, share static creds with all processes).
+#
+# rcodesign's "specified path is not of a recognized type" on the throwaway
+# file is the SUCCESS signal: it means GetPublicKey (=credential resolution)
+# already succeeded. "identity resolver timed out" is the FAILURE signal.
 set -uo pipefail
 
-echo "+++ [debug] host / environment"
-uname -a
-echo "AWS_* env keys present:"; env | grep -oE '^AWS_[A-Z0-9_]+' | sort || true
-
-echo "+++ [debug] assume the throwaway test OIDC role"
-# shellcheck source=SCRIPTDIR/../aws_oidc.sh
 source .buildkite/utilities/aws_oidc.sh publish-test
-echo "AWS_ROLE_ARN=${AWS_ROLE_ARN:-<unset>}"
-echo "AWS_REGION=${AWS_REGION:-<unset>} AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-<unset>}"
-echo "AWS_EC2_METADATA_DISABLED=${AWS_EC2_METADATA_DISABLED:-<unset>}"
-_tok="${AWS_WEB_IDENTITY_TOKEN_FILE:-/nonexistent}"
-echo "AWS_WEB_IDENTITY_TOKEN_FILE=${_tok} (exists: $([ -f "${_tok}" ] && echo yes || echo NO), bytes: $(wc -c <"${_tok}" 2>/dev/null || echo 0))"
-
-echo "+++ [debug] DNS records for STS / KMS regional endpoints (any AAAA / IPv6?)"
-getent ahosts sts.us-east-1.amazonaws.com || true
-echo "  --- kms ---"
-getent ahosts kms.us-east-1.amazonaws.com || true
-
-echo "+++ [debug] raw IPv4 vs IPv6 reachability to STS (the credential endpoint)"
-curl -4 -s -o /dev/null -w 'curl -4 sts: code=%{http_code} connect=%{time_connect}s total=%{time_total}s\n' --max-time 10 https://sts.us-east-1.amazonaws.com/ || echo 'curl -4 sts FAILED'
-curl -6 -s -o /dev/null -w 'curl -6 sts: code=%{http_code} connect=%{time_connect}s total=%{time_total}s\n' --max-time 10 https://sts.us-east-1.amazonaws.com/ || echo 'curl -6 sts FAILED/none'
-
-echo "+++ [debug] aws CLI sts get-caller-identity (known-good resolution path)"
-time aws sts get-caller-identity || echo 'aws CLI FAILED'
-
 RC="$(.buildkite/utilities/macos/get_rcodesign.sh)"
-echo "+++ [debug] rcodesign = ${RC}"
-"${RC}" --version 2>&1 || true
-echo "debug-only throwaway file" > /tmp/_rc_dbg.txt
+KEY="alias/julia-macos-codesigning-test"
+CERT=".buildkite/utilities/macos/developer_id_test.pem"
+echo "debug-only throwaway" > /tmp/_rc.txt
+N=32
 
-echo "+++ [debug] rcodesign GetPublicKey with FULL AWS SDK trace (expected to reproduce the timeout)"
-( set -x
-  RUST_LOG="aws_config=trace,aws_runtime=debug,aws_smithy_runtime=debug,aws_smithy_runtime_api=debug,aws_credential_types=trace,aws_sdk_sts=debug" \
-    "${RC}" sign \
-      --aws-kms-key alias/julia-macos-codesigning-test \
-      --aws-kms-certificate-file .buildkite/utilities/macos/developer_id_test.pem \
-      /tmp/_rc_dbg.txt 2>&1 | tail -150
-) || true
+# Emit OK (creds resolved) / TIMEOUT (creds timed out) / OTHER for one sign.
+run_one() {
+    local out
+    out="$("${RC}" sign --aws-kms-key "${KEY}" --aws-kms-certificate-file "${CERT}" /tmp/_rc.txt 2>&1)"
+    if   grep -q "identity resolver timed out" <<<"${out}"; then echo "TIMEOUT"
+    elif grep -q "not of a recognized type"    <<<"${out}"; then echo "OK"
+    else echo "OTHER: $(tr '\n' '|' <<<"${out}" | tail -c 160)"; fi
+}
 
-echo "+++ [debug] control: rcodesign with EXPLICIT static creds minted by the CLI"
-echo "(if this succeeds where the above failed, the bug is purely SDK credential resolution)"
-if creds="$(aws sts assume-role-with-web-identity \
-      --role-arn "${AWS_ROLE_ARN}" --role-session-name dbg \
-      --web-identity-token "$(cat "${AWS_WEB_IDENTITY_TOKEN_FILE}")" \
-      --query 'Credentials.[AccessKeyId,SecretAccessKey,SessionToken]' --output text)"; then
-  read -r _AKID _SAK _STOK <<<"${creds}"
-  ( set -x
-    AWS_ACCESS_KEY_ID="${_AKID}" AWS_SECRET_ACCESS_KEY="${_SAK}" AWS_SESSION_TOKEN="${_STOK}" \
-      "${RC}" sign \
-        --aws-kms-key alias/julia-macos-codesigning-test \
-        --aws-kms-certificate-file .buildkite/utilities/macos/developer_id_test.pem \
-        /tmp/_rc_dbg.txt 2>&1 | tail -40
-  ) || true
-else
-  echo "could not mint static creds via CLI"
-fi
+batch() { # $1=label  (env for the children inherited from caller)
+    local label="$1" tmp; tmp="$(mktemp -d)"
+    local t0 t1; t0="$(date +%s)"
+    for i in $(seq 1 "${N}"); do ( run_one ) > "${tmp}/${i}" & done
+    wait
+    t1="$(date +%s)"
+    echo "+++ ${label}: ${N} parallel in $((t1-t0))s"
+    sort "${tmp}"/* | uniq -c
+    rm -rf "${tmp}"
+}
+
+echo "=== A: single, metadata default ==="; run_one
+echo "=== B: single, AWS_EC2_METADATA_DISABLED=true (real-publish env) ==="; AWS_EC2_METADATA_DISABLED=true run_one
+
+echo "=== C: parallel, default chain (each does its own STS AssumeRoleWithWebIdentity) ==="
+batch "C default-chain"
+
+echo "=== D: parallel, AWS_EC2_METADATA_DISABLED=true (EXACT real-publish repro) ==="
+AWS_EC2_METADATA_DISABLED=true batch "D metadata-disabled"
+
+echo "=== E: parallel, SHARED static creds resolved ONCE (proposed fix) ==="
+read -r AKID SAK STOK < <(aws sts assume-role-with-web-identity \
+    --role-arn "${AWS_ROLE_ARN}" --role-session-name fix \
+    --web-identity-token "$(cat "${AWS_WEB_IDENTITY_TOKEN_FILE}")" \
+    --query 'Credentials.[AccessKeyId,SecretAccessKey,SessionToken]' --output text)
+export AWS_ACCESS_KEY_ID="${AKID}" AWS_SECRET_ACCESS_KEY="${SAK}" AWS_SESSION_TOKEN="${STOK}"
+unset AWS_WEB_IDENTITY_TOKEN_FILE AWS_ROLE_ARN   # force the env-static provider
+batch "E shared-static-creds"
 
 echo "+++ [debug] done"
