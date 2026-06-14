@@ -241,10 +241,14 @@ steps:
   # and verify_trusted_commit.sh in the publish jobs.
   - wait: ~
 
-  - trigger: "julia-publish"
-    label: ":rocket: trigger publish"
-    if: pipeline.slug == "julia-ci"
-    build:
-      commit: "${BUILDKITE_COMMIT}"
-      branch: "${BUILDKITE_BRANCH}"
-      message: "publish: ${BUILDKITE_MESSAGE}"
+  # TEMP-DISABLED for the publish-test validation: do NOT cross-trigger the real
+  # julia-publish (real KMS keys + julialangnightlies). The new .app/publish
+  # flow is being validated against julia-publish-test-nosecrets, which reads
+  # the staged artifacts from julialang-ephemeral-ci. RESTORE before merge.
+  # - trigger: "julia-publish"
+  #   label: ":rocket: trigger publish"
+  #   if: pipeline.slug == "julia-ci"
+  #   build:
+  #     commit: "${BUILDKITE_COMMIT}"
+  #     branch: "${BUILDKITE_BRANCH}"
+  #     message: "publish: ${BUILDKITE_MESSAGE}"
