@@ -137,7 +137,11 @@ UPLOAD_TO_S3_ACL=none upload_to_s3 "${UPLOAD_FILENAME}.tar.gz" "${STAGING_TARGET
 # tarball above is unchanged (test jobs still consume it).
 if [[ "${OS}" == "macos" || "${OS}" == "macosnogpl" ]]; then
     echo "--- [mac] Assemble the unsigned Julia.app"
-    MACOS_CODESIGN_IDENTITY="" ${MAKE} -C contrib/mac/app "dmg/Julia-${MAJMIN?}.app"
+    # Pass the same MFLAGS as the main build (esp. TAGGED_RELEASE_BANNER): the
+    # contrib/mac/app rule re-runs binary-dist, and without the matching flags
+    # build_h.jl regenerates with a different banner, going stale and forcing a
+    # full system-image rebuild. With them it collapses to a fast re-install+re-tar.
+    MACOS_CODESIGN_IDENTITY="" ${MAKE} "${MFLAGS[@]}" -C contrib/mac/app "dmg/Julia-${MAJMIN?}.app"
     tar zcf "${UPLOAD_FILENAME}.app.tar.gz" -C contrib/mac/app/dmg "Julia-${MAJMIN?}.app"
     echo "--- [mac] Stage the unsigned .app to s3://${STAGING_TARGET}.app.tar.gz"
     UPLOAD_TO_S3_ACL=none upload_to_s3 "${UPLOAD_FILENAME}.app.tar.gz" "${STAGING_TARGET}.app.tar.gz"
