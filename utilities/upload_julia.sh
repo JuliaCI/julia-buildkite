@@ -175,8 +175,8 @@ echo "--- GPG-sign the tarball"
 if [[ -n "${TARBALL_SIGNING_PUBKEY}" ]]; then
     GPG_PUBKEY_ARGS=( --public-key "${TARBALL_SIGNING_PUBKEY}" )
 else
-    # Derive the key identity from KMS at runtime (no committed pubkey). The
-    # creation timestamp defaults to 0 (irrelevant for a throwaway key); set
+    # Derive the key identity from KMS at runtime (no committed pubkey); the
+    # creation timestamp defaults to the KMS key's own CreationDate. Set
     # TARBALL_SIGNING_PUBKEY_CREATED only to pin it to a published pubkey.
     GPG_PUBKEY_ARGS=( --public-key-from-kms )
     [[ -n "${TARBALL_SIGNING_PUBKEY_CREATED:-}" ]] && GPG_PUBKEY_ARGS+=( --created "${TARBALL_SIGNING_PUBKEY_CREATED}" )

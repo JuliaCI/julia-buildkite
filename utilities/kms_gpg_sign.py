@@ -384,6 +384,21 @@ def local_public_key(key_path):
     return out.stdout
 
 
+def kms_key_creation_date(key_id):
+    """The KMS key's creation time as a unix timestamp (kms:DescribeKey)."""
+    out = subprocess.run(
+        ["aws", "kms", "describe-key", "--key-id", key_id,
+         "--query", "KeyMetadata.CreationDate", "--output", "text"],
+        check=True, capture_output=True,
+    ).stdout.decode().strip()
+    # AWS CLI prints this either as epoch seconds (possibly fractional) or as an
+    # ISO-8601 string, depending on cli_timestamp_format; accept both.
+    try:
+        return int(float(out))
+    except ValueError:
+        return int(datetime.datetime.fromisoformat(out.replace("Z", "+00:00")).timestamp())
+
+
 def parse_created(value):
     """A unix timestamp, or a YYYY-MM-DD date interpreted as UTC midnight."""
     try:
@@ -456,10 +471,10 @@ def main():
                                "of a committed file; requires --created. Useful for throwaway "
                                "keys where publishing a public key block is pointless.")
     parser.add_argument("--created",
-                        help="key creation time (unix timestamp or YYYY-MM-DD UTC) for "
-                             "--public-key-from-kms. Part of the fingerprint; defaults to 0 "
-                             "(irrelevant unless these signatures are verified against a "
-                             "published pubkey, in which case pin it to match it).")
+                        help="override the key creation time (unix timestamp or YYYY-MM-DD "
+                             "UTC) for --public-key-from-kms. Part of the fingerprint; "
+                             "defaults to the KMS key's own CreationDate. Pin it only to "
+                             "match a separately-published pubkey.")
     parser.add_argument("--uid", default=None,
                         help="(unused for signing; accepted for symmetry with the exporter)")
     group = parser.add_mutually_exclusive_group(required=True)
@@ -471,12 +486,16 @@ def main():
     args = parser.parse_args()
 
     if args.public_key_from_kms:
-        # The OpenPGP fingerprint covers the key creation timestamp, so deriving
-        # the key identity needs one. For a throwaway key whose pubkey is never
-        # published for verification the exact value is irrelevant, so it
-        # defaults to 0 (the epoch). Pin --created only if something must verify
-        # these signatures against a matching published pubkey.
-        created = parse_created(args.created) if args.created else 0
+        # The OpenPGP fingerprint covers the key creation timestamp. Default it
+        # to the KMS key's own CreationDate (so the identity reflects the real
+        # key); an explicit --created overrides. A local test key has no KMS
+        # creation date, so fall back to 0 there.
+        if args.created:
+            created = parse_created(args.created)
+        elif args.local_key:
+            created = 0
+        else:
+            created = kms_key_creation_date(args.kms_key_id)
         pubkey = public_key_info_from_kms(
             args.kms_key_id, created, local_key=args.local_key)
     else:

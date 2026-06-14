@@ -251,8 +251,9 @@ macOS `.dmg` is still built and codesigned. All of it lives in
    * `./32_gen_test_codesign_cert.sh` → `utilities/macos/developer_id_test.pem`
    * (macOS `.dmg` also needs the shared `.app` skeleton from step 8 above.)
    The GPG test pubkey is NOT committed: the test pipeline sets
-   `TARBALL_SIGNING_PUBKEY=""` and derives the key identity from KMS
-   (`kms:GetPublicKey`) at runtime (`kms_gpg_sign.py --public-key-from-kms`).
+   `TARBALL_SIGNING_PUBKEY=""` and derives the key identity from KMS at runtime
+   (`kms_gpg_sign.py --public-key-from-kms`, using `kms:GetPublicKey` for the
+   RSA public half and `kms:DescribeKey` for the key's creation date).
 4. Seed staged input for a real master commit:
    `./seed_test_staging.sh <full-40-char-commit>` (defaults to the 3 Linux +
    2 macOS tokens). Use a real master commit so `verify_trusted_commit.sh`

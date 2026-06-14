@@ -217,8 +217,11 @@ data "aws_iam_policy_document" "publish_test" {
   }
 
   statement {
-    sid     = "TestReleaseSigning"
-    actions = ["kms:Sign", "kms:GetPublicKey"]
+    sid = "TestReleaseSigning"
+    # DescribeKey: kms_gpg_sign.py --public-key-from-kms reads the GPG key's
+    # CreationDate (part of the OpenPGP fingerprint) so the test pipeline need
+    # not commit a pubkey. GetPublicKey: fetch the RSA public half.
+    actions = ["kms:Sign", "kms:GetPublicKey", "kms:DescribeKey"]
     resources = [
       aws_kms_key.macos_codesign_test[0].arn,
       aws_kms_key.tarball_signing_test[0].arn,
