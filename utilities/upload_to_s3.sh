@@ -31,11 +31,16 @@ upload_to_s3() {
         acl_args=()
     fi
 
-    if [[ "$(basename "${key}")" == julia-latest-* ]]; then
+    # Debug/test stacks (UPLOAD_TO_S3_OVERWRITE=1) re-publish the same commit
+    # repeatedly, so they overwrite unconditionally. This can only ever succeed
+    # against a bucket whose role permits an unconditional PutObject -- the
+    # production roles' IAM denies it (write-once), so the flag is inert on the
+    # real publish path even if accidentally set.
+    if [[ "${UPLOAD_TO_S3_OVERWRITE:-0}" == "1" || "$(basename "${key}")" == julia-latest-* ]]; then
         aws s3api put-object \
             --bucket "${bucket}" --key "${key}" \
             --body "${file}" ${acl_args[@]+"${acl_args[@]}"} >/dev/null
-        echo "uploaded (latest pointer): s3://${target}"
+        echo "uploaded (overwrite): s3://${target}"
         return 0
     fi
 

@@ -102,16 +102,36 @@ elif [ -d "${TARGET}" ]; then
     # read loop.  This safely handles whitespace in filenames.
     find "${TARGET}" -type f -perm -0111 -print0 > "$TMPFIFODIR/findpipe" &
 
-    # This while loop reads in from the fifo, and invokes `do_codesign`,
-    # but it does so in a background task, so that the codesigning can
-    # happen in parallel.  This speeds things up by a few seconds.
-    echo "Codesigning dir ${TARGET} with ${IDENTITY_DESC}"
+    # Sign the discovered files with a BOUNDED pool of background workers so the
+    # codesigning happens in parallel without an unbounded fan-out. A full bundle
+    # (e.g. the Julia tree) holds hundreds of mach-o files; backgrounding a
+    # signer for *every* one at once spawned hundreds of simultaneous rcodesign
+    # processes, each independently assuming the KMS-signing OIDC role via STS
+    # and holding KMS / Apple-timestamp connections open for the duration of the
+    # signature. That much concurrent pressure pushed some credential
+    # resolutions past the AWS SDK's 5s budget ("identity resolver timed out
+    # after 5s"), failing the signature. Cap the concurrency (MACOS_CODESIGN_JOBS).
+    MAX_JOBS="${MACOS_CODESIGN_JOBS:-8}"
+    echo "Codesigning dir ${TARGET} with ${IDENTITY_DESC} (up to ${MAX_JOBS} concurrent)"
+    # A non-empty STATUS_DIR after the run means at least one signer failed: the
+    # trailing `wait` returns 0 regardless, so failures are recorded out-of-band
+    # rather than silently swallowed (never ship a partially-signed bundle).
+    STATUS_DIR="$(mktemp -d)"
     NUM_CODESIGNS=0
     while IFS= read -r -d '' exe_file; do
-        do_codesign "${exe_file}" &
+        # Block until a worker slot frees up before launching the next signer.
+        while (( "$(jobs -rp | wc -l)" >= MAX_JOBS )); do wait -n 2>/dev/null || true; done
+        { do_codesign "${exe_file}" || touch "${STATUS_DIR}/fail.${NUM_CODESIGNS}"; } &
         NUM_CODESIGNS="$((NUM_CODESIGNS + 1))"
     done < "${TMPFIFODIR}/findpipe"
     wait
+
+    NUM_FAILED="$(find "${STATUS_DIR}" -type f | wc -l)"
+    rm -rf "${STATUS_DIR}"
+    if [ "${NUM_FAILED}" -ne 0 ]; then
+        echo "ERROR: ${NUM_FAILED} of ${NUM_CODESIGNS} codesign operations failed" >&2
+        exit 1
+    fi
     echo "Codesigned ${NUM_CODESIGNS} files"
 else
     echo "Given codesigning target '${TARGET}' not a file or directory!" >&2

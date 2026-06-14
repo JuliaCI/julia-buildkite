@@ -59,6 +59,11 @@ steps:
           # The test bucket disables object ACLs (BucketOwnerEnforced, public
           # read via bucket policy), so the promote must not send --acl.
           UPLOAD_TO_S3_ACL: "none"
+          # Allow re-publishing the same commit repeatedly ("test to our heart's
+          # content"): overwrite unconditionally instead of write-once. Safe only
+          # because the throwaway test role permits unconditional PutObject; the
+          # production publish role's IAM denies it regardless of this flag.
+          UPLOAD_TO_S3_OVERWRITE: "1"
           # Throwaway signing material (test KMS keys + self-signed cert/pubkey).
           MACOS_CODESIGN_KMS_KEY: "alias/julia-macos-codesigning-test"
           MACOS_CODESIGN_CERT: ".buildkite/utilities/macos/developer_id_test.pem"
