@@ -195,18 +195,10 @@ python3 .buildkite/utilities/kms_gpg_sign.py \
     "${UPLOAD_FILENAME}.tar.gz"
 UPLOAD_EXTENSIONS+=( "tar.gz.asc" )
 
-# Upload signed products to buildkite, for easy downloading
-echo "--- Upload products to buildkite"
-PIDS=()
-for EXT in "${UPLOAD_EXTENSIONS[@]}"; do
-    buildkite-agent artifact upload "${UPLOAD_FILENAME}.${EXT}" &
-    PIDS+=( "$!" )
-done
-wait_pids "${PIDS[@]}"
-
 # Promote to all final S3 targets (each target gets a direct upload of the
 # local file; no bucket-to-bucket copies, since write-once enforcement only
-# applies to PutObject).
+# applies to PutObject). The signed products are NOT also uploaded to buildkite
+# artifacts -- the final S3 locations are the canonical output.
 echo "--- Promote to final S3 locations"
 PIDS=()
 for UPLOAD_TARGET in "${UPLOAD_TARGETS[@]}"; do

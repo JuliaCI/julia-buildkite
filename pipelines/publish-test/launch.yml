@@ -56,6 +56,9 @@ steps:
           STAGING_BUCKET: "julialang-ephemeral-ci"
           S3_BUCKET: "julialang-test-publish"
           S3_BUCKET_PREFIX: "bin"
+          # The test bucket disables object ACLs (BucketOwnerEnforced, public
+          # read via bucket policy), so the promote must not send --acl.
+          UPLOAD_TO_S3_ACL: "none"
           # Throwaway signing material (test KMS keys + self-signed cert/pubkey).
           MACOS_CODESIGN_KMS_KEY: "alias/julia-macos-codesigning-test"
           MACOS_CODESIGN_CERT: ".buildkite/utilities/macos/developer_id_test.pem"
