@@ -161,12 +161,17 @@ elif [ -d "${TARGET}" ]; then
     NUM_CODESIGNS=0
     NUM_SKIPPED=0
     while IFS= read -r -d '' exe_file; do
-        # rcodesign (the KMS signer) only signs Mach-O; skip executable
-        # non-Mach-O files (scripts, .jl, .tbd, Makefiles, ...) that `find`
-        # matched -- they need no signature. The ad-hoc `codesign` signs them
-        # fine, so only filter on the KMS path.
-        if [ -n "${KMS_KEY}" ] && ! is_macho "${exe_file}"; then
-            echo "Skipping non-Mach-O file: ${exe_file}"
+        # Skip files the KMS signer (rcodesign) can't sign -- they need no
+        # signature, and the ad-hoc `codesign` handles them, so only filter on
+        # the KMS path:
+        #  - non-Mach-O (scripts, .jl, .tbd, Makefiles, ...): rcodesign rejects
+        #    them as "specified path is not of a recognized type".
+        #  - static archives (*.a): a universal/"fat" archive like
+        #    libclang_rt.osx.a carries a fat magic so it passes is_macho, but it
+        #    is an `ar` archive, not a signable binary -- rcodesign panics
+        #    parsing it ("index out of bounds"). Static libs are link-time input.
+        if [ -n "${KMS_KEY}" ] && { [[ "${exe_file}" == *.a ]] || ! is_macho "${exe_file}"; }; then
+            echo "Skipping non-signable file: ${exe_file}"
             NUM_SKIPPED="$((NUM_SKIPPED + 1))"
             continue
         fi
