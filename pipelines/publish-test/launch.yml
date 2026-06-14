@@ -20,8 +20,9 @@ steps:
               version: "./.buildkite-external-version"
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
           - JuliaCI/julia#v1:
-              # Host julia for the cross-mode pkgimage checksum patching
-              # (mounted into the sandbox, as in build_linux / publish).
+              # OUTER julia: runs on the bare agent, only to launch Sandbox.jl
+              # (the sandbox plugin requires a host julia). NOT visible inside
+              # the sandbox -- plugins before sandbox#v2 run outside it.
               persist_depot_dirs: packages,artifacts,compiled
               version: '1.10' # GREP_ME: Keep this updated to LTS. Do not set it to '1' or 'stable' or 'latest'.
           - JuliaCI/sandbox#v2:
@@ -32,6 +33,16 @@ steps:
               gid: 1000
               workspaces:
                 - "/cache/repos:/cache/repos"
+                # Mount the julia plugin's install + depot so the INNER julia
+                # plugin below reuses the already-downloaded julia instead of
+                # re-fetching it inside the sandbox.
+                - "/cache/julia-buildkite-plugin:/cache/julia-buildkite-plugin"
+          - JuliaCI/julia#v1:
+              # INNER julia: plugins after sandbox#v2 run *inside* the sandbox,
+              # so this puts `julia` on PATH within the rootfs. upload_julia.sh
+              # uses it to patch pkgimage checksums in the cross-built (foreign
+              # platform) trees -- the published binaries can't run on this agent.
+              version: '1.10' # GREP_ME: Keep in sync with the outer julia version.
         timeout_in_minutes: 180
         commands: "bash .buildkite/utilities/publish.sh"
         agents:
