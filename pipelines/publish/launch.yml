@@ -17,11 +17,10 @@ steps:
               version: "./.buildkite-external-version"
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
           - JuliaCI/julia#v1:
-              # A HOST julia, used to patch the pkgimage checksums inside
-              # the (foreign-platform) signed install trees -- the target
-              # binaries cannot run here. Not the julia being published.
-              # (The julia#v1 plugin's julia is mounted into the sandbox
-              # below, same as the build_linux step.)
+              # OUTER julia: runs on the bare agent, only to launch Sandbox.jl
+              # (the sandbox plugin requires a host julia). Plugins *before*
+              # sandbox#v2 run outside the sandbox, so this one is NOT visible
+              # inside it -- the inner julia#v1 below provides the in-sandbox julia.
               persist_depot_dirs: packages,artifacts,compiled
               version: '1.10' # GREP_ME: Keep this updated to LTS. Do not set it to '1' or 'stable' or 'latest'.
           - JuliaCI/sandbox#v2:
@@ -39,6 +38,17 @@ steps:
                 # introspection (git describe) resolves cleanly inside the
                 # sandbox, same as the build_linux step.
                 - "/cache/repos:/cache/repos"
+                # Mount the julia plugin's install + depot so the inner julia
+                # plugin below reuses the already-downloaded julia instead of
+                # re-fetching it inside the sandbox.
+                - "/cache/julia-buildkite-plugin:/cache/julia-buildkite-plugin"
+          - JuliaCI/julia#v1:
+              # INNER julia: plugins after sandbox#v2 run *inside* the sandbox,
+              # so this puts `julia` on PATH within the rootfs. upload_julia.sh
+              # uses it to patch the pkgimage checksums inside the (foreign-
+              # platform) signed install trees -- the published binaries cannot
+              # run on this agent.
+              version: '1.10' # GREP_ME: Keep in sync with the outer julia version.
         timeout_in_minutes: 180
         commands: "bash .buildkite/utilities/publish.sh"
         agents:
