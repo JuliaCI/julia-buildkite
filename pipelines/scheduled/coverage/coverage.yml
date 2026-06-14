@@ -156,7 +156,7 @@ steps:
               persist_depot_dirs: packages,artifacts,compiled
               version: '1.11' # GREP_ME: Keep this updated. Do not set it to '1' or 'stable' or 'latest'.
           - docker#v3.13.0:
-              image: "juliapackaging/package-windows-x86_64:v8.3"
+              image: "juliapackaging/package-windows-x86_64:v7.10"
               always-pull: true
               command: ["bash", "-c", "
                 echo '--- Obtain coverage tokens' &&
