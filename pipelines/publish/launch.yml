@@ -20,20 +20,38 @@ steps:
               # A HOST julia, used to patch the pkgimage checksums inside
               # the (foreign-platform) signed install trees -- the target
               # binaries cannot run here. Not the julia being published.
+              # (The julia#v1 plugin's julia is mounted into the sandbox
+              # below, same as the build_linux step.)
               persist_depot_dirs: packages,artifacts,compiled
               version: '1.10' # GREP_ME: Keep this updated to LTS. Do not set it to '1' or 'stable' or 'latest'.
+          - JuliaCI/sandbox#v2:
+              # Run inside the julia_publish rootfs, which carries the full
+              # signing/packaging toolchain (aws CLI, p7zip, libdmg-hfsplus +
+              # newfs_hfs, wine + Inno Setup, jsign, python). Without this the
+              # step runs on a bare agent and fails with `aws: command not
+              # found`. x86_64-only image; built by JuliaCI/rootfs-images.
+              rootfs_url: https://github.com/JuliaCI/rootfs-images/releases/download/v8.3/julia_publish.x86_64.tar.gz
+              rootfs_treehash: "e11a4f12b441b5201ba672077c000bbdea8df244"
+              uid: 1000
+              gid: 1000
         timeout_in_minutes: 180
         commands: "bash .buildkite/utilities/publish.sh"
         agents:
-          # Requires an image carrying the full (linux) signing/packaging
-          # toolchain: rcodesign; Wine + Inno Setup (in the prefix) + jsign
-          # + p7zip for Windows; mkfs.hfsplus + mozilla/libdmg-hfsplus
-          # (hfsplus, dmg) for the .dmg; python3; the AWS CLI.
-          # See ops/README.md.
+          # The signing/packaging toolchain is provided by the julia_publish
+          # rootfs via the sandbox plugin above (rcodesign is fetched at
+          # runtime). The agent only needs to be able to nest a Sandbox.jl
+          # sandbox, hence sandbox_capable.
           queue: "default"
+          sandbox_capable: "true"
           os: "linux"
           arch: "x86_64"
         env:
+          # The Inno Setup 6 prefix is baked into the julia_publish rootfs at
+          # /home/juliaci/.wine (owned by uid 1000). upload_julia.sh runs
+          # `wine ISCC.exe` without setting WINEPREFIX, so it would otherwise
+          # default to $HOME/.wine -- pin it here so the baked prefix is used
+          # regardless of what HOME the sandbox sets.
+          WINEPREFIX: "/home/juliaci/.wine"
           # Identify the Azure Trusted Signing app registration for Windows
           # Authenticode signing (not secrets; auth is via Buildkite OIDC
           # workload identity federation -- see windows/codesign.sh and
