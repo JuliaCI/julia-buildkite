@@ -3,8 +3,10 @@
 This directory contains the tooling for macOS codesigning + notarization
 without secrets on the build agents. We use
 [apple-codesign](https://github.com/indygreg/apple-platform-rs/tree/main/apple-codesign)
-(`rcodesign`), patched to add an AWS KMS signing backend
-(`0001-aws-kms-backend.patch`, see upstreaming note below).
+(`rcodesign`) with an AWS KMS signing backend, maintained on our fork
+[`KenoAIStaging/apple-platform-rs`](https://github.com/KenoAIStaging/apple-platform-rs/tree/aws-kms-backend)
+(branch `aws-kms-backend`, on top of a pinned upstream commit). `build_rcodesign.sh`
+clones that fork and builds it -- there is no local patch (see upstreaming note below).
 
 ## How it works
 
@@ -27,14 +29,14 @@ without secrets on the build agents. We use
 ./build_rcodesign.sh [output_dir]
 ```
 
-builds `rcodesign` from the pinned upstream commit plus the patch. CI
-downloads a prebuilt binary from S3 (`tools/rcodesign-<version>-<arch>`,
-uploaded by `ops/30_upload_tools.sh` in this repo) and verifies its sha256;
-see `utilities/macos/codesign.sh`.
+builds `rcodesign` from the pinned fork commit (bump `APPLE_PLATFORM_RS_COMMIT`
+in that script after pushing to the fork). CI downloads a prebuilt binary from
+S3 (`tools/rcodesign-<version>-<arch>`, uploaded by `ops/30_upload_tools.sh` in
+this repo) and verifies its sha256; see `utilities/macos/codesign.sh`.
 
 ## Upstreaming
 
-The patch is self-contained and written to upstream standards (feature-gated
-`aws-kms` Cargo feature, docs in `apple_codesign_aws_kms.rst`, unit tests).
-Consider submitting it as a PR to `indygreg/apple-platform-rs`; once merged,
-this directory shrinks to a version pin.
+The `aws-kms-backend` branch is self-contained and written to upstream standards
+(feature-gated `aws-kms` Cargo feature, docs in `apple_codesign_aws_kms.rst`,
+unit tests). Consider submitting it as a PR to `indygreg/apple-platform-rs`;
+once merged, `build_rcodesign.sh` shrinks to a plain upstream version pin.

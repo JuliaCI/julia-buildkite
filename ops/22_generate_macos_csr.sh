@@ -7,7 +7,7 @@
 #
 #     openssl x509 -inform DER -in developerID_application.cer -out developer_id.pem
 #
-# Requires the patched rcodesign (utilities/macos/rcodesign/build_rcodesign.sh)
+# Requires the AWS-KMS-backend rcodesign (utilities/macos/rcodesign/build_rcodesign.sh)
 # and AWS credentials with kms:GetPublicKey + kms:Sign on the key.
 set -euo pipefail
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
