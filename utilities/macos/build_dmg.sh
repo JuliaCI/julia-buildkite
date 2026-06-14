@@ -58,14 +58,29 @@ fi
 function create_dmg() {
     rm -f "${DMG_NAME}" "${HFS_IMAGE}"
 
-    # Size the filesystem to the contents plus some breathing room; this only
-    # affects the uncompressed filesystem, not the download size.
+    # Size the filesystem well above the measured tree size. HFS+ catalog/extents
+    # metadata and per-file allocation rounding over the thousands of files in the
+    # Julia tree need far more than a few percent of slack -- an under-sized volume
+    # fails mid-populate ("rawFileWrite ... allocate"). This only affects the
+    # *uncompressed* image (the final UDIF dmg is compressed), so a generous 50% +
+    # 256 MB margin is free.
     local size_mb
-    size_mb="$(( $(du -sm "${DMG_PATH}" | cut -f1) * 11 / 10 + 64 ))"
+    size_mb="$(( $(du -sm "${DMG_PATH}" | cut -f1) * 3 / 2 + 256 ))"
     truncate -s "${size_mb}M" "${HFS_IMAGE}"
     "${MKFSHFS_TOOL}" -v "${VOLUME_NAME}" "${HFS_IMAGE}"
 
-    "${HFSPLUS_TOOL}" "${HFS_IMAGE}" addall "${DMG_PATH}"
+    # `addall` logs every file and directory it copies (thousands of lines), which
+    # both floods the build log and slows the step (all of it streams to the
+    # agent). Capture it and only surface the tail on failure.
+    local addall_log
+    addall_log="$(mktemp)"
+    if ! "${HFSPLUS_TOOL}" "${HFS_IMAGE}" addall "${DMG_PATH}" > "${addall_log}" 2>&1; then
+        echo "ERROR: hfsplus addall failed; tail of its output:" >&2
+        tail -30 "${addall_log}" >&2
+        rm -f "${addall_log}"
+        return 1
+    fi
+    rm -f "${addall_log}"
     "${HFSPLUS_TOOL}" "${HFS_IMAGE}" symlink "/Applications" "/Applications"
     # Mark the volume root as having a custom icon (.VolumeIcon.icns)
     "${HFSPLUS_TOOL}" "${HFS_IMAGE}" attr "/" C

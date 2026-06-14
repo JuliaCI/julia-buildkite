@@ -82,12 +82,20 @@ do_adhoc_codesign() {
 do_kms_codesign() {
     # Sign with the Developer ID key in AWS KMS via rcodesign. The hardened
     # runtime flag and entitlements match what we passed to Apple codesign.
-    "${RCODESIGN_BIN}" sign \
+    # rcodesign prints ~10 chatty lines per file; across hundreds of files signed
+    # in parallel that floods (and interleaves in) the log, so capture the output
+    # and only emit it if the signature actually fails.
+    local out
+    if ! out="$("${RCODESIGN_BIN}" sign \
         --aws-kms-key "${KMS_KEY}" \
         --aws-kms-certificate-file "${CERTIFICATE}" \
         --code-signature-flags runtime \
         --entitlements-xml-file "${THIS_DIR}/Entitlements.plist" \
-        "${1}"
+        "${1}" 2>&1)"; then
+        echo "ERROR: rcodesign failed for ${1}:" >&2
+        echo "${out}" >&2
+        return 1
+    fi
 }
 
 if [ -n "${KMS_KEY}" ]; then
