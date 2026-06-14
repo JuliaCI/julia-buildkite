@@ -1,0 +1,29 @@
+# Steps configured in the `julia-publish-test-nosecrets` pipeline's webUI;
+# modifying this file has no effect -- paste it into the webUI when it changes.
+#
+# This is the ISOLATED, NON-PRODUCTION debug pipeline. It runs the real publish
+# flow (download -> KMS-sign -> promote) but against THROWAWAY test KMS keys
+# (self-signed certs) and the `julialang-test-publish` bucket -- so it can be
+# triggered freely to debug the publish flow without touching any production
+# key, bucket, or the public `julia-latest-*` pointers.
+#
+# Unlike `julia-publish`, this pipeline is NOT a trust boundary: it can only
+# assume `julia-oidc-publish-test`, which is scoped to the test keys + test
+# bucket. So it does NOT need pull-request builds disabled or branch limiting.
+# It is triggered manually (never cross-triggered from julia-ci).
+#
+# Input is seeded with ops/seed_test_staging.sh; trigger a build on the same
+# (real master) commit so verify_trusted_commit.sh passes.
+steps:
+  - group: "Publish (test)"
+    steps:
+      - label: "Launch publish-test jobs"
+        agents:
+          queue: "default"
+          os: "linux"
+        plugins:
+          - JuliaCI/external-buildkite#v1:
+              version: "./.buildkite-external-version"
+              repo_url: "https://github.com/JuliaCI/julia-buildkite"
+        commands: |
+          buildkite-agent pipeline upload .buildkite/pipelines/publish-test/launch.yml

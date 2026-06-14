@@ -25,6 +25,12 @@ export KMS_ALIAS_NOTARY_API="alias/julia-notary-api"
 export KMS_ALIAS_TARBALL_SIGNING="alias/julia-tarball-signing"
 export KMS_ALIAS_DOCS_DEPLOY="alias/julia-docs-deploy"
 
+# Throwaway NON-PRODUCTION test keys (created by ops/terraform/test_publish.tf
+# only when the test pipeline UUID is set). Used by the isolated
+# julia-publish-test-nosecrets debug stack with self-signed material.
+export KMS_ALIAS_MACOS_CODESIGN_TEST="alias/julia-macos-codesigning-test"
+export KMS_ALIAS_TARBALL_SIGNING_TEST="alias/julia-tarball-signing-test"
+
 # SSM Parameter Store prefix for CI telemetry bearer tokens (codecov,
 # coveralls, buildkite analytics). These cannot be public-key operations,
 # so they live in the AWS secrets store, fetched at runtime via OIDC.

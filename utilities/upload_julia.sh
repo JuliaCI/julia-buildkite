@@ -27,9 +27,14 @@ THIS_DIR="$(realpath "$(dirname "${BASH_SOURCE[0]}")")"
 # shellcheck source=SCRIPTDIR/upload_to_s3.sh
 source .buildkite/utilities/upload_to_s3.sh
 
-# KMS keys used for release signing (aliases resolve in the CI account)
+# KMS keys used for release signing (aliases resolve in the CI account).
+# The non-production publish test stack overrides these with the throwaway
+# *-test aliases and the matching test public key / self-signed cert.
 MACOS_CODESIGN_KMS_KEY="${MACOS_CODESIGN_KMS_KEY:-alias/julia-macos-codesigning}"
 TARBALL_SIGNING_KMS_KEY="${TARBALL_SIGNING_KMS_KEY:-alias/julia-tarball-signing}"
+# OpenPGP public key matching TARBALL_SIGNING_KMS_KEY (used only to derive the
+# issuer fingerprint embedded in the signature; see kms_gpg_sign.py).
+TARBALL_SIGNING_PUBKEY="${TARBALL_SIGNING_PUBKEY:-.buildkite/secrets/tarball_signing.pub.asc}"
 
 # Because `wait` returns the exit code of the waited-upon PID, this (with
 # `set -e`) ends execution if any backgrounded task failed.
@@ -89,7 +94,8 @@ if [[ "${OS}" == "macos" || "${OS}" == "macosnogpl" ]]; then
     rm -f "${UPLOAD_FILENAME}.tar.gz"
     tar zcf "${UPLOAD_FILENAME}.tar.gz" "${JULIA_INSTALL_DIR}"
 
-    # Make a `.dmg` out of those files (signs + notarizes via KMS-held keys)
+    # Make a `.dmg` out of those files (signs via KMS; notarization is gated by
+    # PUBLISH_SKIP_NOTARIZATION inside build_dmg.sh).
     echo "--- [mac] Build .dmg"
     MACOS_CODESIGN_KMS_KEY="${MACOS_CODESIGN_KMS_KEY}" \
         .buildkite/utilities/macos/build_dmg.sh
@@ -126,9 +132,13 @@ elif [[ "${OS}" == "windows" || "${OS}" == "windowsnogpl" ]]; then
         "$("${WINE}" winepath -w "${iss_file}")"
 
     # Tripwire: if the Wine->host signing bridge failed silently, the
-    # installer would come out unsigned; refuse to publish it.
-    echo "--- [windows] Verify the installer is Authenticode-signed"
-    python3 "$THIS_DIR/windows/check_signed.py" "${UPLOAD_FILENAME}.exe"
+    # installer would come out unsigned; refuse to publish it. (Skipped when
+    # PUBLISH_SKIP_WINDOWS_SIGN=1, where the installer is intentionally
+    # unsigned -- see windows/codesign.sh.)
+    if [[ "${PUBLISH_SKIP_WINDOWS_SIGN:-0}" != "1" ]]; then
+        echo "--- [windows] Verify the installer is Authenticode-signed"
+        python3 "$THIS_DIR/windows/check_signed.py" "${UPLOAD_FILENAME}.exe"
+    fi
 
     # Add the `.exe` to our upload targets
     UPLOAD_EXTENSIONS+=( "exe" )
@@ -159,7 +169,7 @@ echo "--- GPG-sign the tarball"
 # never leaves. Signatures verify against the committed public key,
 # exported from KMS with ops/20_export_gpg_pubkey.py.
 python3 .buildkite/utilities/kms_gpg_sign.py \
-    --public-key .buildkite/secrets/tarball_signing.pub.asc \
+    --public-key "${TARBALL_SIGNING_PUBKEY}" \
     --kms-key-id "${TARBALL_SIGNING_KMS_KEY}" \
     "${UPLOAD_FILENAME}.tar.gz"
 UPLOAD_EXTENSIONS+=( "tar.gz.asc" )

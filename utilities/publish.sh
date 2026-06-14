@@ -57,12 +57,17 @@ done
 
 echo "--- Publishing ${#TRIPLETS[@]} triplets: ${TRIPLETS[*]}"
 
+# Which OIDC role to assume for signing+promotion. Defaults to the trusted
+# production `publish` role; the non-production publish test stack sets
+# PUBLISH_OIDC_MODE=publish-test to assume the throwaway test role instead.
+PUBLISH_OIDC_MODE="${PUBLISH_OIDC_MODE:-publish}"
+
 FAILED=()
 for triplet in "${TRIPLETS[@]}"; do
     echo "+++ Publish ${triplet}"
     # Fresh OIDC token per triplet (2h max lifetime; see aws_oidc.sh)
     # shellcheck source=SCRIPTDIR/aws_oidc.sh
-    source .buildkite/utilities/aws_oidc.sh publish
+    source .buildkite/utilities/aws_oidc.sh "${PUBLISH_OIDC_MODE}"
     if ! TRIPLET="${triplet}" bash .buildkite/utilities/upload_julia.sh publish; then
         echo "ERROR: publishing ${triplet} failed" >&2
         FAILED+=( "${triplet}" )

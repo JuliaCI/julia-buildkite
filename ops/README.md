@@ -226,6 +226,41 @@ are Terraform variables with the production defaults):
     private half lived on agents) and securely delete all copies; keep
     its revoked public key published so old releases remain verifiable.
 
+### NON-PRODUCTION publish test stack (`julia-publish-test-nosecrets`)
+
+An isolated stack to debug the publish flow (download → KMS-sign → promote)
+end to end without touching any production key, bucket, or `julia-latest-*`
+pointer. It runs the *same* `publish.sh` but redirects every signer to a
+throwaway `*-test` KMS key (self-signed cert) and every bucket to
+`julialang-test-publish`, and skips the two signers with no non-production
+equivalent (Windows Azure Trusted Signing, macOS Apple notarization). The
+macOS `.dmg` is still built and codesigned. All of it lives in
+`ops/terraform/test_publish.tf` (gated on `buildkite_test_pipeline_id`) and
+`pipelines/publish-test/`.
+
+1. Create the `julia-publish-test-nosecrets` Buildkite pipeline (WebUI =
+   `pipelines/publish-test/0_webui.yml`); it is NOT a trust boundary, so PR
+   builds may stay enabled. Put its pipeline + cluster UUIDs in
+   `buildkite_ids.auto.tfvars` (`buildkite_test_pipeline_id` /
+   `buildkite_test_cluster_id`).
+2. `terraform apply` — creates the two test keys (`alias/julia-{tarball-signing,
+   macos-codesigning}-test`), the `julialang-test-publish` bucket, and the
+   `julia-oidc-publish-test` role (test keys + test bucket only, no write-once).
+3. Generate + commit the self-signed material (AWS creds with kms:Sign on the
+   test keys):
+   * `./20_export_gpg_pubkey.py --created <YYYY-MM-DD> --kms-key-id
+     alias/julia-tarball-signing-test -o secrets/tarball_signing_test.pub.asc`
+   * `./32_gen_test_codesign_cert.sh` → `utilities/macos/developer_id_test.pem`
+   * (macOS `.dmg` also needs the shared `.app` skeleton from step 8 above.)
+4. Seed staged input for a real master commit:
+   `./seed_test_staging.sh <full-40-char-commit>` (defaults to the 3 Linux +
+   2 macOS tokens). Use a real master commit so `verify_trusted_commit.sh`
+   passes.
+5. Trigger a `julia-publish-test-nosecrets` build on that commit and watch it
+   download → KMS-sign (test keys) → promote into `julialang-test-publish`.
+   Re-run freely: the test role has no write-once condition. Tear down by
+   deleting `ops/terraform/test_publish.tf` (test keys have no prevent_destroy).
+
 ## Agent/rootfs prerequisites
 
 * AWS CLI on **all build agents/rootfs images** (the build step itself

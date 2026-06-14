@@ -20,3 +20,10 @@ buildkite_cluster_ids = {
   "julia-ci"      = "ae7e6bd1-fde8-433d-bac7-9d2d01108ed6"
   "julia-publish" = "fd6c2af4-60c1-40ee-bdd5-88ecb6698fbc"
 }
+
+# Isolated NON-PRODUCTION publish test stack (ops/terraform/test_publish.tf).
+# Leave commented to keep the test stack disabled; uncomment with the real
+# UUIDs (GET /v2/organizations/julialang/pipelines/julia-publish-test-nosecrets)
+# to create the throwaway test keys/bucket/role and run the test publish flow.
+# buildkite_test_pipeline_id = "00000000-0000-0000-0000-000000000000"
+# buildkite_test_cluster_id  = "00000000-0000-0000-0000-000000000000"

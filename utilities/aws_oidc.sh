@@ -33,19 +33,26 @@
 JULIA_CI_AWS_ACCOUNT_ID="${JULIA_CI_AWS_ACCOUNT_ID:-873569884612}"
 JULIA_CI_AWS_REGION="${JULIA_CI_AWS_REGION:-us-east-1}"
 
-_OIDC_ROLE_SUFFIX="${1:?usage: source aws_oidc.sh <stage|publish|docs-deploy|tokens>}"
+_OIDC_ROLE_SUFFIX="${1:?usage: source aws_oidc.sh <stage|publish|docs-deploy|tokens|publish-test>}"
 
 # The trusted roles must only ever be requested from the dedicated publish
 # pipeline. The IAM trust policy already enforces this (it only trusts the
 # julia-publish* slug), but refuse early here too so a misconfiguration
 # surfaces loudly rather than as a confusing AccessDenied. Pull request
 # builds never run in a publish pipeline.
+# publish-test resolves to the throwaway, non-production test role
+# (julia-oidc-publish-test): it can only sign with the *-test KMS keys and
+# read/write the test bucket. Like the production trusted roles it must come
+# from a *publish* pipeline slug, but -- being harmless -- it is NOT refused on
+# pull-request builds, so the test publish flow can be exercised from anywhere.
 case "${_OIDC_ROLE_SUFFIX}" in
-    publish|docs-deploy)
+    publish|docs-deploy|publish-test)
         if [[ "${BUILDKITE_PIPELINE_SLUG:-}" != *publish* ]]; then
             echo "ERROR: ${_OIDC_ROLE_SUFFIX} role requested from non-publish pipeline '${BUILDKITE_PIPELINE_SLUG:-}'" >&2
             return 1 2>/dev/null || exit 1
         fi
+        ;;&
+    publish|docs-deploy)
         if [[ "${BUILDKITE_PULL_REQUEST:-false}" != "false" ]]; then
             echo "ERROR: ${_OIDC_ROLE_SUFFIX} role must not be requested on a pull request build" >&2
             return 1 2>/dev/null || exit 1

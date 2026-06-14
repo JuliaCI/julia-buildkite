@@ -113,18 +113,28 @@ create_dmg
 # Notarize the `.dmg`. The App Store Connect API key also lives in KMS;
 # notary_api_key.json contains no secret material (see ops/21_import_notary_key.sh),
 # so it is committed in this repository in plaintext.
-RCODESIGN="$("${THIS_DIR}/get_rcodesign.sh")"
+#
+# The non-production publish test stack sets PUBLISH_SKIP_NOTARIZATION=1:
+# notarization is a hosted Apple App Store Connect round-trip with no
+# self-signable / KMS-faked equivalent, so the test pipeline skips it. The
+# `.dmg`/`.app` are still KMS-codesigned above; only the Apple notarize+staple
+# (and the post-staple .dmg rebuild) are skipped.
+if [[ "${PUBLISH_SKIP_NOTARIZATION:-0}" != "1" ]]; then
+    RCODESIGN="$("${THIS_DIR}/get_rcodesign.sh")"
 
-"${RCODESIGN}" notary-submit \
-    --api-key-file "${NOTARY_API_KEY_FILE}" \
-    --wait \
-    "${DMG_NAME}"
+    "${RCODESIGN}" notary-submit \
+        --api-key-file "${NOTARY_API_KEY_FILE}" \
+        --wait \
+        "${DMG_NAME}"
 
-# Staple the notarization ticket to the app
-"${RCODESIGN}" staple "${APP_PATH}"
+    # Staple the notarization ticket to the app
+    "${RCODESIGN}" staple "${APP_PATH}"
 
-# Re-build the .dmg from the app now that it's notarized
-create_dmg
+    # Re-build the .dmg from the app now that it's notarized
+    create_dmg
+else
+    echo "Skipping notarization (PUBLISH_SKIP_NOTARIZATION=1): .dmg is KMS-codesigned but not notarized/stapled." >&2
+fi
 
 # Cleanup things we created here
 rm -rf "${DMG_PATH}"

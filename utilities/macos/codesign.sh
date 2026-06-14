@@ -29,7 +29,11 @@ if [ "$#" -lt 1 ]; then
 fi
 
 KMS_KEY=""
-CERTIFICATE="${THIS_DIR}/developer_id.pem"
+# The Developer ID certificate (PEM) paired with the KMS key. Defaults to the
+# production developer_id.pem next to this script; the non-production publish
+# test stack overrides it (a self-signed cert for the test KMS key) via
+# MACOS_CODESIGN_CERT. An explicit --certificate still wins over both.
+CERTIFICATE="${MACOS_CODESIGN_CERT:-${THIS_DIR}/developer_id.pem}"
 
 while [ "$#" -gt 1 ]; do
     case "${1}" in

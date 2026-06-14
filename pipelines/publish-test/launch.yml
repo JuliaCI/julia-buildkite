@@ -1,0 +1,69 @@
+# Launched by the julia-publish-test-nosecrets pipeline. Runs the exact same
+# publish.sh flow as production, but the env below redirects every signing key
+# to a THROWAWAY *-test KMS key (self-signed cert) and every bucket to the
+# isolated julialang-test-publish bucket, and skips the two signers that have
+# no non-production equivalent (Windows Azure Trusted Signing, macOS Apple
+# notarization). Nothing here can touch a production key, bucket, or pointer.
+#
+# See ops/terraform/test_publish.tf (test keys + bucket + julia-oidc-publish-test
+# role) and ops/seed_test_staging.sh (seed the staged input).
+steps:
+  - group: "Publish (test)"
+    steps:
+      - label: ":test_tube: publish all (test)"
+        key: "publish_all"
+        concurrency: 1
+        concurrency_group: 'publish-test/julialangnightlies'
+        concurrency_method: eager
+        plugins:
+          - JuliaCI/external-buildkite#v1:
+              version: "./.buildkite-external-version"
+              repo_url: "https://github.com/JuliaCI/julia-buildkite"
+          - JuliaCI/julia#v1:
+              # Host julia for the cross-mode pkgimage checksum patching
+              # (mounted into the sandbox, as in build_linux / publish).
+              persist_depot_dirs: packages,artifacts,compiled
+              version: '1.10' # GREP_ME: Keep this updated to LTS. Do not set it to '1' or 'stable' or 'latest'.
+          - JuliaCI/sandbox#v2:
+              # Same toolchain image as the production publish step.
+              rootfs_url: https://github.com/JuliaCI/rootfs-images/releases/download/v8.3/julia_publish.x86_64.tar.gz
+              rootfs_treehash: "e11a4f12b441b5201ba672077c000bbdea8df244"
+              uid: 1000
+              gid: 1000
+              workspaces:
+                - "/cache/repos:/cache/repos"
+        timeout_in_minutes: 180
+        commands: "bash .buildkite/utilities/publish.sh"
+        agents:
+          queue: "default"
+          sandbox_capable: "true"
+          os: "linux"
+          arch: "x86_64"
+        env:
+          # Scope the test to the Linux + macOS triplets. Linux exercises the
+          # GPG-sign path (content-agnostic). macOS exercises the real rcodesign
+          # codesigning of the mach-o binaries AND the .dmg build (codesigned
+          # with the test KMS key + self-signed cert; notarization skipped),
+          # plus the cross-mode pkgimage checksum patch. The .dmg build requires
+          # the committed macOS .app skeleton (utilities/macos/julia-app-skeleton.tar.gz,
+          # built once on a Mac via ops/31_build_app_skeleton.sh).
+          # ops/seed_test_staging.sh seeds these five tokens by default.
+          PUBLISH_ARCHES_FILES: ".buildkite/pipelines/main/platforms/upload_linux.arches .buildkite/pipelines/main/platforms/upload_macos.arches"
+          # Assume the throwaway test role (test keys + test bucket only).
+          PUBLISH_OIDC_MODE: "publish-test"
+          # Redirect staging input AND promotion output to the test bucket.
+          S3_BUCKET: "julialang-test-publish"
+          STAGING_BUCKET: "julialang-test-publish"
+          S3_BUCKET_PREFIX: "bin"
+          # Throwaway signing material (test KMS keys + self-signed cert/pubkey).
+          MACOS_CODESIGN_KMS_KEY: "alias/julia-macos-codesigning-test"
+          MACOS_CODESIGN_CERT: ".buildkite/utilities/macos/developer_id_test.pem"
+          TARBALL_SIGNING_KMS_KEY: "alias/julia-tarball-signing-test"
+          TARBALL_SIGNING_PUBKEY: ".buildkite/secrets/tarball_signing_test.pub.asc"
+          # The two signers with no non-production equivalent are skipped:
+          # Windows Authenticode (Azure Trusted Signing) and macOS notarization
+          # (Apple App Store Connect). The .dmg is still built and codesigned.
+          PUBLISH_SKIP_WINDOWS_SIGN: "1"
+          PUBLISH_SKIP_NOTARIZATION: "1"
+          # Inno Setup prefix baked into the rootfs (as in production publish).
+          WINEPREFIX: "/home/juliaci/.wine"

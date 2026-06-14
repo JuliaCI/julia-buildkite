@@ -39,6 +39,17 @@ if [[ "${TARGET}" =~ ^[A-Za-z]: ]]; then
     TARGET="$(winepath -u "${TARGET}")"
 fi
 
+# The non-production publish test stack sets PUBLISH_SKIP_WINDOWS_SIGN=1:
+# Windows Authenticode signing is Azure Trusted Signing, which has no
+# KMS/self-signed equivalent. No-op (exit 0) so that ISCC's compile-time
+# SignTool hook and the direct PE-signing pass both "succeed" while producing
+# UNSIGNED binaries. (upload_julia.sh skips the check_signed.py tripwire in
+# this mode, since the installer is intentionally unsigned.)
+if [[ "${PUBLISH_SKIP_WINDOWS_SIGN:-0}" == "1" ]]; then
+    echo "PUBLISH_SKIP_WINDOWS_SIGN=1: not Authenticode-signing ${TARGET}" >&2
+    exit 0
+fi
+
 # AZURE_TENANT_ID / AZURE_CLIENT_ID identify the Trusted Signing app
 # registration; they are not secrets and are set in the pipeline yml.
 if [[ -z "${AZURE_TENANT_ID:-}" ]] ||
