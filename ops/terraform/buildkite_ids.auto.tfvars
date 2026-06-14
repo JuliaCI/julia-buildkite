@@ -22,8 +22,8 @@ buildkite_cluster_ids = {
 }
 
 # Isolated NON-PRODUCTION publish test stack (ops/terraform/test_publish.tf).
-# Leave commented to keep the test stack disabled; uncomment with the real
-# UUIDs (GET /v2/organizations/julialang/pipelines/julia-publish-test-nosecrets)
-# to create the throwaway test keys/bucket/role and run the test publish flow.
-# buildkite_test_pipeline_id = "00000000-0000-0000-0000-000000000000"
-# buildkite_test_cluster_id  = "00000000-0000-0000-0000-000000000000"
+# Set to the real UUIDs to enable the throwaway test keys/bucket/role; comment
+# out (or set null) to disable. julia-publish-test-nosecrets lives in the same
+# Secure cluster as julia-publish.
+buildkite_test_pipeline_id = "019ec73b-f8df-428a-a256-745eff852687"
+buildkite_test_cluster_id  = "fd6c2af4-60c1-40ee-bdd5-88ecb6698fbc"
