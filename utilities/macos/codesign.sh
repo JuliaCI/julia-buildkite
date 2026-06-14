@@ -80,6 +80,31 @@ if [ -n "${KMS_KEY}" ]; then
         exit 1
     fi
     RCODESIGN_BIN="$("${THIS_DIR}/get_rcodesign.sh")"
+
+    # Each rcodesign process resolves AWS credentials independently. Signing a
+    # whole bundle means hundreds of processes, and under Buildkite OIDC each
+    # would run its own STS AssumeRoleWithWebIdentity. Even a small bounded pool
+    # overwhelmed the (proxied) STS endpoint enough that ~8% of resolutions
+    # exceeded the AWS SDK's 5s budget ("identity resolver timed out after 5s")
+    # and the signature failed. Assume the role ONCE here and hand every signer
+    # the resulting static session credentials via the SDK's first, network-free
+    # environment provider -- credential resolution becomes a local lookup that
+    # cannot time out, no matter how many signers run concurrently. (Only when
+    # running under an OIDC web-identity token; a local run with static creds
+    # already in the environment keeps them.)
+    if [[ -z "${AWS_ACCESS_KEY_ID:-}" && -n "${AWS_WEB_IDENTITY_TOKEN_FILE:-}" ]]; then
+        echo "Resolving shared AWS session credentials for rcodesign (one STS call for all signers)"
+        _kms_creds="$(aws sts assume-role-with-web-identity \
+            --role-arn "${AWS_ROLE_ARN:?}" \
+            --role-session-name "${AWS_ROLE_SESSION_NAME:-rcodesign}" \
+            --web-identity-token "$(cat "${AWS_WEB_IDENTITY_TOKEN_FILE}")" \
+            --query 'Credentials.[AccessKeyId,SecretAccessKey,SessionToken]' \
+            --output text)"
+        read -r AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN <<<"${_kms_creds}"
+        export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+        unset _kms_creds
+    fi
+
     do_codesign() { do_kms_codesign "$@"; }
     IDENTITY_DESC="KMS key ${KMS_KEY}"
 else
