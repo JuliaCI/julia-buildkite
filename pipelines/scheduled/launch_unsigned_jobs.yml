@@ -27,7 +27,7 @@ steps:
               .buildkite/pipelines/scheduled/platforms/build_linux.schedule.arches \
               .buildkite/pipelines/main/platforms/build_linux.yml
         agents:
-          queue: "julia"
+          queue: "launch"
           os: "linux"
           arch: "x86_64" # prevent from running on PiBots
   - group: "Source Tests (Allow Fail)"
@@ -44,7 +44,7 @@ steps:
               .buildkite/pipelines/scheduled/platforms/test_linux.schedule.arches \
               .buildkite/pipelines/main/platforms/test_linux.yml
         agents:
-          queue: "julia"
+          queue: "launch"
           os: "linux"
           arch: "x86_64" # prevent from running on PiBots
   - group: "no_GPL"
@@ -71,6 +71,6 @@ steps:
               .buildkite/pipelines/scheduled/platforms/build_windows.no_gpl.arches \
               .buildkite/pipelines/main/platforms/build_windows.yml
         agents:
-          queue: "julia"
+          queue: "launch"
           os: "linux"
           arch: "x86_64" # prevent from running on PiBots

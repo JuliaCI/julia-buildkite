@@ -83,8 +83,8 @@ if [[ "${USE_RR-}" == "rr" ]] || [[ "${USE_RR-}" == "rr-net" ]]; then
     export NCORES_FOR_TESTS="parse(Int, ENV[\"JULIA_RRCAPTURE_NUM_CORES\"])"
     export JULIA_NUM_THREADS=1
 
-    # Do not run Pkg tests on rr
-    TESTS_TO_SKIP+=( Pkg )
+    # Do not run Pkg or JuliaLowering stdlib tests on rr.
+    TESTS_TO_SKIP+=( Pkg JuliaLowering_stdlibs )
 
     # rr: all tests EXCEPT the network-related tests
     # rr-net: ONLY the network-related tests

@@ -34,7 +34,7 @@ steps:
         timeout_in_minutes: 30
         soft_fail: ${ALLOW_FAIL?}
         agents:
-          queue: "julia"
+          queue: "test"
           sandbox_capable: "true"
           os: "linux"
           arch: "x86_64"

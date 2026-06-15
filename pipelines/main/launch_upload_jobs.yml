@@ -8,7 +8,7 @@ steps:
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
-          - JuliaCI/julia#b4d0bfa510bc399417133adae013385af5c71190: # v1.13.5
+          - JuliaCI/julia#d8cd48ed4e72ca4ea47a5d02d79fb1bea0ee3e6b: # v1.13.8
               # A few notes:
               # 1. We pin the `JuliaCI/julia` plugin to a full commit hash.
               #    This is intentional. We want to make sure that this script doesn't suddenly
@@ -66,7 +66,7 @@ steps:
           unset BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET
         agents:
           cryptic_capable: "true"
-          queue: "julia"
+          queue: "launch"
           os: "linux"
           arch: "x86_64" # prevent from running on PiBots
         env:
@@ -95,7 +95,7 @@ steps:
           unset BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET
         agents:
           cryptic_capable: "true"
-          queue: "julia"
+          queue: "launch"
           os: "linux"
           arch: "x86_64" # prevent from running on PiBots
         env:
