@@ -88,11 +88,14 @@ esac
 # this script to mint a fresh token (publish.sh does so per triplet).
 _OIDC_TOKEN_FILE="$(mktemp)"
 # Agent v3.104+ redacts the token from logs via the Job API (a unix socket),
-# which is unreachable inside the publish sandbox, aborting the request. We
+# which is unreachable inside the publish sandbox and aborts the request. We
 # write the token to a file and never echo it, so skip redaction -- but only
-# where the flag exists, since older build-cluster agents predate it.
+# on agents new enough to know the flag (older build-cluster agents reject it
+# and aren't sandbox-broken). Detect by version: `--help` can't be probed,
+# since on affected agents it too needs the Job API and aborts.
 _OIDC_SKIP_REDACTION=()
-if buildkite-agent oidc request-token --help 2>&1 | grep -q -- '--skip-redaction'; then
+_BK_VER="$(buildkite-agent --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+' | head -1)"
+if [ -n "${_BK_VER}" ] && { [ "${_BK_VER%%.*}" -gt 3 ] || { [ "${_BK_VER%%.*}" -eq 3 ] && [ "${_BK_VER#*.}" -ge 104 ]; }; }; then
     _OIDC_SKIP_REDACTION=( --skip-redaction )
 fi
 buildkite-agent oidc request-token \
