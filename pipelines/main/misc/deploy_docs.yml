@@ -77,7 +77,7 @@ steps:
           fi
         timeout_in_minutes: 45
         agents:
-          queue: "julia"
+          queue: "test"
           sandbox_capable: "true"
           os: "linux"
           arch: "x86_64"

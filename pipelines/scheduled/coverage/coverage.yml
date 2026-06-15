@@ -51,7 +51,7 @@ steps:
           echo "--- Process and upload coverage information"
           ./julia --color=yes .buildkite/pipelines/scheduled/coverage/upload_coverage.jl
         agents:
-          queue: "julia"
+          queue: "test"
           # Only run on `sandbox.jl` machines (not `docker`-isolated ones) since we need nestable sandboxing
           sandbox_capable: "true"
           os: "linux"
@@ -107,7 +107,7 @@ steps:
           echo "--- Process and upload coverage information"
           ./julia --color=yes .buildkite/pipelines/scheduled/coverage/upload_coverage.jl
         agents:
-          queue: "julia"
+          queue: "test"
           os: "macos"
           arch: "aarch64"
         env:
@@ -179,7 +179,7 @@ steps:
                 - "BUILDKITE_BUILD_NUMBER"
         timeout_in_minutes: 540 # 9h
         agents:
-          queue: "julia"
+          queue: "test"
           os: "windows"
           arch: "x86_64"
         env:
@@ -215,7 +215,7 @@ steps:
           echo "--- Signal completion of parallel coverage uploads"
           julia --color=yes .buildkite/pipelines/scheduled/coverage/finish_parallel_coverage.jl
         agents:
-          queue: "julia"
+          queue: "test"
           os: "linux"
           arch: "x86_64"
         env:

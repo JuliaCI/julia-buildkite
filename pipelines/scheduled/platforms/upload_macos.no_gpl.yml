@@ -34,7 +34,7 @@ steps:
         timeout_in_minutes: ${TIMEOUT?}
         commands: "bash .buildkite/utilities/upload_julia.sh"
         agents:
-          queue: "julia"
+          queue: "build"
           os: "macos"
           arch: "${ARCH}"
         env:

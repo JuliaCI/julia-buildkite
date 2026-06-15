@@ -59,7 +59,7 @@ steps:
                 - "S3_BUCKET_PREFIX=bin-nogpl"
         timeout_in_minutes: ${TIMEOUT?}
         agents:
-          queue: "julia"
+          queue: "build"
           os: "windows"
         env:
           # Receive cryptic token from parent job
