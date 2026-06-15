@@ -294,8 +294,14 @@ echo "The short commit is:                     ${SHORT_COMMIT}"
 echo "Julia will be installed to:        ${JULIA_BINARY}"
 echo "Detected Julia version:            ${MAJMIN}  (${JULIA_VERSION})"
 echo "Detected build platform:           ${TRIPLET}  (${ARCH}, ${OS})"
-echo "Julia will be uploaded to:         s3://${UPLOAD_TARGETS[0]}.tar.gz"
-echo "With additional upload targets:"
-for UPLOAD_TARGET in "${UPLOAD_TARGETS[@]:1}"; do
-    echo " -> s3://${UPLOAD_TARGET}.tar.gz"
-done
+# PR (and other non-master/release/tag) builds have no canonical upload targets:
+# they only stage to the ephemeral bucket, so UPLOAD_TARGETS is empty here.
+if [[ "${#UPLOAD_TARGETS[@]}" -gt 0 ]]; then
+    echo "Julia will be uploaded to:         s3://${UPLOAD_TARGETS[0]}.tar.gz"
+    echo "With additional upload targets:"
+    for UPLOAD_TARGET in "${UPLOAD_TARGETS[@]:1}"; do
+        echo " -> s3://${UPLOAD_TARGET}.tar.gz"
+    done
+else
+    echo "Staging only (no canonical upload targets): s3://${STAGING_TARGET}.tar.gz"
+fi
