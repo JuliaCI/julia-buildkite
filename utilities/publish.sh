@@ -17,6 +17,14 @@
 # by a host julia. See "Publish image prerequisites" in ops/README.md.
 set -euo pipefail
 
+# This step runs inside the julia_publish sandbox, whose mount namespace can't
+# reach the agent's Job API unix socket on the host. A set-but-unreachable
+# BUILDKITE_AGENT_JOB_API_SOCKET makes every `buildkite-agent` CLI call abort
+# on startup. The only agent calls here are `oidc request-token` (aws_oidc.sh,
+# windows/codesign.sh), which use the agent's HTTPS API, not the Job API, so
+# drop the socket vars to skip the unreachable Job API client.
+unset BUILDKITE_AGENT_JOB_API_SOCKET BUILDKITE_AGENT_JOB_API_TOKEN
+
 # The set of arches to publish. Mirrors what the build pipeline staged.
 # Each file's rows define TRIPLET (and TIMEOUT); see utilities/arches_env.sh.
 ARCHES_FILES=(
