@@ -172,13 +172,14 @@ are Terraform variables with the production defaults):
    true`) and running `terraform init -migrate-state` — the resources
    are untouched by the migration.
 4. Key material:
-   * `./20_export_gpg_pubkey.py --created <today>` — exports the OpenPGP
-     public half of the KMS-generated tarball signing key to
+   * `./20_export_gpg_pubkey.py` — exports the OpenPGP public half of the
+     KMS-generated tarball signing key to
      `signing-pubkeys/tarball_signing.pub.asc`. Commit it, and publish it as the
      new Julia releases signing key (it **replaces** the pre-migration
      `juliareleases.asc`; old signatures keep verifying against the old
-     key, new signatures only against this one). `--created` is part of
-     the key fingerprint: pin it and never change it.
+     key, new signatures only against this one). The creation timestamp is
+     part of the key fingerprint; it defaults to the KMS key's own
+     immutable CreationDate, so no date need be pinned by hand.
    * `./21_import_notary_key.sh AuthKey_X.p8 <issuer-id> <key-id>` — the
      App Store Connect API key is Apple-generated and must be imported
      (from a trusted workstation; obtain the .p8 once via the legacy
