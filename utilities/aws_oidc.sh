@@ -87,9 +87,18 @@ esac
 # expires, so jobs whose AWS usage spans more than ~2h must re-source
 # this script to mint a fresh token (publish.sh does so per triplet).
 _OIDC_TOKEN_FILE="$(mktemp)"
+# Agent v3.104+ redacts the token from logs via the Job API (a unix socket),
+# which is unreachable inside the publish sandbox, aborting the request. We
+# write the token to a file and never echo it, so skip redaction -- but only
+# where the flag exists, since older build-cluster agents predate it.
+_OIDC_SKIP_REDACTION=()
+if buildkite-agent oidc request-token --help 2>&1 | grep -q -- '--skip-redaction'; then
+    _OIDC_SKIP_REDACTION=( --skip-redaction )
+fi
 buildkite-agent oidc request-token \
     --audience "sts.amazonaws.com" \
     --lifetime 7200 \
+    "${_OIDC_SKIP_REDACTION[@]}" \
     --aws-session-tag "organization_slug,organization_id,pipeline_slug,pipeline_id,cluster_id,build_branch,build_number,build_commit,step_key,job_id,agent_id" \
     > "${_OIDC_TOKEN_FILE}"
 

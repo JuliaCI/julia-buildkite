@@ -80,6 +80,7 @@ get_access_token() {
     oidc_token="$(buildkite-agent oidc request-token \
         --audience "api://AzureADTokenExchange" \
         --subject-claim pipeline_id \
+        --skip-redaction \
         --lifetime 3600)"
 
     response="$(curl --fail --silent --show-error \
