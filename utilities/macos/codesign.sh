@@ -85,12 +85,21 @@ do_kms_codesign() {
     # rcodesign prints ~10 chatty lines per file; across hundreds of files signed
     # in parallel that floods (and interleaves in) the log, so capture the output
     # and only emit it if the signature actually fails.
+    #
+    # A directory target is the .app bundle: seal it WITHOUT re-signing nested
+    # code (--shallow). The per-file pass already signs every nested Mach-O
+    # individually; Apple recommends against re-signing nested code via a deep
+    # bundle sign, and shallow mode also avoids touching unsignable members
+    # (static archives, dSYM DWARF) -- they are sealed as resources.
+    local shallow_args=()
+    [[ -d "${1}" ]] && shallow_args=( --shallow )
     local out
     if ! out="$("${RCODESIGN_BIN}" sign \
         --aws-kms-key "${KMS_KEY}" \
         --aws-kms-certificate-file "${CERTIFICATE}" \
         --code-signature-flags runtime \
         --entitlements-xml-file "${THIS_DIR}/Entitlements.plist" \
+        ${shallow_args[@]+"${shallow_args[@]}"} \
         "${1}" 2>&1)"; then
         echo "ERROR: rcodesign failed for ${1}:" >&2
         echo "${out}" >&2
