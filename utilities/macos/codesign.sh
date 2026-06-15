@@ -197,6 +197,17 @@ elif [ -d "${TARGET}" ]; then
         exit 1
     fi
     echo "Codesigned ${NUM_CODESIGNS} files (skipped ${NUM_SKIPPED} non-Mach-O)"
+
+    # A .app is a bundle: its main executable (Contents/MacOS/applet) must be
+    # signed in bundle context -- sealing Contents/_CodeSignature/CodeResources
+    # and binding Info.plist -- or Apple's notary rejects its signature as
+    # invalid. The per-file pass above signs every nested Mach-O (so the notary
+    # sees them all signed); this final pass seals the bundle and re-signs the
+    # main executable correctly. rcodesign detects the bundle from the path.
+    if [[ "${TARGET}" == *.app && -d "${TARGET}/Contents" ]]; then
+        echo "Sealing .app bundle ${TARGET} with ${IDENTITY_DESC}"
+        do_codesign "${TARGET}"
+    fi
 else
     echo "Given codesigning target '${TARGET}' not a file or directory!" >&2
     usage

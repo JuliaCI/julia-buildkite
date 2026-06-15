@@ -88,18 +88,23 @@ if [[ "${OS}" == "macos" || "${OS}" == "macosnogpl" ]]; then
     tar zxf "${UPLOAD_FILENAME}.app.tar.gz"
     chmod -R u+w "${APP_NAME}"
 
+    echo "--- [mac] Update checksums for stdlib cachefiles"
+    # Cross mode: the host julia rewrites pkgimage checksums in the bundled
+    # (foreign-platform) target tree in place. This must happen BEFORE signing:
+    # modifying a binary after it is signed invalidates its signature and the
+    # bundle seal, which fails notarization (and ships a broken .tar.gz).
+    julia .buildkite/utilities/update_stdlib_pkgimage_checksums.jl \
+        "${APP_NAME}/Contents/Resources/julia" dylib
+
     echo "--- [mac] Codesign the .app"
     # The Developer ID private key lives in AWS KMS; every signature is a
-    # kms:Sign call performed by rcodesign (no keychain, no key file).
+    # kms:Sign call performed by rcodesign (no keychain, no key file). codesign.sh
+    # signs every nested Mach-O and then seals the .app as a bundle, so the main
+    # executable (Contents/MacOS/applet) carries a valid bundle signature that
+    # Apple's notary accepts.
     .buildkite/utilities/macos/codesign.sh \
         --kms-key "${MACOS_CODESIGN_KMS_KEY}" \
         "${APP_NAME}"
-
-    echo "--- [mac] Update checksums for stdlib cachefiles"
-    # Cross mode: the freshly signed macOS binaries cannot run on this linux
-    # agent, so the host julia patches the bundled target tree in place.
-    julia .buildkite/utilities/update_stdlib_pkgimage_checksums.jl \
-        "${APP_NAME}/Contents/Resources/julia" dylib
 
     echo "--- [mac] Repackage the signed tree as the .tar.gz product"
     rm -rf "${JULIA_INSTALL_DIR}"
