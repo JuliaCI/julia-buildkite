@@ -6,7 +6,7 @@ steps:
     steps:
       - label: "Unlock secrets, launch pipelines"
         agents:
-          queue: "julia"
+          queue: "launch"
           cryptic_capable: "true"
           os: "linux"
         plugins:
