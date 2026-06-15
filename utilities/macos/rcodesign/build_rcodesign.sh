@@ -16,7 +16,7 @@ set -euo pipefail
 
 # Our apple-platform-rs fork carrying the AWS KMS signing backend.
 APPLE_PLATFORM_RS_URL="https://github.com/KenoAIStaging/apple-platform-rs"
-APPLE_PLATFORM_RS_COMMIT="78b02e9309b2f829748879df5e5a8237de41e380"
+APPLE_PLATFORM_RS_COMMIT="1a05c5f91f07ddb923336e034037cae8bdcd3038"
 
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 OUTPUT_DIR="${1:-${SCRIPT_DIR}}"
