@@ -7,7 +7,7 @@ created by ops/terraform) and never leaves it. This script fetches the
 RSA public half via `aws kms get-public-key`, wraps it in an OpenPGP v4
 public key packet + user ID, and obtains the positive self-certification
 with a `kms:Sign` call -- producing an armored public key block that GPG
-and friends accept. Commit the output (secrets/tarball_signing.pub.asc)
+and friends accept. Commit the output (signing-pubkeys/tarball_signing.pub.asc)
 and publish it as the Julia releases signing key; release signatures
 made by utilities/kms_gpg_sign.py verify against it.
 
@@ -40,7 +40,7 @@ import kms_gpg_sign as K  # noqa: E402
 
 DEFAULT_KMS_KEY = "alias/julia-tarball-signing"
 DEFAULT_UID = "Julia Release Signing Key <buildbot@julialang.org>"
-DEFAULT_OUTPUT = os.path.join(SCRIPT_DIR, "..", "secrets", "tarball_signing.pub.asc")
+DEFAULT_OUTPUT = os.path.join(SCRIPT_DIR, "..", "signing-pubkeys", "tarball_signing.pub.asc")
 
 
 def main():

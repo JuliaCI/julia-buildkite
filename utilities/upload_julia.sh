@@ -38,7 +38,7 @@ TARBALL_SIGNING_KMS_KEY="${TARBALL_SIGNING_KMS_KEY:-alias/julia-tarball-signing}
 # to instead derive the key identity from KMS (kms:GetPublicKey) at runtime --
 # the throwaway test stack does this so it need not commit a test pubkey.
 # (`-` not `:-` so an explicit empty value is honored.)
-TARBALL_SIGNING_PUBKEY="${TARBALL_SIGNING_PUBKEY-.buildkite/secrets/tarball_signing.pub.asc}"
+TARBALL_SIGNING_PUBKEY="${TARBALL_SIGNING_PUBKEY-.buildkite/signing-pubkeys/tarball_signing.pub.asc}"
 
 # Because `wait` returns the exit code of the waited-upon PID, this (with
 # `set -e`) ends execution if any backgrounded task failed.

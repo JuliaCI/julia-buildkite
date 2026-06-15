@@ -19,12 +19,19 @@ API_KEY_ID="${3:?usage: $0 AuthKey.p8 <issuer-id> <key-id>}"
 WORK="$(mktemp -d)"
 trap 'rm -rf "${WORK}"' EXIT
 
+# GetParametersForImport / ImportKeyMaterial reject aliases; resolve to the ARN.
+KEY_ARN="$(kms_key_arn "${KMS_ALIAS_NOTARY_API}")"
+if [ -z "${KEY_ARN}" ]; then
+    echo "ERROR: ${KMS_ALIAS_NOTARY_API} not found (run terraform apply first)" >&2
+    exit 1
+fi
+
 echo "--- Convert .p8 (PEM PKCS#8) to DER"
 openssl pkcs8 -topk8 -nocrypt -in "${P8_FILE}" -outform DER -out "${WORK}/key.pkcs8.der"
 
 echo "--- Get KMS import parameters"
 aws kms get-parameters-for-import --region "${AWS_REGION}" \
-    --key-id "${KMS_ALIAS_NOTARY_API}" \
+    --key-id "${KEY_ARN}" \
     --wrapping-algorithm RSA_AES_KEY_WRAP_SHA_256 \
     --wrapping-key-spec RSA_4096 \
     --output json > "${WORK}/import-params.json"
@@ -53,12 +60,11 @@ cat "${WORK}/wrapped_aes.bin" "${WORK}/wrapped_key.bin" > "${WORK}/encrypted_mat
 
 echo "--- Import key material into ${KMS_ALIAS_NOTARY_API}"
 aws kms import-key-material --region "${AWS_REGION}" \
-    --key-id "${KMS_ALIAS_NOTARY_API}" \
+    --key-id "${KEY_ARN}" \
     --encrypted-key-material "fileb://${WORK}/encrypted_material.bin" \
     --import-token "fileb://${WORK}/import_token.bin" \
     --expiration-model KEY_MATERIAL_DOES_NOT_EXPIRE
 
-KEY_ARN="$(kms_key_arn "${KMS_ALIAS_NOTARY_API}")"
 OUT_JSON="${SCRIPT_DIR}/../utilities/macos/notary_api_key.json"
 
 echo "--- Write unified api key JSON (no secret material) to ${OUT_JSON}"

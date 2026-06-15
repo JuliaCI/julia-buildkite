@@ -71,9 +71,8 @@ steps:
           # Authenticode signing (not secrets; auth is via Buildkite OIDC
           # workload identity federation -- see windows/codesign.sh and
           # ops/terraform/azure).
-          # TODO: fill in after applying ops/terraform/azure
-          AZURE_TENANT_ID: "00000000-0000-0000-0000-000000000000"
-          AZURE_CLIENT_ID: "00000000-0000-0000-0000-000000000000"
+          AZURE_TENANT_ID: "8d3de454-9fdc-4091-90af-9cf79dcabe79"
+          AZURE_CLIENT_ID: "a1fa180a-5312-4673-a98c-7cde383bae9c"
 
       - label: "deploy docs"
         key: "deploy_docs"
