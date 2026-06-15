@@ -23,7 +23,7 @@ steps:
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
-          - JuliaCI/julia#b4d0bfa510bc399417133adae013385af5c71190: # v1.13.5
+          - JuliaCI/julia#d8cd48ed4e72ca4ea47a5d02d79fb1bea0ee3e6b: # v1.13.8
               # A few notes:
               # 1. We pin the `JuliaCI/julia` plugin to a full commit hash.
               #    This is intentional. We want to make sure that this script doesn't suddenly
@@ -66,7 +66,7 @@ steps:
               .buildkite/pipelines/main/platforms/build_windows.arches \
               .buildkite/pipelines/main/platforms/build_windows.yml
         agents:
-          queue: "julia"
+          queue: "launch"
           os: "linux"
           arch: "x86_64" # prevent from running on PiBots
   - group: "Check"
@@ -90,7 +90,7 @@ steps:
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/sanitizers/asan.yml
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/sanitizers/tsan.yml
         agents:
-          queue: "julia"
+          queue: "launch"
           os: "linux"
           arch: "x86_64" # prevent from running on PiBots
   - group: "Test"
@@ -136,7 +136,7 @@ steps:
               .buildkite/pipelines/main/platforms/test_windows.yml
           echo "+++ Finished launching test jobs"
         agents:
-          queue: "julia"
+          queue: "launch"
           os: "linux"
           arch: "x86_64" # prevent from running on PiBots
   - group: "Allow Fail"
@@ -159,7 +159,7 @@ steps:
               .buildkite/pipelines/main/platforms/build_macos.soft_fail.arches \
               .buildkite/pipelines/main/platforms/build_macos.yml
         agents:
-          queue: "julia"
+          queue: "launch"
           os: "linux"
           arch: "x86_64" # prevent from running on PiBots
       - label: "Launch allowed-to-fail test jobs"
@@ -167,7 +167,7 @@ steps:
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
-          - JuliaCI/julia#b4d0bfa510bc399417133adae013385af5c71190: # v1.13.5
+          - JuliaCI/julia#d8cd48ed4e72ca4ea47a5d02d79fb1bea0ee3e6b: # v1.13.8
               # A few notes:
               # 1. We pin the `JuliaCI/julia` plugin to a full commit hash.
               #    This is intentional. We want to make sure that this script doesn't suddenly
@@ -207,6 +207,6 @@ steps:
               .buildkite/pipelines/main/platforms/test_windows.soft_fail.arches \
               .buildkite/pipelines/main/platforms/test_windows.yml
         agents:
-          queue: "julia"
+          queue: "launch"
           os: "linux"
           arch: "x86_64" # prevent from running on PiBots
