@@ -10,13 +10,13 @@
 # Set RCODESIGN to override (e.g. a locally built binary).
 set -euo pipefail
 
-RCODESIGN_VERSION="0.29.0-kms1"
-RCODESIGN_SHA256_x86_64_linux_gnu="82a3693f584fa42fd6e9668bbe7cbe48ba66f8f75373804700ae44398955932f"
+RCODESIGN_VERSION="0.29.0-kms2"
+RCODESIGN_SHA256_x86_64_linux_gnu="f83f0c781d5a52f739b70af4daf53cc3b0306ae4192947ae280e55d9a49c83d9"
 # Test build: published as a GitHub release asset from
 # KenoAIStaging/apple-platform-rs @ aws-kms-backend. For production, build with
 # build_rcodesign.sh, upload via ops/30_upload_tools.sh, and point this at the
 # S3 tools/ path with a fresh sha.
-RCODESIGN_BASE_URL="${RCODESIGN_BASE_URL:-https://github.com/KenoAIStaging/apple-platform-rs/releases/download/julialang-test-1}"
+RCODESIGN_BASE_URL="${RCODESIGN_BASE_URL:-https://github.com/KenoAIStaging/apple-platform-rs/releases/download/fix1}"
 RCODESIGN_ASSET="${RCODESIGN_ASSET:-rcodesign}"
 
 if [ -n "${RCODESIGN:-}" ]; then
