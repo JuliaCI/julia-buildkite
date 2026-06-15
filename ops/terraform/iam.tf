@@ -261,7 +261,7 @@ data "aws_iam_policy_document" "publish" {
 
   statement {
     sid       = "WriteOnceToFinalLocations"
-    actions   = ["s3:PutObject", "s3:PutObjectAcl"]
+    actions   = ["s3:PutObject"]
     resources = [for p in local.final_paths : "${p}/*"]
 
     condition {
@@ -269,6 +269,16 @@ data "aws_iam_policy_document" "publish" {
       variable = "s3:if-none-match"
       values   = ["*"]
     }
+  }
+
+  # Versioned objects are uploaded public-read (--acl). The s3:if-none-match
+  # condition key exists only for s3:PutObject, so a PutObjectAcl folded into
+  # the conditioned statement above would never match -- keep it unconditioned.
+  # Object content stays write-once: that is enforced by the PutObject grant.
+  statement {
+    sid       = "SetPublicReadAclOnFinalObjects"
+    actions   = ["s3:PutObjectAcl"]
+    resources = [for p in local.final_paths : "${p}/*"]
   }
 
   statement {
