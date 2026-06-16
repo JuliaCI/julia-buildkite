@@ -134,9 +134,16 @@ mktempdir(temp_parent_dir) do dir
             )
             dst_full_path = joinpath(dumps_dir, dst_file_name)
             zstd_jll.zstdmt() do zstdp
-                tarproc = open(`$(zstdp) -o $(dst_full_path)`, "w")
-                Tar.create(dir, tarproc)
-                close(tarproc.in)
+                # Use GNU `tar` rather than `Tar.create`: `rr pack` deduplicates
+                # the large mmap'd files (sysimage, shared libraries, the `rr`
+                # binary) shared between the many per-worker traces using
+                # hardlinks. GNU tar emits a single copy plus hardlink entries,
+                # whereas `Tar.create` ignores `nlink` and rewrites each
+                # hardlink in full -- which, with one trace per precompile
+                # worker, blows the archive up by an order of magnitude and
+                # makes compression extremely slow.
+                run(pipeline(`tar --create --file=- --directory=$(dir) .`,
+                             `$(zstdp) -o $(dst_full_path)`))
             end
 
             @info "The `rr` trace file has been saved to: $(dst_full_path)"
