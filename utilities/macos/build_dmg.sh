@@ -57,14 +57,18 @@ fi
 function create_dmg() {
     rm -f "${DMG_NAME}" "${HFS_IMAGE}"
 
-    # Size the filesystem well above the measured tree size. HFS+ catalog/extents
-    # metadata and per-file allocation rounding over the thousands of files in the
-    # Julia tree need far more than a few percent of slack -- an under-sized volume
-    # fails mid-populate ("rawFileWrite ... allocate"). This only affects the
-    # *uncompressed* image (the final UDIF dmg is compressed), so a generous 50% +
-    # 256 MB margin is free.
+    # Size the filesystem just above the measured tree size. The margin covers
+    # HFS+ catalog/extents/bitmap metadata plus per-file allocation rounding over
+    # the thousands of files in the Julia tree; `du -sm` already rounds each file
+    # up to a 4 KB block, so the real overhead is only ~5% and a 10% + 64 MB
+    # margin sits comfortably above the empirical failure floor (under-sizing
+    # fails loudly mid-populate with "rawFileWrite ... allocate", never a corrupt
+    # dmg). Keep it TIGHT: libdmg-hfsplus's `addall` cost scales with the image's
+    # total block count, not the file data -- every allocated block is zeroed and
+    # its bitmap byte seeked individually -- so the old 1.5x+256 MB of free space
+    # made the populate ~3x slower for no benefit (the final UDIF is compressed).
     local size_mb
-    size_mb="$(( $(du -sm "${DMG_PATH}" | cut -f1) * 3 / 2 + 256 ))"
+    size_mb="$(( $(du -sm "${DMG_PATH}" | cut -f1) * 11 / 10 + 64 ))"
     truncate -s "${size_mb}M" "${HFS_IMAGE}"
     "${MKFSHFS_TOOL}" -v "${VOLUME_NAME}" "${HFS_IMAGE}"
 
