@@ -14,6 +14,13 @@ usage() {
     echo "    certificate: Path to the Developer ID certificate (PEM) paired with the"
     echo "                 KMS key. Defaults to developer_id.pem next to this script."
     echo
+    echo "    For a .app directory the default is a two-phase sign: first every nested"
+    echo "    Mach-O individually, then a bundle seal. These flags split the phases so a"
+    echo "    caller can interpose work (e.g. patching stdlib pkgimage checksums, which"
+    echo "    must read the *signed* pkgimages yet be sealed into CodeResources):"
+    echo "        --no-seal:   sign the nested Mach-Os but do NOT seal the bundle."
+    echo "        --seal-only: skip the nested pass; only seal the bundle."
+    echo
     echo "         target: A file or directory to codesign (must come last!)"
     echo
     echo "When a KMS key is used, signing is performed with rcodesign (apple-codesign"
@@ -35,6 +42,12 @@ KMS_KEY=""
 # MACOS_CODESIGN_CERT. An explicit --certificate still wins over both.
 CERTIFICATE="${MACOS_CODESIGN_CERT:-${THIS_DIR}/developer_id.pem}"
 
+# Bundle signing phases (see usage): by default a .app target gets both the
+# per-file nested pass and the final bundle seal. --no-seal / --seal-only run
+# only one phase so a caller can interpose work between them.
+DO_NESTED=1
+DO_SEAL=1
+
 while [ "$#" -gt 1 ]; do
     case "${1}" in
         --kms-key)
@@ -45,6 +58,10 @@ while [ "$#" -gt 1 ]; do
             CERTIFICATE="$2"; shift; shift ;;
         --certificate=*)
             CERTIFICATE="${1#*=}"; shift ;;
+        --no-seal)
+            DO_SEAL=0; shift ;;
+        --seal-only)
+            DO_NESTED=0; shift ;;
         *)
             echo "Unknown argument '$1'"
             usage
@@ -52,6 +69,11 @@ while [ "$#" -gt 1 ]; do
     esac
 done
 TARGET="${1}"
+
+if [ "${DO_NESTED}" = 0 ] && [ "${DO_SEAL}" = 0 ]; then
+    echo "ERROR: --no-seal and --seal-only are mutually exclusive" >&2
+    exit 1
+fi
 
 # True if $1 begins with a Mach-O magic (thin LE/BE 32/64-bit, or a fat/universal
 # archive). rcodesign signs Mach-O binaries (and bundles/dmgs) only; the bundle
@@ -150,6 +172,7 @@ if [ -f "${TARGET}" ]; then
     echo "Codesigning file ${TARGET} with ${IDENTITY_DESC}"
     do_codesign "${TARGET}"
 elif [ -d "${TARGET}" ]; then
+  if [ "${DO_NESTED}" = 1 ]; then
     # Create a fifo to communicate from `find` to `while`
     trap 'rm -rf $TMPFIFODIR' EXIT
     TMPFIFODIR="$(mktemp -d)"
@@ -206,6 +229,7 @@ elif [ -d "${TARGET}" ]; then
         exit 1
     fi
     echo "Codesigned ${NUM_CODESIGNS} files (skipped ${NUM_SKIPPED} non-Mach-O)"
+  fi
 
     # A .app is a bundle: its main executable (Contents/MacOS/applet) must be
     # signed in bundle context -- sealing Contents/_CodeSignature/CodeResources
@@ -213,7 +237,11 @@ elif [ -d "${TARGET}" ]; then
     # invalid. The per-file pass above signs every nested Mach-O (so the notary
     # sees them all signed); this final pass seals the bundle and re-signs the
     # main executable correctly. rcodesign detects the bundle from the path.
-    if [[ "${TARGET}" == *.app && -d "${TARGET}/Contents" ]]; then
+    #
+    # When split across phases (--no-seal / --seal-only) the caller patches the
+    # stdlib pkgimage checksums between the nested pass and this seal, so the
+    # sealed CodeResources covers the final (checksum-corrected) .ji files.
+    if [ "${DO_SEAL}" = 1 ] && [[ "${TARGET}" == *.app && -d "${TARGET}/Contents" ]]; then
         echo "Sealing .app bundle ${TARGET} with ${IDENTITY_DESC}"
         do_codesign "${TARGET}"
     fi

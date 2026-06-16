@@ -88,22 +88,35 @@ if [[ "${OS}" == "macos" || "${OS}" == "macosnogpl" ]]; then
     tar zxf "${UPLOAD_FILENAME}.app.tar.gz"
     chmod -R u+w "${APP_NAME}"
 
+    # Signing is split across three steps because the stdlib pkgimage checksum
+    # fixup has to happen in the middle. Codesigning rewrites every pkgimage
+    # Mach-O (.dylib), which changes its crc32c; the .ji caches embed that
+    # crc32c, so they must be repatched AFTER signing -- otherwise julia rejects
+    # the native code caches at load ("native code cache checksum is invalid")
+    # and recompiles them. But the .ji files are also sealed into the bundle's
+    # CodeResources, so the repatch must land BEFORE the bundle seal. Hence:
+    # sign nested -> patch checksums -> seal.
+    echo "--- [mac] Codesign nested Mach-Os (pre-seal)"
+    # The Developer ID private key lives in AWS KMS; every signature is a
+    # kms:Sign call performed by rcodesign (no keychain, no key file).
+    .buildkite/utilities/macos/codesign.sh \
+        --kms-key "${MACOS_CODESIGN_KMS_KEY}" \
+        --no-seal \
+        "${APP_NAME}"
+
     echo "--- [mac] Update checksums for stdlib cachefiles"
-    # Cross mode: the host julia rewrites pkgimage checksums in the bundled
-    # (foreign-platform) target tree in place. This must happen BEFORE signing:
-    # modifying a binary after it is signed invalidates its signature and the
-    # bundle seal, which fails notarization (and ships a broken .tar.gz).
+    # Cross mode: the host julia rewrites the (now signed) pkgimage checksums in
+    # the bundled foreign-platform target tree in place.
     julia .buildkite/utilities/update_stdlib_pkgimage_checksums.jl \
         "${APP_NAME}/Contents/Resources/julia" dylib
 
-    echo "--- [mac] Codesign the .app"
-    # The Developer ID private key lives in AWS KMS; every signature is a
-    # kms:Sign call performed by rcodesign (no keychain, no key file). codesign.sh
-    # signs every nested Mach-O and then seals the .app as a bundle, so the main
-    # executable (Contents/MacOS/applet) carries a valid bundle signature that
-    # Apple's notary accepts.
+    echo "--- [mac] Seal the .app bundle"
+    # Seals Contents/_CodeSignature/CodeResources (over the checksum-corrected
+    # tree) and signs the main executable (Contents/MacOS/applet) in bundle
+    # context, so Apple's notary accepts the bundle signature.
     .buildkite/utilities/macos/codesign.sh \
         --kms-key "${MACOS_CODESIGN_KMS_KEY}" \
+        --seal-only \
         "${APP_NAME}"
 
     echo "--- [mac] Repackage the signed tree as the .tar.gz product"
