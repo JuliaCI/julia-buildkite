@@ -21,7 +21,7 @@ case "${TRIPLET}" in
     *-gnuprofiling) # profiling-enabled builds (`WITH_TRACY=1` and `WITH_ITTAPI=1` and `WITH_TIMING_COUNTS=1`)
         OS="linuxprofiling"
         ;;
-    *-gnummtk) # Using MMTk Immix as the default GC (`MMTK_PLAN=Immix`)
+    *-gnummtk) # Using MMTk StickyImmix as the default GC (`MMTK_PLAN=StickyImmix`)
         OS="linuxmmtk"
         ;;
     *-gnusrcassert) # both "from source" and assert
