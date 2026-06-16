@@ -53,8 +53,7 @@ if [[ -f "${APP_PATH}/Contents/Resources/julia.icns" ]]; then
 fi
 
 # Create the `.dmg`: an HFS+ filesystem image filled with the staged directory,
-# converted to a compressed UDIF, then signed. We define this in a function
-# because we need to do it again after stapling.
+# converted to a compressed UDIF, then signed.
 function create_dmg() {
     rm -f "${DMG_NAME}" "${HFS_IMAGE}"
 
@@ -103,17 +102,14 @@ function create_dmg() {
 }
 create_dmg
 
-# TEMP DEBUG (revert): upload the signed .dmg as a Buildkite artifact so it can
-# be downloaded and inspected (codesign/notarytool) off the agent.
-buildkite-agent artifact upload "${DMG_NAME}" || echo "DEBUG: artifact upload failed (Job API?)" >&2
-
-# Notarize the `.dmg`. The App Store Connect API key also lives in KMS;
-# notary_api_key.json contains no secret material (see ops/21_import_notary_key.sh).
+# Notarize the `.dmg`, then staple the ticket onto the `.dmg` itself. The App
+# Store Connect API key also lives in KMS; notary_api_key.json contains no secret
+# material (see ops/21_import_notary_key.sh).
 #
 # The non-production publish test stack sets PUBLISH_SKIP_NOTARIZATION=1:
 # notarization is a hosted Apple round-trip with no self-signable equivalent, so
 # the test pipeline skips it. The .dmg is still KMS-signed; only the Apple
-# notarize + staple (and the post-staple rebuild) are skipped.
+# notarize + staple are skipped.
 if [[ "${PUBLISH_SKIP_NOTARIZATION:-0}" != "1" ]]; then
     RCODESIGN="$("${THIS_DIR}/get_rcodesign.sh")"
 
@@ -122,12 +118,17 @@ if [[ "${PUBLISH_SKIP_NOTARIZATION:-0}" != "1" ]]; then
         --wait \
         "${DMG_NAME}"
 
-    # Staple the notarization ticket to the app, then re-build the .dmg.
-    "${RCODESIGN}" staple "${DMG_PATH}/$(basename "${APP_PATH}")"
-    create_dmg
+    # Staple the ticket onto the .dmg itself -- no rebuild needed. The stapled
+    # .dmg validates offline on download; Gatekeeper then assesses the .app when
+    # it is first launched from the mounted volume.
+    "${RCODESIGN}" staple "${DMG_NAME}"
 else
     echo "Skipping notarization (PUBLISH_SKIP_NOTARIZATION=1): .dmg is KMS-signed but not notarized/stapled." >&2
 fi
+
+# TEMP DEBUG (revert): upload the final signed+stapled .dmg as a Buildkite
+# artifact so it can be downloaded and inspected (codesign/spctl) off the agent.
+buildkite-agent artifact upload "${DMG_NAME}" || echo "DEBUG: artifact upload failed (Job API?)" >&2
 
 # Cleanup things we created here
 rm -rf "${DMG_PATH}"
