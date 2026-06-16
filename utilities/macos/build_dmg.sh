@@ -72,9 +72,17 @@ function create_dmg() {
     # `addall` logs every file and directory it copies (thousands of lines), which
     # both floods the build log and slows the step (all of it streams to the
     # agent). Capture it and only surface the tail on failure.
+    #
+    # `--symlinks clone_link` is REQUIRED: the Julia tree ships ~60 versioned
+    # dylib symlinks (libjulia.dylib -> libjulia.1.14.0.dylib, etc.). The default
+    # policy dereferences them into regular files, which breaks the codesign
+    # symlink seals (rcodesign seals them as {symlink: target}); Apple's notary
+    # then reports every one as "file modified" and rejects the bundle's main
+    # executable as having an invalid signature. clone_link recreates them as
+    # real HFS+ symlinks so the seals match.
     local addall_log
     addall_log="$(mktemp)"
-    if ! "${HFSPLUS_TOOL}" "${HFS_IMAGE}" addall "${DMG_PATH}" > "${addall_log}" 2>&1; then
+    if ! "${HFSPLUS_TOOL}" "${HFS_IMAGE}" addall "${DMG_PATH}" --symlinks clone_link > "${addall_log}" 2>&1; then
         echo "ERROR: hfsplus addall failed; tail of its output:" >&2
         tail -30 "${addall_log}" >&2
         rm -f "${addall_log}"
