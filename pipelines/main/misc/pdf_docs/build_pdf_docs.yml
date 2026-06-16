@@ -45,7 +45,7 @@ steps:
           cd doc/_build/pdf/en && buildkite-agent artifact upload TheJuliaLanguage.pdf
         timeout_in_minutes: 120
         agents:
-          queue: "julia"
+          queue: "test"
           sandbox_capable: "true"
           os: "linux"
           arch: "x86_64"
