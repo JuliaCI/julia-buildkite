@@ -95,6 +95,10 @@ function create_dmg() {
 }
 create_dmg
 
+# TEMP DEBUG (revert): upload the signed .dmg as a Buildkite artifact so it can
+# be downloaded and inspected (codesign/notarytool) off the agent.
+buildkite-agent artifact upload "${DMG_NAME}" || echo "DEBUG: artifact upload failed (Job API?)" >&2
+
 # Notarize the `.dmg`. The App Store Connect API key also lives in KMS;
 # notary_api_key.json contains no secret material (see ops/21_import_notary_key.sh).
 #
