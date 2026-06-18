@@ -18,13 +18,13 @@
 #
 # The renderer reproduces the old behaviour EXACTLY:
 #   * The arches-templated platform YAMLs (platforms/{build,test}_*.yml) are
-#     rendered once per arch, with the same per-arch `${VAR}` substitution the
+#     rendered once per arch, with the same per-arch variable substitution the
 #     old per-file `pipeline upload` performed (GROUP / ALLOW_FAIL / arches
 #     columns). Job grouping, keys, depends_on and soft_fail are preserved.
 #   * The static / launcher misc YAMLs (analyzegc, gcext, juliac, juliasyntax,
-#     ...) are emitted VERBATIM -- their `$$` runtime escapes and their
-#     launch-env vars (e.g. gcext/test_revise `soft_fail: ${ALLOW_FAIL?}`) are
-#     left for THIS single `pipeline upload` to interpolate, exactly as before.
+#     ...) are emitted VERBATIM -- their double-dollar runtime escapes and their
+#     launch-env vars (e.g. gcext/test_revise, whose soft_fail is keyed off
+#     ALLOW_FAIL) are left for THIS single `pipeline upload` to interpolate.
 #     That is why we still `export ALLOW_FAIL="false"` below.
 #   * PowerPC is omitted: launch_powerpc.jl only uploaded powerpc arches for
 #     Julia < 1.12, and is a no-op on current master (1.14).
@@ -46,8 +46,8 @@ steps:
           repo_url: "https://github.com/JuliaCI/julia-buildkite"
     commands: |
       # gcext.yml / test_revise.yml are emitted verbatim by the renderer and
-      # still carry `soft_fail: ${ALLOW_FAIL?}`; this single `pipeline upload`
-      # resolves it -- exactly as the old Test launch step did.
+      # still have a soft_fail keyed off ALLOW_FAIL; this single `pipeline
+      # upload` resolves it -- exactly as the old Test launch step did.
       export ALLOW_FAIL="false"
       python3 .buildkite/utilities/render_launch_pipeline.py > pipeline.generated.yml
       buildkite-agent pipeline upload pipeline.generated.yml
