@@ -12,223 +12,133 @@
 # configuration, so I'd rather live with an extra layer of indirection and
 # only need to touch the webui configuration when something about the
 # launch flow itself changes.
+#
+# All of the launching is one job, on the dedicated `launch` queue: it only
+# uploads more steps (a few seconds of work), so there's no reason to split it
+# across several agents. The Build/Check/Test/Allow-Fail *groups* you see in the
+# UI come from the `GROUP=` env passed to each upload below, not from this job.
 
 steps:
-  - group: "Build"
-    notify:
-      - github_commit_status:
-          context: "Build"
-    steps:
-      - label: "Launch build jobs"
-        plugins:
-          - JuliaCI/external-buildkite#v1:
-              version: "./.buildkite-external-version"
-              repo_url: "https://github.com/JuliaCI/julia-buildkite"
-          - JuliaCI/julia#d8cd48ed4e72ca4ea47a5d02d79fb1bea0ee3e6b: # v1.13.8
-              # A few notes:
-              # 1. We pin the `JuliaCI/julia` plugin to a full commit hash.
-              #    This is intentional. We want to make sure that this script doesn't suddenly
-              #    break when a new version of the plugin is released.
-              # 2. We specify the Julia version up to patch, e.g. '1.7.3'.
-              #    This is intentional. We don't do e.g. '1.7', because we want to make sure
-              #    that this script doesn't suddenly break when a new patch release of Julia
-              #    is released.
-              version: '1.10.10' # GREP_ME: Keep this updated to LTS. Do not set it to '1' or 'stable' or 'latest'.
-        commands: |
-          ### Launch Linux build jobs.
-          # Regular:
-          GROUP="Build" \
-              ALLOW_FAIL="false" \
-              bash .buildkite/utilities/arches_pipeline_upload.sh \
-              .buildkite/pipelines/main/platforms/build_linux.arches \
-              .buildkite/pipelines/main/platforms/build_linux.yml
-          # PowerPC (only for Julia prior to 1.12):
-          GROUP="Build" \
-              ALLOW_FAIL="false" \
-              julia .buildkite/pipelines/main/platforms/launch_powerpc.jl \
-              .buildkite/pipelines/main/platforms/build_linux.powerpc.arches \
-              .buildkite/pipelines/main/platforms/build_linux.yml
-          ### Launch macOS build jobs:
-          GROUP="Build" \
-              ALLOW_FAIL="false" \
-              bash .buildkite/utilities/arches_pipeline_upload.sh \
-              .buildkite/pipelines/main/platforms/build_macos.arches \
-              .buildkite/pipelines/main/platforms/build_macos.yml
-          ### Launch FreeBSD build jobs:
-          GROUP="Build" \
-              ALLOW_FAIL="false" \
-              bash .buildkite/utilities/arches_pipeline_upload.sh \
-              .buildkite/pipelines/main/platforms/build_freebsd.arches \
-              .buildkite/pipelines/main/platforms/build_freebsd.yml
-          ### Launch Windows build jobs:
-          GROUP="Build" \
-              ALLOW_FAIL="false" \
-              bash .buildkite/utilities/arches_pipeline_upload.sh \
-              .buildkite/pipelines/main/platforms/build_windows.arches \
-              .buildkite/pipelines/main/platforms/build_windows.yml
-        agents:
-          queue: "build"
-          os: "linux"
-          arch: "x86_64" # prevent from running on PiBots
-  - group: "Check"
-    notify:
-      - github_commit_status:
-          context: "Check"
-    steps:
-      - label: "Launch check jobs"
-        plugins:
-          - JuliaCI/external-buildkite#v1:
-              version: "./.buildkite-external-version"
-              repo_url: "https://github.com/JuliaCI/julia-buildkite"
-        commands: |
-          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/analyzegc.yml
-          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/doctest.yml
-          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/pdf_docs/build_pdf_docs.yml
-          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/embedding.yml
-          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/trimming.yml
-          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/llvmpasses.yml
-          # buildkite-agent pipeline upload .buildkite/pipelines/main/misc/whitespace.yml # Currently runs in GitHub Actions instead of Buildkite
+  - label: ":rocket: Launch jobs"
+    agents:
+      queue: "launch"
+      os: "linux"
+      arch: "x86_64" # prevent from running on PiBots
+    plugins:
+      - JuliaCI/external-buildkite#v1:
+          version: "./.buildkite-external-version"
+          repo_url: "https://github.com/JuliaCI/julia-buildkite"
+      - JuliaCI/julia#b4d0bfa510bc399417133adae013385af5c71190: # v1.13.5
+          # Pinned to a full commit hash (so this script doesn't break when a new
+          # plugin version releases) and the Julia version to patch (so it doesn't
+          # break on a new Julia patch release). Needed for launch_powerpc.jl.
+          version: '1.10.10' # GREP_ME: Keep this updated to LTS. Do not set it to '1' or 'stable' or 'latest'.
+    commands: |
+      ### Build jobs
+      GROUP="Build" ALLOW_FAIL="false" \
+          bash .buildkite/utilities/arches_pipeline_upload.sh \
+          .buildkite/pipelines/main/platforms/build_linux.arches \
+          .buildkite/pipelines/main/platforms/build_linux.yml
+      # PowerPC (only for Julia prior to 1.12):
+      GROUP="Build" ALLOW_FAIL="false" \
+          julia .buildkite/pipelines/main/platforms/launch_powerpc.jl \
+          .buildkite/pipelines/main/platforms/build_linux.powerpc.arches \
+          .buildkite/pipelines/main/platforms/build_linux.yml
+      GROUP="Build" ALLOW_FAIL="false" \
+          bash .buildkite/utilities/arches_pipeline_upload.sh \
+          .buildkite/pipelines/main/platforms/build_macos.arches \
+          .buildkite/pipelines/main/platforms/build_macos.yml
+      GROUP="Build" ALLOW_FAIL="false" \
+          bash .buildkite/utilities/arches_pipeline_upload.sh \
+          .buildkite/pipelines/main/platforms/build_freebsd.arches \
+          .buildkite/pipelines/main/platforms/build_freebsd.yml
+      GROUP="Build" ALLOW_FAIL="false" \
+          bash .buildkite/utilities/arches_pipeline_upload.sh \
+          .buildkite/pipelines/main/platforms/build_windows.arches \
+          .buildkite/pipelines/main/platforms/build_windows.yml
 
-          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/sanitizers/asan.yml
-          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/sanitizers/tsan.yml
+      ### Check jobs
+      buildkite-agent pipeline upload .buildkite/pipelines/main/misc/analyzegc.yml
+      buildkite-agent pipeline upload .buildkite/pipelines/main/misc/doctest.yml
+      buildkite-agent pipeline upload .buildkite/pipelines/main/misc/pdf_docs/build_pdf_docs.yml
+      buildkite-agent pipeline upload .buildkite/pipelines/main/misc/embedding.yml
+      buildkite-agent pipeline upload .buildkite/pipelines/main/misc/trimming.yml
+      buildkite-agent pipeline upload .buildkite/pipelines/main/misc/llvmpasses.yml
+      # buildkite-agent pipeline upload .buildkite/pipelines/main/misc/whitespace.yml # Currently runs in GitHub Actions instead of Buildkite
+      buildkite-agent pipeline upload .buildkite/pipelines/main/misc/sanitizers/asan.yml
+      buildkite-agent pipeline upload .buildkite/pipelines/main/misc/sanitizers/tsan.yml
+      if [ -e "./JuliaSyntax/Project.toml" ]; then
+        echo "./JuliaSyntax/Project.toml file exists"
+        buildkite-agent pipeline upload .buildkite/pipelines/main/misc/juliasyntax.launch.yml
+      else
+        echo "./JuliaSyntax/Project.toml file does NOT exist. Will not launch JuliaSyntax test jobs"
+      fi
 
-          if [ -e "./JuliaSyntax/Project.toml" ]; then
-            echo "./JuliaSyntax/Project.toml file exists"
-            buildkite-agent pipeline upload .buildkite/pipelines/main/misc/juliasyntax.launch.yml
-          else
-            echo "./JuliaSyntax/Project.toml file does NOT exist. Will not launch JuliaSyntax test jobs"
-          fi
-        agents:
-          queue: "build"
-          os: "linux"
-          arch: "x86_64" # prevent from running on PiBots
-  - group: "Test"
-    notify:
-      - github_commit_status:
-          context: "Test"
-    steps:
-      - label: "Launch test jobs"
-        plugins:
-          - JuliaCI/external-buildkite#v1:
-              version: "./.buildkite-external-version"
-              repo_url: "https://github.com/JuliaCI/julia-buildkite"
-        commands: |
-          export ALLOW_FAIL="false"
-          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/gcext.yml
-          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/test_revise.yml
-          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/juliac/test_juliac.yml
+      ### Test jobs
+      ALLOW_FAIL="false" buildkite-agent pipeline upload .buildkite/pipelines/main/misc/gcext.yml
+      ALLOW_FAIL="false" buildkite-agent pipeline upload .buildkite/pipelines/main/misc/test_revise.yml
+      ALLOW_FAIL="false" buildkite-agent pipeline upload .buildkite/pipelines/main/misc/juliac/test_juliac.yml
+      GROUP="Test" ALLOW_FAIL="false" \
+          bash .buildkite/utilities/arches_pipeline_upload.sh \
+          .buildkite/pipelines/main/platforms/test_linux.arches \
+          .buildkite/pipelines/main/platforms/test_linux.yml
+      GROUP="Test" ALLOW_FAIL="false" \
+          bash .buildkite/utilities/arches_pipeline_upload.sh \
+          .buildkite/pipelines/main/platforms/test_linux.i686.arches \
+          .buildkite/pipelines/main/platforms/test_linux.i686.yml
+      GROUP="Test" ALLOW_FAIL="false" \
+          bash .buildkite/utilities/arches_pipeline_upload.sh \
+          .buildkite/pipelines/main/platforms/test_macos.arches \
+          .buildkite/pipelines/main/platforms/test_macos.yml
+      GROUP="Test" ALLOW_FAIL="false" \
+          bash .buildkite/utilities/arches_pipeline_upload.sh \
+          .buildkite/pipelines/main/platforms/test_freebsd.arches \
+          .buildkite/pipelines/main/platforms/test_freebsd.yml
+      GROUP="Test" ALLOW_FAIL="false" \
+          bash .buildkite/utilities/arches_pipeline_upload.sh \
+          .buildkite/pipelines/main/platforms/test_windows.arches \
+          .buildkite/pipelines/main/platforms/test_windows.yml
 
-          ### Launch Linux test jobs.
-          # Regular:
-          GROUP="Test" \
-              bash .buildkite/utilities/arches_pipeline_upload.sh \
-              .buildkite/pipelines/main/platforms/test_linux.arches \
-              .buildkite/pipelines/main/platforms/test_linux.yml
-          # i686-linux-gnu:
-          GROUP="Test" \
-              bash .buildkite/utilities/arches_pipeline_upload.sh \
-              .buildkite/pipelines/main/platforms/test_linux.i686.arches \
-              .buildkite/pipelines/main/platforms/test_linux.i686.yml
-          ### Launch macOS test jobs:
-          GROUP="Test" \
-              bash .buildkite/utilities/arches_pipeline_upload.sh \
-              .buildkite/pipelines/main/platforms/test_macos.arches \
-              .buildkite/pipelines/main/platforms/test_macos.yml
-          ### Launch FreeBSD test jobs:
-          GROUP="Test" \
-              bash .buildkite/utilities/arches_pipeline_upload.sh \
-              .buildkite/pipelines/main/platforms/test_freebsd.arches \
-              .buildkite/pipelines/main/platforms/test_freebsd.yml
-          ### Launch Windows test jobs:
-          GROUP="Test" \
-              bash .buildkite/utilities/arches_pipeline_upload.sh \
-              .buildkite/pipelines/main/platforms/test_windows.arches \
-              .buildkite/pipelines/main/platforms/test_windows.yml
-          echo "+++ Finished launching test jobs"
-        agents:
-          queue: "launch"
-          os: "linux"
-          arch: "x86_64" # prevent from running on PiBots
-  - group: "Allow Fail"
-    steps:
-      - label: "Launch allowed-to-fail build jobs"
-        plugins:
-          - JuliaCI/external-buildkite#v1:
-              version: "./.buildkite-external-version"
-              repo_url: "https://github.com/JuliaCI/julia-buildkite"
-        commands: |
-          export ALLOW_FAIL="true"
-          # Launch Linux allowed-to-fail build jobs:
-          GROUP="Allow Fail" \
-              bash .buildkite/utilities/arches_pipeline_upload.sh \
-              .buildkite/pipelines/main/platforms/build_linux.soft_fail.arches \
-              .buildkite/pipelines/main/platforms/build_linux.yml
-          # Launch macOS allowed-to-fail build jobs:
-          GROUP="Allow Fail" \
-              bash .buildkite/utilities/arches_pipeline_upload.sh \
-              .buildkite/pipelines/main/platforms/build_macos.soft_fail.arches \
-              .buildkite/pipelines/main/platforms/build_macos.yml
-        agents:
-          queue: "build"
-          os: "linux"
-          arch: "x86_64" # prevent from running on PiBots
-      - label: "Launch allowed-to-fail test jobs"
-        plugins:
-          - JuliaCI/external-buildkite#v1:
-              version: "./.buildkite-external-version"
-              repo_url: "https://github.com/JuliaCI/julia-buildkite"
-          - JuliaCI/julia#d8cd48ed4e72ca4ea47a5d02d79fb1bea0ee3e6b: # v1.13.8
-              # A few notes:
-              # 1. We pin the `JuliaCI/julia` plugin to a full commit hash.
-              #    This is intentional. We want to make sure that this script doesn't suddenly
-              #    break when a new version of the plugin is released.
-              # 2. We specify the Julia version up to patch, e.g. '1.7.3'.
-              #    This is intentional. We don't do e.g. '1.7', because we want to make sure
-              #    that this script doesn't suddenly break when a new patch release of Julia
-              #    is released.
-              version: '1.10.10' # GREP_ME: Keep this updated to LTS. Do not set it to '1' or 'stable' or 'latest'.
-        commands: |
-          export ALLOW_FAIL="true"
+      ### Allowed-to-fail build jobs
+      GROUP="Allow Fail" ALLOW_FAIL="true" \
+          bash .buildkite/utilities/arches_pipeline_upload.sh \
+          .buildkite/pipelines/main/platforms/build_linux.soft_fail.arches \
+          .buildkite/pipelines/main/platforms/build_linux.yml
+      GROUP="Allow Fail" ALLOW_FAIL="true" \
+          bash .buildkite/utilities/arches_pipeline_upload.sh \
+          .buildkite/pipelines/main/platforms/build_macos.soft_fail.arches \
+          .buildkite/pipelines/main/platforms/build_macos.yml
 
-          ### Launch Linux allowed-to-fail test jobs.
-          # Regular:
-          GROUP="Allow Fail" \
-              bash .buildkite/utilities/arches_pipeline_upload.sh \
-              .buildkite/pipelines/main/platforms/test_linux.soft_fail.arches \
-              .buildkite/pipelines/main/platforms/test_linux.yml
-          # PowerPC (only for Julia prior to 1.12):
-          GROUP="Allow Fail" \
-              julia .buildkite/pipelines/main/platforms/launch_powerpc.jl \
-              .buildkite/pipelines/main/platforms/test_linux.powerpc.soft_fail.arches \
-              .buildkite/pipelines/main/platforms/test_linux.yml
-          ### Launch macOS allowed-to-fail test jobs:
-          GROUP="Allow Fail" \
-              bash .buildkite/utilities/arches_pipeline_upload.sh \
-              .buildkite/pipelines/main/platforms/test_macos.soft_fail.arches \
-              .buildkite/pipelines/main/platforms/test_macos.yml
-          ### Launch FreeBSD allowed-to-fail jobs:
-          GROUP="Allow Fail" \
-              bash .buildkite/utilities/arches_pipeline_upload.sh \
-              .buildkite/pipelines/main/platforms/test_freebsd.soft_fail.arches \
-              .buildkite/pipelines/main/platforms/test_freebsd.yml
-          ### Launch Windows allowed-to-fail test jobs:
-          GROUP="Allow Fail" \
-              bash .buildkite/utilities/arches_pipeline_upload.sh \
-              .buildkite/pipelines/main/platforms/test_windows.soft_fail.arches \
-              .buildkite/pipelines/main/platforms/test_windows.yml
-        agents:
-          queue: "launch"
-          os: "linux"
-          arch: "x86_64" # prevent from running on PiBots
+      ### Allowed-to-fail test jobs
+      GROUP="Allow Fail" ALLOW_FAIL="true" \
+          bash .buildkite/utilities/arches_pipeline_upload.sh \
+          .buildkite/pipelines/main/platforms/test_linux.soft_fail.arches \
+          .buildkite/pipelines/main/platforms/test_linux.yml
+      # PowerPC (only for Julia prior to 1.12):
+      GROUP="Allow Fail" ALLOW_FAIL="true" \
+          julia .buildkite/pipelines/main/platforms/launch_powerpc.jl \
+          .buildkite/pipelines/main/platforms/test_linux.powerpc.soft_fail.arches \
+          .buildkite/pipelines/main/platforms/test_linux.yml
+      GROUP="Allow Fail" ALLOW_FAIL="true" \
+          bash .buildkite/utilities/arches_pipeline_upload.sh \
+          .buildkite/pipelines/main/platforms/test_macos.soft_fail.arches \
+          .buildkite/pipelines/main/platforms/test_macos.yml
+      GROUP="Allow Fail" ALLOW_FAIL="true" \
+          bash .buildkite/utilities/arches_pipeline_upload.sh \
+          .buildkite/pipelines/main/platforms/test_freebsd.soft_fail.arches \
+          .buildkite/pipelines/main/platforms/test_freebsd.yml
+      GROUP="Allow Fail" ALLOW_FAIL="true" \
+          bash .buildkite/utilities/arches_pipeline_upload.sh \
+          .buildkite/pipelines/main/platforms/test_windows.soft_fail.arches \
+          .buildkite/pipelines/main/platforms/test_windows.yml
 
   # Barrier + trigger of the trusted julia-publish pipeline.
   #
   # This wait + trigger are INLINED here on purpose -- in the *same* pipeline
-  # upload as the Build/Check/Test/Allow-Fail groups above -- so the `wait`
-  # reliably barriers all of their dynamically-uploaded jobs. Previously the
-  # wait lived in a separately-uploaded file and raced the build jobs (it
-  # ended up positioned before them), so the trigger fired immediately,
-  # before anything was built or staged.
+  # upload as the launch job above -- so the `wait` reliably barriers all of the
+  # dynamically-uploaded jobs. Previously the wait lived in a separately-uploaded
+  # file and raced the build jobs (it ended up positioned before them), so the
+  # trigger fired immediately, before anything was built or staged.
   #
   # Coverage is launched by a *separate* upload (launch_coverage.yml) and is
   # therefore NOT behind this barrier -- a long scheduled coverage run never

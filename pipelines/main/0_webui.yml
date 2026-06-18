@@ -27,7 +27,7 @@ steps:
     steps:
       - label: "Launch pipelines"
         agents:
-          queue: "build"
+          queue: "launch"
           os: "linux"
         plugins:
           - JuliaCI/external-buildkite#v1:
