@@ -10,6 +10,26 @@ set -euo pipefail
 # shellcheck source=SCRIPTDIR/build_envs.sh
 source .buildkite/utilities/build_envs.sh
 
+echo "--- Print upload target information"
+if (( ${#CANONICAL_UPLOAD_TARGETS[@]} )); then
+    echo "Canonical upload target(s):"
+    for target in "${CANONICAL_UPLOAD_TARGETS[@]}"; do
+        echo "  s3://${target}.tar.gz"
+    done
+fi
+if (( ${#LEGACY_UPLOAD_TARGETS[@]} )); then
+    echo "Legacy upload target(s):"
+    for target in "${LEGACY_UPLOAD_TARGETS[@]}"; do
+        echo "    s3://${target}.tar.gz"
+    done
+fi
+if (( ${#EPHEMERAL_UPLOAD_TARGETS[@]} )); then
+    echo "Ephemeral upload target(s):"
+    for target in "${EPHEMERAL_UPLOAD_TARGETS[@]}"; do
+        echo "    s3://${target}.tar.gz"
+    done
+fi
+
 echo "--- Download ${UPLOAD_FILENAME}.tar.gz to ."
 buildkite-agent artifact download "${UPLOAD_FILENAME}.tar.gz" .
 
@@ -137,6 +157,12 @@ for EXT in "${UPLOAD_EXTENSIONS[@]}"; do
 done
 wait_pids "${PIDS[@]}"
 
+# We upload all targets to S3
+# S3_UPLOAD_TARGETS=("${CANONICAL_UPLOAD_TARGETS[@]}" "${LEGACY_UPLOAD_TARGETS[@]}" "${EPHEMERAL_UPLOAD_TARGETS[@]}")
+UPLOAD_TARGETS=("${CANONICAL_UPLOAD_TARGETS[@]}" "${LEGACY_UPLOAD_TARGETS[@]}" "${EPHEMERAL_UPLOAD_TARGETS[@]}")
+# Only non-legacy targets are uploaded to R2
+R2_UPLOAD_TARGETS=("${CANONICAL_UPLOAD_TARGETS[@]}" "${EPHEMERAL_UPLOAD_TARGETS[@]}")
+
 # Next, upload primary files to S3
 echo "--- Upload primary products to S3"
 PIDS=()
@@ -157,10 +183,39 @@ for SECONDARY_TARGET in "${UPLOAD_TARGETS[@]:1}"; do
 done
 wait_pids "${PIDS[@]}"
 
+# Upload primary files to R2
+echo "--- Upload primary products to R2"
+R2_ACCOUNT_ID=2f1a87f641da882a3f856da54947be1a
+R2_ENDPOINT_URL="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
+PIDS=()
+for EXT in "${UPLOAD_EXTENSIONS[@]}"; do
+    AWS_ACCESS_KEY_ID="${R2_ACCESS_KEY_ID}" AWS_SECRET_ACCESS_KEY="${R2_SECRET_ACCESS_KEY}" \
+        aws s3 cp --endpoint-url "${R2_ENDPOINT_URL}" "${UPLOAD_FILENAME}.${EXT}" "s3://${R2_UPLOAD_TARGETS[0]}.${EXT}" &
+    PIDS+=( "$!" )
+done
+wait_pids "${PIDS[@]}"
+
+echo "--- Copy to secondary R2 upload targets"
+PIDS=()
+for SECONDARY_TARGET in "${R2_UPLOAD_TARGETS[@]:1}"; do
+    for EXT in "${UPLOAD_EXTENSIONS[@]}"; do
+        AWS_ACCESS_KEY_ID="${R2_ACCESS_KEY_ID}" AWS_SECRET_ACCESS_KEY="${R2_SECRET_ACCESS_KEY}" \
+            aws s3 cp --endpoint-url "${R2_ENDPOINT_URL}" "s3://${R2_UPLOAD_TARGETS[0]}.${EXT}" "s3://${SECONDARY_TARGET}.${EXT}" \
+            --copy-props metadata-directive &
+        PIDS+=( "$!" )
+    done
+done
+wait_pids "${PIDS[@]}"
+
 # Report to the user some URLs that they can use to download this from
 echo "+++ Uploaded to targets"
 for UPLOAD_TARGET in "${UPLOAD_TARGETS[@]}"; do
     for EXT in "${UPLOAD_EXTENSIONS[@]}"; do
-        echo " -> s3://${UPLOAD_TARGET}.${EXT}"
+        echo " -> s3://${UPLOAD_TARGET}.${EXT} (AWS S3)"
+    done
+done
+for UPLOAD_TARGET in "${R2_UPLOAD_TARGETS[@]}"; do
+    for EXT in "${UPLOAD_EXTENSIONS[@]}"; do
+        echo " -> s3://${UPLOAD_TARGET}.${EXT} (Cloudflare R2)"
     done
 done
