@@ -26,11 +26,6 @@ steps:
               bash .buildkite/utilities/arches_pipeline_upload.sh \
               .buildkite/pipelines/main/misc/juliac/test_juliac_windows.arches \
               .buildkite/pipelines/main/misc/juliac/test_juliac_windows.yml
-          ### Launch FreeBSD JuliaC test jobs:
-          GROUP="JuliaC" \
-              bash .buildkite/utilities/arches_pipeline_upload.sh \
-              .buildkite/pipelines/main/misc/juliac/test_juliac_freebsd.arches \
-              .buildkite/pipelines/main/misc/juliac/test_juliac_freebsd.yml
         agents:
           queue: "launch"
           os: "linux"

@@ -1,9 +1,0 @@
-# OS       TRIPLET                 ARCH          TIMEOUT
-freebsd    x86_64-unknown-freebsd  x86_64        .
-
-# These special lines allow us to embed default values for the columns above.
-# Any column without a default mapping here will simply substitute a `.` to the empty string
-
-# FreeBSD hardware is slow and this job also runs the trim builds, so allow more
-# time than the other JuliaC platforms.
-#default TIMEOUT 90
