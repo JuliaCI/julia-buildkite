@@ -64,9 +64,23 @@ for FLAG in "${MFLAGS[@]}"; do
     echo " -> ${FLAG}"
 done
 
+# Stream-filter the build log, rewriting the build dir to [buildroot].  On Windows
+# the buildkite agent has no PTY, so this pipe is block-buffered: a long, nearly
+# silent step (e.g. the ~25 min libjulia-codegen.dll link) produces no visible
+# output until the buffer fills, making the build look hung.  GNU sed -u flushes
+# per line so the log streams live.  (BSD sed on macOS has no -u, and unix jobs run
+# under a PTY anyway, so only Windows needs this.)
+filter_buildroot() {
+    if [[ "${TRIPLET}" == *mingw* ]]; then
+        sed -u "s|$(pwd)|[buildroot]|g"
+    else
+        sed "s|$(pwd)|[buildroot]|g"
+    fi
+}
+
 echo "--- Build Julia"
 echo "Note: The log stream is filtered. [buildroot] replaces pwd $(pwd)"
-${MAKE} "${MFLAGS[@]}" 2>&1 | sed "s|$(pwd)|[buildroot]|g"
+${MAKE} "${MFLAGS[@]}" 2>&1 | filter_buildroot
 
 
 echo "--- Check that the working directory is clean"
@@ -89,7 +103,7 @@ ${JULIA_EXE} -e "import Test; Test.@test Sys.WORD_SIZE == ${EXPECTED_WORD_SIZE:?
 
 echo "--- Show build stats"
 echo "Note: The log stream is filtered. [buildroot] replaces pwd $(pwd)"
-${MAKE} "${MFLAGS[@]}" build-stats 2>&1 | sed "s|$(pwd)|[buildroot]|g"
+${MAKE} "${MFLAGS[@]}" build-stats 2>&1 | filter_buildroot
 
 echo "--- Create build artifacts"
 ${MAKE} "${MFLAGS[@]}" binary-dist
