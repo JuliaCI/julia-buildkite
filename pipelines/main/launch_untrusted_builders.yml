@@ -3,248 +3,67 @@
 # none of them hold secrets or signing rights (the trusted work happens in
 # the separate julia-publish Buildkite pipeline).
 #
+# LAUNCH-LATENCY OPTIMIZATION:
+#
+# Previously this file had five separate launch steps (groups Build / Check /
+# Test / Allow Fail) that each ran MANY `buildkite-agent pipeline upload`
+# calls -- roughly ~30 in total, one per arches-templated platform YAML and
+# per static misc YAML. Each upload is a ~1.5s network round-trip, and they
+# ran serially, so they dominated CI launch latency.
+#
+# Now a SINGLE launch step runs `utilities/render_launch_pipeline.py`, which
+# renders ONE pre-grouped pipeline document (one `group:` per label:
+# Build / Check / Test / Allow Fail / JuliaSyntax / JuliaC, plus the
+# wait + julia-publish trigger), and uploads it with ONE `pipeline upload`.
+#
+# The renderer reproduces the old behaviour EXACTLY:
+#   * The arches-templated platform YAMLs (platforms/{build,test}_*.yml) are
+#     rendered once per arch, with the same per-arch `${VAR}` substitution the
+#     old per-file `pipeline upload` performed (GROUP / ALLOW_FAIL / arches
+#     columns). Job grouping, keys, depends_on and soft_fail are preserved.
+#   * The static / launcher misc YAMLs (analyzegc, gcext, juliac, juliasyntax,
+#     ...) are emitted VERBATIM -- their `$$` runtime escapes and their
+#     launch-env vars (e.g. gcext/test_revise `soft_fail: ${ALLOW_FAIL?}`) are
+#     left for THIS single `pipeline upload` to interpolate, exactly as before.
+#     That is why we still `export ALLOW_FAIL="false"` below.
+#   * PowerPC is omitted: launch_powerpc.jl only uploaded powerpc arches for
+#     Julia < 1.12, and is a no-op on current master (1.14).
+#
 # Yes, this is creating another layer of indirection; the flow now looks like:
 #
-#   [webui] -> launch_untrusted_builders.yml -> misc/llvmpasses.yml
+#   [webui] -> launch_untrusted_builders.yml -> render_launch_pipeline.py
 #
-# when we could theoretically just have the `webui` launch `misc/llvmpasses.yml`,
 # however this raises the bar for contributors to add new steps to our CI
 # configuration, so I'd rather live with an extra layer of indirection and
 # only need to touch the webui configuration when something about the
 # launch flow itself changes.
 
 steps:
-  - group: "Build"
-    notify:
-      - github_commit_status:
-          context: "Build"
-    steps:
-      - label: "Launch build jobs"
-        plugins:
-          - JuliaCI/external-buildkite#v1:
-              version: "./.buildkite-external-version"
-              repo_url: "https://github.com/JuliaCI/julia-buildkite"
-          - JuliaCI/julia#b4d0bfa510bc399417133adae013385af5c71190: # v1.13.5
-              # A few notes:
-              # 1. We pin the `JuliaCI/julia` plugin to a full commit hash.
-              #    This is intentional. We want to make sure that this script doesn't suddenly
-              #    break when a new version of the plugin is released.
-              # 2. We specify the Julia version up to patch, e.g. '1.7.3'.
-              #    This is intentional. We don't do e.g. '1.7', because we want to make sure
-              #    that this script doesn't suddenly break when a new patch release of Julia
-              #    is released.
-              version: '1.10.10' # GREP_ME: Keep this updated to LTS. Do not set it to '1' or 'stable' or 'latest'.
-        commands: |
-          ### Launch Linux build jobs.
-          # Regular:
-          GROUP="Build" \
-              ALLOW_FAIL="false" \
-              bash .buildkite/utilities/arches_pipeline_upload.sh \
-              .buildkite/pipelines/main/platforms/build_linux.arches \
-              .buildkite/pipelines/main/platforms/build_linux.yml
-          # PowerPC (only for Julia prior to 1.12):
-          GROUP="Build" \
-              ALLOW_FAIL="false" \
-              julia .buildkite/pipelines/main/platforms/launch_powerpc.jl \
-              .buildkite/pipelines/main/platforms/build_linux.powerpc.arches \
-              .buildkite/pipelines/main/platforms/build_linux.yml
-          ### Launch macOS build jobs:
-          GROUP="Build" \
-              ALLOW_FAIL="false" \
-              bash .buildkite/utilities/arches_pipeline_upload.sh \
-              .buildkite/pipelines/main/platforms/build_macos.arches \
-              .buildkite/pipelines/main/platforms/build_macos.yml
-          ### Launch FreeBSD build jobs:
-          GROUP="Build" \
-              ALLOW_FAIL="false" \
-              bash .buildkite/utilities/arches_pipeline_upload.sh \
-              .buildkite/pipelines/main/platforms/build_freebsd.arches \
-              .buildkite/pipelines/main/platforms/build_freebsd.yml
-          ### Launch Windows build jobs:
-          GROUP="Build" \
-              ALLOW_FAIL="false" \
-              bash .buildkite/utilities/arches_pipeline_upload.sh \
-              .buildkite/pipelines/main/platforms/build_windows.arches \
-              .buildkite/pipelines/main/platforms/build_windows.yml
-        agents:
-          queue: "launch"
-          os: "linux"
-          arch: "x86_64" # prevent from running on PiBots
-  - group: "Check"
-    notify:
-      - github_commit_status:
-          context: "Check"
-    steps:
-      - label: "Launch check jobs"
-        plugins:
-          - JuliaCI/external-buildkite#v1:
-              version: "./.buildkite-external-version"
-              repo_url: "https://github.com/JuliaCI/julia-buildkite"
-        commands: |
-          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/analyzegc.yml
-          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/doctest.yml
-          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/pdf_docs/build_pdf_docs.yml
-          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/embedding.yml
-          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/trimming.yml
-          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/llvmpasses.yml
-          # buildkite-agent pipeline upload .buildkite/pipelines/main/misc/whitespace.yml # Currently runs in GitHub Actions instead of Buildkite
+  - label: ":rocket: Launch jobs"
+    plugins:
+      - JuliaCI/external-buildkite#v1:
+          version: "./.buildkite-external-version"
+          repo_url: "https://github.com/JuliaCI/julia-buildkite"
+    commands: |
+      # gcext.yml / test_revise.yml are emitted verbatim by the renderer and
+      # still carry `soft_fail: ${ALLOW_FAIL?}`; this single `pipeline upload`
+      # resolves it -- exactly as the old Test launch step did.
+      export ALLOW_FAIL="false"
+      python3 .buildkite/utilities/render_launch_pipeline.py > pipeline.generated.yml
+      buildkite-agent pipeline upload pipeline.generated.yml
+    agents:
+      queue: "launch"
+      os: "linux"
+      arch: "x86_64" # prevent from running on PiBots
 
-          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/sanitizers/asan.yml
-          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/sanitizers/tsan.yml
-
-          if [ -e "./JuliaSyntax/Project.toml" ]; then
-            echo "./JuliaSyntax/Project.toml file exists"
-            buildkite-agent pipeline upload .buildkite/pipelines/main/misc/juliasyntax.launch.yml
-          else
-            echo "./JuliaSyntax/Project.toml file does NOT exist. Will not launch JuliaSyntax test jobs"
-          fi
-        agents:
-          queue: "launch"
-          os: "linux"
-          arch: "x86_64" # prevent from running on PiBots
-  - group: "Test"
-    notify:
-      - github_commit_status:
-          context: "Test"
-    steps:
-      - label: "Launch test jobs"
-        plugins:
-          - JuliaCI/external-buildkite#v1:
-              version: "./.buildkite-external-version"
-              repo_url: "https://github.com/JuliaCI/julia-buildkite"
-        commands: |
-          export ALLOW_FAIL="false"
-          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/gcext.yml
-          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/test_revise.yml
-          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/juliac/test_juliac.yml
-
-          ### Launch Linux test jobs.
-          # Regular:
-          GROUP="Test" \
-              bash .buildkite/utilities/arches_pipeline_upload.sh \
-              .buildkite/pipelines/main/platforms/test_linux.arches \
-              .buildkite/pipelines/main/platforms/test_linux.yml
-          # i686-linux-gnu:
-          GROUP="Test" \
-              bash .buildkite/utilities/arches_pipeline_upload.sh \
-              .buildkite/pipelines/main/platforms/test_linux.i686.arches \
-              .buildkite/pipelines/main/platforms/test_linux.i686.yml
-          ### Launch macOS test jobs:
-          GROUP="Test" \
-              bash .buildkite/utilities/arches_pipeline_upload.sh \
-              .buildkite/pipelines/main/platforms/test_macos.arches \
-              .buildkite/pipelines/main/platforms/test_macos.yml
-          ### Launch FreeBSD test jobs:
-          GROUP="Test" \
-              bash .buildkite/utilities/arches_pipeline_upload.sh \
-              .buildkite/pipelines/main/platforms/test_freebsd.arches \
-              .buildkite/pipelines/main/platforms/test_freebsd.yml
-          ### Launch Windows test jobs:
-          GROUP="Test" \
-              bash .buildkite/utilities/arches_pipeline_upload.sh \
-              .buildkite/pipelines/main/platforms/test_windows.arches \
-              .buildkite/pipelines/main/platforms/test_windows.yml
-          echo "+++ Finished launching test jobs"
-        agents:
-          queue: "launch"
-          os: "linux"
-          arch: "x86_64" # prevent from running on PiBots
-  - group: "Allow Fail"
-    steps:
-      - label: "Launch allowed-to-fail build jobs"
-        plugins:
-          - JuliaCI/external-buildkite#v1:
-              version: "./.buildkite-external-version"
-              repo_url: "https://github.com/JuliaCI/julia-buildkite"
-        commands: |
-          export ALLOW_FAIL="true"
-          # Launch Linux allowed-to-fail build jobs:
-          GROUP="Allow Fail" \
-              bash .buildkite/utilities/arches_pipeline_upload.sh \
-              .buildkite/pipelines/main/platforms/build_linux.soft_fail.arches \
-              .buildkite/pipelines/main/platforms/build_linux.yml
-          # Launch macOS allowed-to-fail build jobs:
-          GROUP="Allow Fail" \
-              bash .buildkite/utilities/arches_pipeline_upload.sh \
-              .buildkite/pipelines/main/platforms/build_macos.soft_fail.arches \
-              .buildkite/pipelines/main/platforms/build_macos.yml
-        agents:
-          queue: "launch"
-          os: "linux"
-          arch: "x86_64" # prevent from running on PiBots
-      - label: "Launch allowed-to-fail test jobs"
-        plugins:
-          - JuliaCI/external-buildkite#v1:
-              version: "./.buildkite-external-version"
-              repo_url: "https://github.com/JuliaCI/julia-buildkite"
-          - JuliaCI/julia#b4d0bfa510bc399417133adae013385af5c71190: # v1.13.5
-              # A few notes:
-              # 1. We pin the `JuliaCI/julia` plugin to a full commit hash.
-              #    This is intentional. We want to make sure that this script doesn't suddenly
-              #    break when a new version of the plugin is released.
-              # 2. We specify the Julia version up to patch, e.g. '1.7.3'.
-              #    This is intentional. We don't do e.g. '1.7', because we want to make sure
-              #    that this script doesn't suddenly break when a new patch release of Julia
-              #    is released.
-              version: '1.10.10' # GREP_ME: Keep this updated to LTS. Do not set it to '1' or 'stable' or 'latest'.
-        commands: |
-          export ALLOW_FAIL="true"
-
-          ### Launch Linux allowed-to-fail test jobs.
-          # Regular:
-          GROUP="Allow Fail" \
-              bash .buildkite/utilities/arches_pipeline_upload.sh \
-              .buildkite/pipelines/main/platforms/test_linux.soft_fail.arches \
-              .buildkite/pipelines/main/platforms/test_linux.yml
-          # PowerPC (only for Julia prior to 1.12):
-          GROUP="Allow Fail" \
-              julia .buildkite/pipelines/main/platforms/launch_powerpc.jl \
-              .buildkite/pipelines/main/platforms/test_linux.powerpc.soft_fail.arches \
-              .buildkite/pipelines/main/platforms/test_linux.yml
-          ### Launch macOS allowed-to-fail test jobs:
-          GROUP="Allow Fail" \
-              bash .buildkite/utilities/arches_pipeline_upload.sh \
-              .buildkite/pipelines/main/platforms/test_macos.soft_fail.arches \
-              .buildkite/pipelines/main/platforms/test_macos.yml
-          ### Launch FreeBSD allowed-to-fail jobs:
-          GROUP="Allow Fail" \
-              bash .buildkite/utilities/arches_pipeline_upload.sh \
-              .buildkite/pipelines/main/platforms/test_freebsd.soft_fail.arches \
-              .buildkite/pipelines/main/platforms/test_freebsd.yml
-          ### Launch Windows allowed-to-fail test jobs:
-          GROUP="Allow Fail" \
-              bash .buildkite/utilities/arches_pipeline_upload.sh \
-              .buildkite/pipelines/main/platforms/test_windows.soft_fail.arches \
-              .buildkite/pipelines/main/platforms/test_windows.yml
-        agents:
-          queue: "launch"
-          os: "linux"
-          arch: "x86_64" # prevent from running on PiBots
-
-  # Barrier + trigger of the trusted julia-publish pipeline.
+  # The barrier + trigger of the trusted julia-publish pipeline are emitted by
+  # render_launch_pipeline.py at the END of the rendered document, in the SAME
+  # `pipeline upload` as the Build/Check/Test/Allow-Fail groups. That is on
+  # purpose so the `wait` reliably barriers all of those dynamically-uploaded
+  # jobs (a `wait` placed in a separately-uploaded file used to race the build
+  # jobs and fire the trigger before anything was built or staged).
   #
-  # This wait + trigger are INLINED here on purpose -- in the *same* pipeline
-  # upload as the Build/Check/Test/Allow-Fail groups above -- so the `wait`
-  # reliably barriers all of their dynamically-uploaded jobs. Previously the
-  # wait lived in a separately-uploaded file and raced the build jobs (it
-  # ended up positioned before them), so the trigger fired immediately,
-  # before anything was built or staged.
-  #
-  # Coverage is launched by a *separate* upload (launch_coverage.yml) and is
-  # therefore NOT behind this barrier -- a long scheduled coverage run never
-  # delays publish.
-  #
-  # The `if:` restricts the trigger to julia-ci. julia-pr (pull requests)
-  # never triggers publish; this is layered with julia-publish not building
-  # PRs at all, its IAM trust being pinned to the julia-publish pipeline +
-  # cluster UUIDs, the cross-cluster trigger rule (commit/branch must match),
-  # and verify_trusted_commit.sh in the publish jobs.
-  - wait: ~
-
-  - trigger: "julia-publish"
-    label: ":rocket: trigger publish"
-    if: pipeline.slug == "julia-ci"
-    build:
-      commit: "${BUILDKITE_COMMIT}"
-      branch: "${BUILDKITE_BRANCH}"
-      message: "publish: ${BUILDKITE_MESSAGE}"
+  # See render_launch_pipeline.py for the wait + the `julia-publish` trigger
+  # (guarded by `if: pipeline.slug == "julia-ci"`). Coverage is launched by a
+  # separate upload (launch_coverage.yml) and is intentionally NOT behind this
+  # barrier.
