@@ -134,42 +134,163 @@ def interpolate(text, env, where):
 
 
 # --------------------------------------------------------------------------
-# YAML step extraction
+# YAML step extraction (text-only; no YAML library)
 # --------------------------------------------------------------------------
 # Every platform / misc YAML we care about has the shape:
 #   steps:
 #     - group: "<label>"
 #       [notify: ...]
 #       steps:
-#         - <one inner step>
+#         - <one or more inner step blocks>
 # We want the inner step block(s) so we can re-group them. We operate on raw
 # text (not a YAML round-trip) to preserve `$$` escapes and formatting exactly.
+#
+# These files are structurally regular, so instead of parsing them we slice the
+# indented text block under a given key. The launch agents have no PyYAML, so
+# the renderer must stay stdlib-only; we emit text we control (re-indented to a
+# canonical depth) so indentation and `$$` stay byte-exact.
 
-import yaml  # noqa: E402  (import here so the module-level docstring runs first)
+# Canonical indentation of the emitted document: the merged inner step blocks
+# live under `    steps:` of `  - group:`, so each step block's leading `- `
+# sits at 6 spaces, matching the platform sources.
+STEP_INDENT = 6
 
 
-def load_group(path):
-    """Load a YAML file expected to contain a single top-level group and
-    return (group_label, notify_obj_or_None, [inner_step_dicts])."""
+def _split_lines(text):
+    """Split into lines WITHOUT dropping a trailing newline's emptiness.
+    Returns the list of lines (no line endings)."""
+    return text.split("\n")
+
+
+def _indent_of(line):
+    """Number of leading spaces; None for a blank/whitespace-only line."""
+    stripped = line.lstrip(" ")
+    if stripped == "":
+        return None
+    return len(line) - len(stripped)
+
+
+def _find_group_label(text, where):
+    """Return the group label string from the single `  - group: "<label>"`
+    top-level entry. Parses the quoted (or bare) scalar after `group:`."""
+    for line in _split_lines(text):
+        m = re.match(r'\s*- group:\s*(.*?)\s*$', line)
+        if m:
+            return _scalar(m.group(1))
+    raise AssertionError(f"{where}: no top-level group found")
+
+
+def _scalar(raw):
+    """Decode a simple YAML scalar: a double/single-quoted string or a bare
+    word. Sufficient for the group labels in these files."""
+    raw = raw.strip()
+    if len(raw) >= 2 and raw[0] == raw[-1] and raw[0] in ("'", '"'):
+        return raw[1:-1]
+    return raw
+
+
+def _reindent_step_block(block_lines):
+    """Re-indent a sliced inner-steps block so each step's `- ` sits at
+    STEP_INDENT spaces. The block's own base indent (indent of the first
+    non-blank line) is stripped and replaced. Relative indentation -- and thus
+    every `$$` byte -- is preserved."""
+    base = None
+    for line in block_lines:
+        ind = _indent_of(line)
+        if ind is not None:
+            base = ind
+            break
+    if base is None:
+        return ""
+    shift = STEP_INDENT - base
+    out = []
+    for line in block_lines:
+        if line.strip() == "":
+            out.append("")
+            continue
+        if shift >= 0:
+            out.append(" " * shift + line)
+        else:
+            # Remove up to -shift leading spaces (block is more deeply indented
+            # than canonical). All lines share at least `base` spaces.
+            out.append(line[-shift:])
+    return "\n".join(out)
+
+
+def extract_inner_steps_text(text, where):
+    """From a single-group document's text, return the re-indented text of all
+    inner step blocks under the group's `steps:` key (6-space `- ` indent).
+
+    The block continues until the text dedents back out of the group (a line
+    indented <= the `  - group:` indent). This deliberately does NOT bound on
+    the `steps:` key indent, because some sources (sanitizers/asan.yml,
+    tsan.yml) put their list items at the SAME indent as `steps:` -- still
+    inside the group -- which a strict `> steps_indent` rule would drop."""
+    lines = _split_lines(text)
+
+    # Locate the `  - group:` line and its indent (the group boundary).
+    group_indent = None
+    group_idx = None
+    for i, line in enumerate(lines):
+        ind = _indent_of(line)
+        if ind is None:
+            continue
+        if re.match(r'\s*- group:\s', line) or re.match(r'\s*- group:\s*$', line):
+            group_indent = ind
+            group_idx = i
+            break
+    assert group_idx is not None, f"{where}: no group line found"
+
+    # Find the group's own `steps:` key (the first `steps:` AFTER the group line
+    # that is indented deeper than the group line).
+    start = None
+    for i in range(group_idx + 1, len(lines)):
+        line = lines[i]
+        ind = _indent_of(line)
+        if ind is None:
+            continue
+        if ind <= group_indent:
+            break  # left the group without finding steps:
+        if re.match(rf'\s*steps:\s*$', line):
+            start = i + 1
+            break
+    assert start is not None, f"{where}: group has no steps: key"
+
+    block = []
+    for line in lines[start:]:
+        ind = _indent_of(line)
+        if ind is None:
+            block.append(line)
+            continue
+        if ind <= group_indent:
+            break  # dedented out of the group
+        block.append(line)
+    while block and block[-1].strip() == "":
+        block.pop()
+    return _reindent_step_block(block)
+
+
+def load_group_text(path):
+    """Return (group_label, inner_steps_text) for a single-group YAML file,
+    with inner step blocks re-indented to the canonical depth. Verbatim bytes
+    (incl. `$$`) within each step body are preserved."""
     with open(path) as f:
-        doc = yaml.safe_load(f)
-    steps = doc["steps"]
-    assert len(steps) == 1, f"{path}: expected exactly one top-level group"
-    group = steps[0]
-    assert "group" in group, f"{path}: top-level entry is not a group"
-    return group["group"], group.get("notify"), group["steps"]
+        text = f.read()
+    label = _find_group_label(text, path)
+    return label, extract_inner_steps_text(text, path)
 
 
-def render_arches_group(arches_file, yaml_file, group, allow_fail,
-                        extra_env=None):
-    """Render the inner step of an arches-templated platform YAML once per
-    arch. Returns a list of inner-step dicts (parsed YAML)."""
+def render_arches_group_text(arches_file, yaml_file, group, allow_fail,
+                             extra_env=None):
+    """Render the inner step block of an arches-templated platform YAML once
+    per arch. Interpolation is applied to the source TEXT first, then the inner
+    steps are sliced out. Returns the concatenated re-indented step text."""
     arches_path = os.path.join(PLATFORMS, arches_file)
     yaml_path = os.path.join(PLATFORMS, yaml_file)
     with open(yaml_path) as f:
         template_text = f.read()
 
-    inner_steps = []
+    chunks = []
     for arch_env in arches_envs(arches_path):
         env = dict(arch_env)
         env["GROUP"] = group
@@ -178,12 +299,8 @@ def render_arches_group(arches_file, yaml_file, group, allow_fail,
             env.update(extra_env)
         where = f"{yaml_file} [{arch_env.get('TRIPLET', '?')}]"
         rendered = interpolate(template_text, env, where)
-        doc = yaml.safe_load(rendered)
-        # doc is {steps: [{group:..., steps:[inner]}]}
-        grp = doc["steps"][0]
-        for inner in grp["steps"]:
-            inner_steps.append(inner)
-    return inner_steps
+        chunks.append(extract_inner_steps_text(rendered, where))
+    return "\n".join(c for c in chunks if c)
 
 
 # Each tuple mirrors a `arches_pipeline_upload.sh <arches> <yaml>` call from
@@ -242,107 +359,138 @@ TEST_STATIC = [
 ]
 
 
-def build_group():
-    steps = []
-    for arches, yml in BUILD_ARCHES:
-        steps += render_arches_group(arches, yml, "Build", "false")
-    return {
-        "group": "Build",
-        "notify": [{"github_commit_status": {"context": "Build"}}],
-        "steps": steps,
-    }
+# --------------------------------------------------------------------------
+# group emission (text)
+# --------------------------------------------------------------------------
+# A merged group is emitted as:
+#     - group: "<label>"
+#     [notify block]
+#     steps:
+#       <concatenated 6-space step blocks>
+# The notify block per merged group is fixed (the old Build/Check/Test groups
+# carried `notify: [{github_commit_status: {context: <label>}}]`). Allow Fail
+# carried no notify.
+
+# Notify context per merged group label (None => no notify block).
+GROUP_NOTIFY = {
+    "Build": "Build",
+    "Check": "Check",
+    "Test": "Test",
+    "Allow Fail": None,
+}
 
 
-def check_group():
-    steps = []
-    notify = None
-    for rel in CHECK_STATIC:
-        label, n, inner = load_group(os.path.join(MISC, rel))
-        assert label == "Check", f"{rel}: expected Check group, got {label!r}"
-        if n is not None:
-            notify = n
-        steps += inner
-    return {
-        "group": "Check",
-        "notify": notify or [{"github_commit_status": {"context": "Check"}}],
-        "steps": steps,
-    }
+def emit_group(label, steps_text):
+    """Build the text of one merged `  - group:` block. `steps_text` is the
+    already-re-indented (6-space `- `) concatenation of inner step blocks."""
+    out = [f'  - group: "{label}"']
+    context = GROUP_NOTIFY.get(label)
+    if context is not None:
+        out.append("    notify:")
+        out.append("      - github_commit_status:")
+        out.append(f'          context: "{context}"')
+    out.append("    steps:")
+    if steps_text:
+        out.append(steps_text)
+    return "\n".join(out)
 
 
-def test_group():
-    steps = []
-    notify = None
-    for rel in TEST_STATIC:
-        label, n, inner = load_group(os.path.join(MISC, rel))
-        assert label == "Test", f"{rel}: expected Test group, got {label!r}"
-        if n is not None:
-            notify = n
-        steps += inner
-    for arches, yml in TEST_ARCHES:
-        steps += render_arches_group(arches, yml, "Test", "false")
-    return {
-        "group": "Test",
-        "notify": notify or [{"github_commit_status": {"context": "Test"}}],
-        "steps": steps,
-    }
-
-
-def allow_fail_group():
-    steps = []
-    for arches, yml in ALLOW_FAIL_BUILD_ARCHES:
-        steps += render_arches_group(arches, yml, "Allow Fail", "true")
-    for arches, yml in ALLOW_FAIL_TEST_ARCHES:
-        steps += render_arches_group(arches, yml, "Allow Fail", "true")
-    return {"group": "Allow Fail", "steps": steps}
-
-
-def verbatim_group(path):
-    """Return the single top-level group of `path` as a parsed dict, verbatim
-    (no per-arch interpolation -- it stays a launcher / static job and is
-    resolved by the final pipeline upload)."""
+def verbatim_group_text(path):
+    """Return the entire `  - group:` ... block text of a single-group file,
+    VERBATIM (no interpolation, no re-indentation). Strips leading comment /
+    blank lines before `steps:` and any trailing blank lines."""
     with open(path) as f:
-        doc = yaml.safe_load(f)
-    assert len(doc["steps"]) == 1
-    return doc["steps"][0]
+        text = f.read()
+    lines = _split_lines(text)
+    # Find the top-level `- group:` line (indent 2).
+    start = None
+    for i, line in enumerate(lines):
+        if re.match(r'  - group:', line):
+            start = i
+            break
+    assert start is not None, f"{path}: no top-level group found"
+    block = lines[start:]
+    while block and block[-1].strip() == "":
+        block.pop()
+    return "\n".join(block)
+
+
+def build_group_text():
+    chunks = []
+    for arches, yml in BUILD_ARCHES:
+        chunks.append(render_arches_group_text(arches, yml, "Build", "false"))
+    return emit_group("Build", "\n".join(c for c in chunks if c))
+
+
+def check_group_text():
+    chunks = []
+    for rel in CHECK_STATIC:
+        label, inner = load_group_text(os.path.join(MISC, rel))
+        assert label == "Check", f"{rel}: expected Check group, got {label!r}"
+        chunks.append(inner)
+    return emit_group("Check", "\n".join(c for c in chunks if c))
+
+
+def test_group_text():
+    chunks = []
+    for rel in TEST_STATIC:
+        label, inner = load_group_text(os.path.join(MISC, rel))
+        assert label == "Test", f"{rel}: expected Test group, got {label!r}"
+        chunks.append(inner)
+    for arches, yml in TEST_ARCHES:
+        chunks.append(render_arches_group_text(arches, yml, "Test", "false"))
+    return emit_group("Test", "\n".join(c for c in chunks if c))
+
+
+def allow_fail_group_text():
+    chunks = []
+    for arches, yml in ALLOW_FAIL_BUILD_ARCHES:
+        chunks.append(render_arches_group_text(arches, yml, "Allow Fail", "true"))
+    for arches, yml in ALLOW_FAIL_TEST_ARCHES:
+        chunks.append(render_arches_group_text(arches, yml, "Allow Fail", "true"))
+    return emit_group("Allow Fail", "\n".join(c for c in chunks if c))
+
+
+# Trailing barrier + trigger of the trusted julia-publish pipeline (inlined
+# verbatim so the wait reliably barriers all dynamically-uploaded jobs).
+TRAILER = '''\
+  - wait: ~
+  - trigger: "julia-publish"
+    label: ":rocket: trigger publish"
+    if: pipeline.slug == "julia-ci"
+    build:
+      commit: "${BUILDKITE_COMMIT}"
+      branch: "${BUILDKITE_BRANCH}"
+      message: "publish: ${BUILDKITE_MESSAGE}"'''
 
 
 def main():
-    groups = [build_group(), check_group(), test_group(), allow_fail_group()]
+    blocks = [
+        build_group_text(),
+        check_group_text(),
+        test_group_text(),
+        allow_fail_group_text(),
+    ]
 
     # JuliaSyntax: gated on ./JuliaSyntax/Project.toml existing in the julia
     # checkout (same conditional the old Check step used). Included verbatim
     # as its own group (it is itself a launcher with its own notify).
     juliasyntax_project = os.path.join(os.getcwd(), "JuliaSyntax", "Project.toml")
     if os.path.exists(juliasyntax_project):
-        groups.append(verbatim_group(os.path.join(MISC, "juliasyntax.launch.yml")))
+        blocks.append(verbatim_group_text(os.path.join(MISC, "juliasyntax.launch.yml")))
     else:
         sys.stderr.write(
             "./JuliaSyntax/Project.toml does NOT exist; omitting JuliaSyntax group\n"
         )
 
     # JuliaC: itself a launcher with its own group + notify -- include verbatim.
-    groups.append(verbatim_group(os.path.join(MISC, "juliac", "test_juliac.yml")))
+    blocks.append(verbatim_group_text(os.path.join(MISC, "juliac", "test_juliac.yml")))
 
-    # Barrier + trigger of the trusted julia-publish pipeline (inlined verbatim
-    # so the wait reliably barriers all dynamically-uploaded jobs).
-    doc = {
-        "steps": groups + [
-            {"wait": None},
-            {
-                "trigger": "julia-publish",
-                "label": ":rocket: trigger publish",
-                "if": 'pipeline.slug == "julia-ci"',
-                "build": {
-                    "commit": "${BUILDKITE_COMMIT}",
-                    "branch": "${BUILDKITE_BRANCH}",
-                    "message": "publish: ${BUILDKITE_MESSAGE}",
-                },
-            },
-        ]
-    }
-
-    yaml.safe_dump(doc, sys.stdout, default_flow_style=False, sort_keys=False,
-                   width=10_000)
+    sys.stdout.write("steps:\n")
+    sys.stdout.write("\n".join(blocks))
+    sys.stdout.write("\n")
+    sys.stdout.write(TRAILER)
+    sys.stdout.write("\n")
 
 
 if __name__ == "__main__":
