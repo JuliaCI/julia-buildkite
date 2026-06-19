@@ -2,14 +2,13 @@ steps:
   - group: "Upload"
     steps:
       - label: "upload docs"
-        depends_on:
-          - "doctest"
-        # We only upload if one of the following criteria are true:
-        # 1. The branch is `master`.
-        # 2. The branch is `release-*`.
-        # 3. The build is a tag build AND the tag is `v*`.
-        # 4. The pipeline is `julia-buildkite`.
-        if: ((build.branch == "master") || (build.branch =~ /^release-/) || (build.tag =~ /^v/)) || (pipeline.slug == "julia-buildkite")
+        # The step key is part of the job's OIDC identity: the
+        # julia-oidc-docs-deploy IAM role only trusts this step, and only from
+        # the trusted julia-publish pipeline (this file is launched by the
+        # publish pipeline, not the build pipeline). There is no `depends_on`
+        # doctest here: the html docs tarball is read from the commit-sha
+        # gated S3 staging area (the build pipeline's doctest step stages it),
+        # the same cross-pipeline handoff used for the binaries.
         # Prevent multiple pipelines from pushing to the `git@github.com:JuliaLang/docs.julialang.org` repo simultaneously
         concurrency: 1
         concurrency_group: 'upload/julialang/upload_docs/docs_julialang_org'
@@ -23,23 +22,34 @@ steps:
               persist_depot_dirs: packages,artifacts,compiled
               # We maintain multiple Documenter manifests (one manifest for each v1.x minor version of Julia).
               version: '1.10' # GREP_ME: Keep this updated to LTS. Do not set it to '1' or 'stable' or 'latest'.
-          - staticfloat/sandbox#v2:
+          - JuliaCI/sandbox#v2:
               # Use `aws_uploader` image, since it has things like `git` and `ssh` and whatnot
-              rootfs_url: "https://github.com/JuliaCI/rootfs-images/releases/download/v6.00/aws_uploader.x86_64.tar.gz"
-              rootfs_treehash: "61cb30497604eb1581b3ffd6a8058c150f4cbf8b"
+              rootfs_url: "https://github.com/JuliaCI/rootfs-images/releases/download/v8.1/aws_uploader.x86_64.tar.gz"
+              rootfs_treehash: "c031b94d209e3e86507aaa9998c1fa3544f32c72"
               uid: 1000
               gid: 1000
               workspaces:
                 # Include `/cache/repos` so that our `git` version introspection works.
                 - "/cache/repos:/cache/repos"
-          - JuliaCI/cryptic#v2:
-              files:
-                - .buildkite/secrets/ssh_docs_deploy
-          - staticfloat/ssh-agent#v1:
-              keyfiles:
-                - .buildkite/secrets/ssh_docs_deploy
         commands: |
-          buildkite-agent artifact download --step "doctest" "julia-*-htmldocs.tar.gz" .
+          echo "--- Download built docs from staging"
+          # TODO(publish-split): the build pipeline's doctest step must stage
+          # julia-*-htmldocs.tar.gz to the julia-ci staging bucket via the
+          # untrusted `stage` role (same handoff as the binaries). This job
+          # then downloads it from there. Until that staging step exists,
+          # this download has no source.
+          source .buildkite/utilities/aws_oidc.sh docs-deploy
+          aws s3 cp "s3://${STAGING_BUCKET:-julialang-ephemeral-ci}/${S3_BUCKET_PREFIX:-bin}/${BUILDKITE_COMMIT}/" . \
+              --recursive --exclude "*" --include "*-htmldocs.tar.gz"
+
+          echo "--- Configure SSH signing via AWS KMS"
+          # The deploy key private half lives in AWS KMS and never leaves
+          # it: ssh performs each signature through the aws-kms-pkcs11
+          # provider, authorized by this job's OIDC identity (the docs-deploy
+          # role assumed above). No secrets are involved.
+          mkdir -p ~/.config/aws-kms-pkcs11
+          echo '{"slots": [{"kms_key_id": "alias/julia-docs-deploy"}]}' > ~/.config/aws-kms-pkcs11/config.json
+          export GIT_SSH_COMMAND="ssh -o PKCS11Provider=$${AWS_KMS_PKCS11_PROVIDER:-/usr/lib/x86_64-linux-gnu/pkcs11/aws_kms_pkcs11.so}"
 
           echo "--- clone docs.julialang.org"
           mkdir -p /home/juliaci/.ssh
@@ -68,7 +78,7 @@ steps:
           git add .
           git commit -a -F ../commit_message
 
-          if [[ "$${BUILDKITE_PIPELINE_SLUG}" == "julia-buildkite" ]]; then
+          if [[ "$${S3_BUCKET:-}" == "julialang-ephemeral" ]]; then
             # If we're testing new CI configurations, push to a temporary branch, then delete it
             git push origin gh-pages:gh-pages-buildkite-$${BUILDKITE_COMMIT}
             git push origin --delete gh-pages-buildkite-$${BUILDKITE_COMMIT}
@@ -77,10 +87,7 @@ steps:
           fi
         timeout_in_minutes: 45
         agents:
-          queue: "test"
+          queue: "default"
           sandbox_capable: "true"
           os: "linux"
           arch: "x86_64"
-        env:
-          # Receive cryptic token from parent job
-          BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET: ${BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET?}

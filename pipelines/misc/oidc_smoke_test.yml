@@ -1,0 +1,38 @@
+# OIDC/IAM trust smoke test -- validates role assumption and every trust
+# boundary from inside a build pipeline, WITHOUT building julia.
+#
+# Usage (see also "Validation" in ops/README.md): temporarily replace the
+# webUI steps of julia-pr (or julia-ci) with this file's steps and start a
+# new build (any recent julia commit); restore the real webUI
+# (pipelines/main/0_webui.yml) afterwards.
+#
+# NOTE: while validating a julia-buildkite revision that julia's
+# `.buildkite-external-version` does not point to yet, replace the
+# `version:` below with the julia-buildkite commit sha under test.
+steps:
+  - label: ":mag: OIDC trust smoke test"
+    plugins:
+      - JuliaCI/external-buildkite#v1:
+          version: "./.buildkite-external-version"
+          repo_url: "https://github.com/JuliaCI/julia-buildkite"
+      - JuliaCI/julia#v1:
+          # The sandbox plugin itself runs on Julia (Sandbox.jl)
+          persist_depot_dirs: packages,artifacts,compiled
+          version: '1.10' # GREP_ME: Keep this updated to LTS. Do not set it to '1' or 'stable' or 'latest'.
+      - JuliaCI/sandbox#v2:
+          # The bare agents do not carry the AWS CLI; like the historical
+          # upload jobs, run inside the `aws_uploader` rootfs, which exists
+          # to provide aws/git/ssh.
+          rootfs_url: "https://github.com/JuliaCI/rootfs-images/releases/download/v8.1/aws_uploader.x86_64.tar.gz"
+          rootfs_treehash: "c031b94d209e3e86507aaa9998c1fa3544f32c72"
+          uid: 1000
+          gid: 1000
+          workspaces:
+            - "/cache/repos:/cache/repos"
+    commands: "bash .buildkite/utilities/tests/oidc_smoke_test.sh"
+    timeout_in_minutes: 10
+    agents:
+      queue: "build"
+      sandbox_capable: "true"
+      os: "linux"
+      arch: "x86_64"

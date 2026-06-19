@@ -14,15 +14,15 @@ steps:
               persist_depot_dirs: packages,artifacts,compiled
               version: '1.10' # GREP_ME: Keep this updated to LTS. Do not set it to '1' or 'stable' or 'latest'.
           - staticfloat/sandbox#v1:
-              rootfs_url: https://github.com/JuliaCI/rootfs-images/releases/download/v6.00/package_linux.x86_64.tar.gz
-              rootfs_treehash: "4dcde853eb5baaa0a8f087b633eaf955dc94b5dc"
+              rootfs_url: https://github.com/JuliaCI/rootfs-images/releases/download/v8.2/package_linux.x86_64.tar.gz
+              rootfs_treehash: "3446de08cb5b6239c00910e1f7afe432a53d2932"
               uid: 1000
               gid: 1000
               workspaces:
                 # Include `/cache/repos` so that our `git` version introspection works.
                 - "/cache/repos:/cache/repos"
         if: | # We only run the `trimming` job on Julia 1.12 and later.
-          (pipeline.slug != "julia-release-1-dot-10") && (pipeline.slug != "julia-release-1-dot-11")
+          (build.branch != "release-1.10") && (build.branch != "release-1.11")
         commands: |
           # Download pre-built julia, extract into `usr/`
           buildkite-agent artifact download --step "build_x86_64-linux-gnu" 'julia-*-linux-x86_64.tar.gz' .
