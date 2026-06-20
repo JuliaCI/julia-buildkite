@@ -1,0 +1,20 @@
+steps:
+  - group: "Check"
+    steps:
+      - label: ":macos: stdlib load-time regression (aarch64)"
+        key: "stdlib-load-time-regression"
+        depends_on:
+          - "build_aarch64-apple-darwin"
+        plugins:
+          - JuliaCI/external-buildkite#v1:
+              version: "./.buildkite-external-version"
+              repo_url: "https://github.com/JuliaCI/julia-buildkite"
+        commands: "bash .buildkite/utilities/stdlib_load_time_regression.sh"
+        timeout_in_minutes: 120
+        agents:
+          queue: "test"
+          os: "macos"
+          arch: "aarch64"
+        env:
+          TRIPLET: "aarch64-apple-darwin"
+          BUILDKITE_CANCEL_SIGNAL: "SIGQUIT"

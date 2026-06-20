@@ -86,6 +86,7 @@ steps:
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/embedding.yml
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/trimming.yml
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/llvmpasses.yml
+          buildkite-agent pipeline upload .buildkite/pipelines/main/misc/stdlib_load_time_regression.yml
           # buildkite-agent pipeline upload .buildkite/pipelines/main/misc/whitespace.yml # Currently runs in GitHub Actions instead of Buildkite
 
           buildkite-agent pipeline upload .buildkite/pipelines/main/misc/sanitizers/asan.yml
