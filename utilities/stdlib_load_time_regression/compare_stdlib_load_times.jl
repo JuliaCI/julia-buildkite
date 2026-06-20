@@ -7,8 +7,11 @@
 # For each binary, across several rounds, we:
 #   1. Force a fresh re-precompilation of every loadable stdlib into an isolated,
 #      writable depot (so we never reuse the bundled pkgimages), timing the whole
-#      parallel precompile batch.
+#      precompile.
 #   2. Measure the time to load each stdlib from that freshly-populated depot.
+#
+# The work runs entirely against a throwaway depot via `Base.compilecache` /
+# `Base.require`, so it needs no registry, manifest, or network.
 #
 # To control for machine noise we run the rounds in an A/B/B/A/B/A order and take
 # the per-binary minimum of each metric (the least noise-perturbed sample) before
@@ -66,60 +69,15 @@ function setup_depot(julia::String)
     return depot
 end
 
-# Run the measure script with `julia`, using the isolated depot as the *only*
-# depot (a single path, no trailing `:`), so compiled-cache lookups never fall
-# through to the bundled pkgimages. `project` is the shared dir whose generated
-# `Project.toml`/`Manifest.toml` lists the stdlibs as deps.
-function run_phase(julia::String, depot::String, project::String, mode::String)
+# Run the measure helper with `julia` against the isolated `depot` as the *only*
+# depot (a single path, no trailing `:`), so cache lookups never fall through to
+# the bundled pkgimages. Returns the path of the output file it wrote.
+function run_measure(julia::String, depot::String, mode::String, args...)
     out = tempname()
     env = copy(ENV)
     env["JULIA_DEPOT_PATH"] = depot
-    cmd = `$(julia) --startup-file=no --color=yes $(MEASURE_SCRIPT) $(mode) $(out) $(project)`
-    run(setenv(cmd, env))
-    return read_timings(out)
-end
-
-# Generate the `Project.toml`/`Manifest.toml` for `julia` using its *standard*
-# depot, so resolution can consult the registry. The resolved environment is
-# reused (against the fresh depot) by the precompile and measure phases.
-function generate_project(julia::String, project::String)
-    cmd = `$(julia) --startup-file=no --color=yes $(MEASURE_SCRIPT) generate /dev/null $(project)`
-    run(cmd)
-    return nothing
-end
-
-# Names of the stdlibs listed under `[deps]` in the generated `Project.toml`.
-function stdlib_names(project::String)
-    names = String[]
-    in_deps = false
-    for line in eachline(joinpath(project, "Project.toml"))
-        s = strip(line)
-        if s == "[deps]"
-            in_deps = true
-        elseif startswith(s, "[")
-            in_deps = false
-        elseif in_deps
-            m = match(r"^(\S+)\s*=", s)
-            m === nothing || push!(names, String(m.captures[1]))
-        end
-    end
-    return names
-end
-
-# Measure the load time of every stdlib, *each in its own fresh process* (loading
-# one stdlib pulls in its deps, so a shared session would report later stdlibs as
-# already-resident). Returns a `name => seconds` Dict for this sample.
-function measure_sample(julia::String, depot::String, project::String, names)
-    env = copy(ENV)
-    env["JULIA_DEPOT_PATH"] = depot
-    timings = Dict{String,Float64}()
-    for name in names
-        out = tempname()
-        cmd = `$(julia) --startup-file=no $(MEASURE_SCRIPT) measure $(out) $(project) $(name)`
-        run(setenv(cmd, env))
-        merge!(timings, read_timings(out))
-    end
-    return timings
+    run(setenv(`$(julia) --startup-file=no $(MEASURE_SCRIPT) $(mode) $(out) $(args...)`, env))
+    return out
 end
 
 # Per-key minimum across repeated samples (each a Dict). The min is the least
@@ -130,17 +88,28 @@ function min_load(samples)
     return Dict(k => minimum(s[k] for s in samples) for k in common)
 end
 
-# One measurement round for `julia`: create a fresh, isolated depot, precompile the
-# whole stdlib environment into it (timing the parallel batch), then measure each
-# stdlib's load time against that warm depot. The depot is removed afterward so that
-# repeated rounds don't accumulate compiled caches on disk. Returns
-# `(precompile_seconds, name => load_seconds Dict)`.
-function measure_round(julia::String, project::String, names)
+# Load time of every stdlib in `names`, each in its own fresh process (loading one
+# stdlib pulls in its deps, so a shared session would report later ones as already
+# resident). Returns a `name => seconds` Dict for this sample.
+function measure_sample(julia::String, depot::String, names)
+    timings = Dict{String,Float64}()
+    for name in names
+        merge!(timings, read_timings(run_measure(julia, depot, "measure", name)))
+    end
+    return timings
+end
+
+# One measurement round for `julia`: create a fresh, isolated depot, precompile
+# every stdlib into it (timing it), then measure each stdlib's warm-cache load
+# time. The depot is removed afterward so repeated rounds don't pile up compiled
+# caches. Returns `(precompile_seconds, name => load_seconds Dict)`.
+function measure_round(julia::String)
     depot = setup_depot(julia)
     try
-        precompile_s = run_phase(julia, depot, project, "precompile")["__precompile__"]
-        load = measure_sample(julia, depot, project, names)
-        return precompile_s, load
+        lines = readlines(run_measure(julia, depot, "precompile"))
+        precompile_s = parse(Float64, lines[1])
+        names = lines[2:end]
+        return precompile_s, measure_sample(julia, depot, names)
     finally
         rm(depot; recursive = true, force = true)
     end
@@ -154,33 +123,14 @@ function main()
     pre_rel_threshold = parse(Float64, get(ENV, "PRECOMPILE_REL_THRESHOLD", "1.5"))
     pre_abs_threshold = parse(Float64, get(ENV, "PRECOMPILE_ABS_THRESHOLD_S", "10"))
 
-    project_a = mktempdir(; prefix = "stdlib-loadtime-proj-a-")
-    project_b = mktempdir(; prefix = "stdlib-loadtime-proj-b-")
-
-    # Resolve each environment with the standard depot first, so the fresh-depot
-    # precompile phase has a manifest and never needs the registry.
-    println("--- Generate stdlib environment (candidate A)")
-    generate_project(julia_a, project_a)
-    println("--- Generate stdlib environment (baseline B)")
-    generate_project(julia_b, project_b)
-
-    names_a = stdlib_names(project_a)
-    names_b = stdlib_names(project_b)
-
     # Run the precompile+load rounds in A/B/B/A/B/A order so machine drift/noise is
     # spread across both binaries, then take the per-binary minimum of each metric.
-    println("--- Round 1: precompile + load (A)")
-    pa1, a1 = measure_round(julia_a, project_a, names_a)
-    println("--- Round 1: precompile + load (B)")
-    pb1, b1 = measure_round(julia_b, project_b, names_b)
-    println("--- Round 2: precompile + load (B)")
-    pb2, b2 = measure_round(julia_b, project_b, names_b)
-    println("--- Round 2: precompile + load (A)")
-    pa2, a2 = measure_round(julia_a, project_a, names_a)
-    println("--- Round 3: precompile + load (B)")
-    pb3, b3 = measure_round(julia_b, project_b, names_b)
-    println("--- Round 3: precompile + load (A)")
-    pa3, a3 = measure_round(julia_a, project_a, names_a)
+    println("--- Round 1: precompile + load (A)"); pa1, a1 = measure_round(julia_a)
+    println("--- Round 1: precompile + load (B)"); pb1, b1 = measure_round(julia_b)
+    println("--- Round 2: precompile + load (B)"); pb2, b2 = measure_round(julia_b)
+    println("--- Round 2: precompile + load (A)"); pa2, a2 = measure_round(julia_a)
+    println("--- Round 3: precompile + load (B)"); pb3, b3 = measure_round(julia_b)
+    println("--- Round 3: precompile + load (A)"); pa3, a3 = measure_round(julia_a)
 
     pre_a = minimum((pa1, pa2, pa3))
     pre_b = minimum((pb1, pb2, pb3))

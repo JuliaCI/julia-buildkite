@@ -37,9 +37,11 @@ buildkite-agent artifact download --step "build_${TRIPLET}" "${UPLOAD_FILENAME}.
 echo "--- Extract candidate build artifact"
 tar xzf "${UPLOAD_FILENAME}.tar.gz" "${JULIA_INSTALL_DIR}/"
 
+# Codesign so the binary runs and JLL artifact dylibs load on aarch64. We don't
+# update the bundled pkgimage checksums here: this check recompiles every stdlib
+# into a throwaway depot, so the bundled pkgimages are never loaded.
 echo "--- [mac] Codesign candidate"
 .buildkite/utilities/macos/codesign.sh "${JULIA_INSTALL_DIR}"
-"${JULIA_INSTALL_DIR}/bin/julia" .buildkite/utilities/update_stdlib_pkgimage_checksums.jl
 
 JULIA_A="$(pwd)/${JULIA_BINARY}"
 
@@ -75,7 +77,6 @@ if curl -fL --retry 3 -o baseline.tar.gz "${NIGHTLY_URL}"; then
 
     echo "--- [mac] Codesign baseline nightly"
     .buildkite/utilities/macos/codesign.sh "${BASELINE_DIR}"
-    "${BASELINE_DIR}/bin/julia" .buildkite/utilities/update_stdlib_pkgimage_checksums.jl
 
     JULIA_B="${BASELINE_DIR}/bin/julia"
 else
