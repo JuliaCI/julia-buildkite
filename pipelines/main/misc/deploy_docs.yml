@@ -2,14 +2,16 @@ steps:
   - group: "Upload"
     steps:
       - label: "upload docs"
-        depends_on:
-          - "doctest"
-        # We only upload if one of the following criteria are true:
-        # 1. The branch is `master`.
-        # 2. The branch is `release-*`.
-        # 3. The build is a tag build AND the tag is `v*`.
-        # 4. The pipeline is `julia-buildkite`.
-        if: ((build.branch == "master") || (build.branch =~ /^release-/) || (build.tag =~ /^v/)) || (pipeline.slug == "julia-buildkite")
+        # The step key IS this job's OIDC identity: julia-oidc-docs-deploy only
+        # trusts step_key "deploy_docs", from the trusted julia-publish pipeline
+        # (this file is launched by the publish pipeline, not the build one).
+        # The key MUST be on this job -- the one that actually assumes the role
+        # -- not on the launcher step in publish/launch.yml that uploads this
+        # file (that launcher touches no AWS). There is no `depends_on` doctest
+        # here: the html docs tarball is read from the commit-sha gated S3
+        # staging area (the build pipeline's doctest step stages it), the same
+        # cross-pipeline handoff used for the binaries.
+        key: "deploy_docs"
         # Prevent multiple pipelines from pushing to the `git@github.com:JuliaLang/docs.julialang.org` repo simultaneously
         concurrency: 1
         concurrency_group: 'upload/julialang/upload_docs/docs_julialang_org'
@@ -23,23 +25,38 @@ steps:
               persist_depot_dirs: packages,artifacts,compiled
               # We maintain multiple Documenter manifests (one manifest for each v1.x minor version of Julia).
               version: '1.10' # GREP_ME: Keep this updated to LTS. Do not set it to '1' or 'stable' or 'latest'.
-          - staticfloat/sandbox#v2:
-              # Use `aws_uploader` image, since it has things like `git` and `ssh` and whatnot
-              rootfs_url: "https://github.com/JuliaCI/rootfs-images/releases/download/v6.00/aws_uploader.x86_64.tar.gz"
-              rootfs_treehash: "61cb30497604eb1581b3ffd6a8058c150f4cbf8b"
+          - JuliaCI/sandbox#v2:
+              # Use the julia_publish image (same trusted toolchain as the
+              # publish_all step): it has git/ssh/awscli AND the aws-kms-pkcs11
+              # PKCS#11 provider used to SSH-sign the docs push with the KMS
+              # deploy key. (Keep this treehash in sync with publish/launch.yml's
+              # -- it is the same image.)
+              rootfs_url: "https://github.com/JuliaCI/rootfs-images/releases/download/v8.6/julia_publish.x86_64.tar.gz"
+              rootfs_treehash: "8b28c5b8937f25827c1ad4b6a3bc1bb90c9e9087"
               uid: 1000
               gid: 1000
               workspaces:
                 # Include `/cache/repos` so that our `git` version introspection works.
                 - "/cache/repos:/cache/repos"
-          - JuliaCI/cryptic#v2:
-              files:
-                - .buildkite/secrets/ssh_docs_deploy
-          - staticfloat/ssh-agent#v1:
-              keyfiles:
-                - .buildkite/secrets/ssh_docs_deploy
         commands: |
-          buildkite-agent artifact download --step "doctest" "julia-*-htmldocs.tar.gz" .
+          echo "--- Download built docs from staging"
+          # The build pipeline's doctest step stages the html docs under the
+          # commit-sha-gated key julia-htmldocs.tar.gz (see misc/doctest.yml).
+          # We fetch it by exact key with a single GetObject -- the staging
+          # bucket grants public s3:GetObject via its bucket policy, so no IAM
+          # S3 grant (and no bucket-listing) is needed here. We still assume the
+          # docs-deploy role below for the KMS-backed SSH signing of the push.
+          source .buildkite/utilities/aws_oidc.sh docs-deploy
+          aws s3 cp "s3://${STAGING_BUCKET:-julialang-ephemeral-ci}/${S3_BUCKET_PREFIX:-bin}/${BUILDKITE_COMMIT}/julia-htmldocs.tar.gz" .
+
+          echo "--- Configure SSH signing via AWS KMS"
+          # The deploy key private half lives in AWS KMS and never leaves
+          # it: ssh performs each signature through the aws-kms-pkcs11
+          # provider, authorized by this job's OIDC identity (the docs-deploy
+          # role assumed above). No secrets are involved.
+          mkdir -p ~/.config/aws-kms-pkcs11
+          echo '{"slots": [{"kms_key_id": "alias/julia-docs-deploy"}]}' > ~/.config/aws-kms-pkcs11/config.json
+          export GIT_SSH_COMMAND="ssh -o PKCS11Provider=$${AWS_KMS_PKCS11_PROVIDER:-/usr/lib/x86_64-linux-gnu/pkcs11/aws_kms_pkcs11.so}"
 
           echo "--- clone docs.julialang.org"
           mkdir -p /home/juliaci/.ssh
@@ -48,13 +65,13 @@ steps:
           cd repo
 
           echo "--- deploy new docs"
-          # Delete everything except for `.git`
-          shopt -s extglob
-          rm -rf !(".git")
-          shopt -u extglob
+          # Delete everything except for `.git` (find, not an extglob `!(.git)`
+          # glob, which fails to parse unless `shopt -s extglob` is already
+          # active when the commands block is parsed).
+          find . -mindepth 1 -maxdepth 1 ! -name '.git' -exec rm -rf {} +
 
           # Extract new docs build
-          tar -zxf ../julia-*-htmldocs.tar.gz
+          tar -zxf ../julia-htmldocs.tar.gz
 
           # Build commit message
           echo "build based on $${BUILDKITE_COMMIT}" > ../commit_message
@@ -68,7 +85,7 @@ steps:
           git add .
           git commit -a -F ../commit_message
 
-          if [[ "$${BUILDKITE_PIPELINE_SLUG}" == "julia-buildkite" ]]; then
+          if [[ "$${S3_BUCKET:-}" == "julialang-ephemeral" ]]; then
             # If we're testing new CI configurations, push to a temporary branch, then delete it
             git push origin gh-pages:gh-pages-buildkite-$${BUILDKITE_COMMIT}
             git push origin --delete gh-pages-buildkite-$${BUILDKITE_COMMIT}
@@ -77,10 +94,7 @@ steps:
           fi
         timeout_in_minutes: 45
         agents:
-          queue: "test"
+          queue: "default"
           sandbox_capable: "true"
           os: "linux"
           arch: "x86_64"
-        env:
-          # Receive cryptic token from parent job
-          BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET: ${BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET?}
