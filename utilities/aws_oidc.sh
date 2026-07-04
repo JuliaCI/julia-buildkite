@@ -23,8 +23,8 @@
 #
 # It exports AWS_WEB_IDENTITY_TOKEN_FILE / AWS_ROLE_ARN, which every AWS
 # SDK and the AWS CLI use to assume the role automatically (and refresh
-# as needed). The token carries AWS session tags (step_key, build_commit,
-# ...) that IAM policies match against.
+# as needed). The token carries only the AWS session tags that the selected
+# role's trust and permission policies match against.
 # (Sourced file: deliberately no `set -euo pipefail` here -- shell options
 # set in a sourced file leak into the calling script; strict mode belongs
 # to the entrypoints.)
@@ -82,6 +82,26 @@ esac
 # The *_id tags carry the Buildkite UUIDs (not the renameable slugs); the
 # IAM trust policies pin organization_id / pipeline_id / cluster_id so a
 # recreated or renamed pipeline with a matching slug cannot assume a role.
+case "${_OIDC_ROLE_SUFFIX}" in
+    stage-pr|stage-ci)
+        # Trust: org/pipeline/cluster IDs. Permission policy: own commit path.
+        _OIDC_AWS_SESSION_TAGS="organization_id,pipeline_id,cluster_id,build_commit"
+        ;;
+    publish|docs-deploy)
+        # Trust: org/pipeline/cluster IDs and step key. KMS policies also gate
+        # the trusted roles by step_key.
+        _OIDC_AWS_SESSION_TAGS="organization_id,pipeline_id,cluster_id,step_key"
+        ;;
+    tokens-ci|publish-test)
+        # Trust only needs the immutable Buildkite IDs.
+        _OIDC_AWS_SESSION_TAGS="organization_id,pipeline_id,cluster_id"
+        ;;
+    *)
+        echo "ERROR: unknown OIDC role suffix '${_OIDC_ROLE_SUFFIX}'" >&2
+        return 1 2>/dev/null || exit 1
+        ;;
+esac
+
 # Buildkite caps the OIDC token lifetime at 7200s (2h). The AWS SDK/CLI
 # re-assumes the role from the token file whenever the (1h) STS session
 # expires, so jobs whose AWS usage spans more than ~2h must re-source
@@ -102,7 +122,7 @@ buildkite-agent oidc request-token \
     --audience "sts.amazonaws.com" \
     --lifetime 7200 \
     "${_OIDC_SKIP_REDACTION[@]}" \
-    --aws-session-tag "organization_slug,organization_id,pipeline_slug,pipeline_id,cluster_id,build_branch,build_number,build_commit,step_key,job_id,agent_id" \
+    --aws-session-tag "${_OIDC_AWS_SESSION_TAGS}" \
     > "${_OIDC_TOKEN_FILE}"
 
 export AWS_WEB_IDENTITY_TOKEN_FILE="${_OIDC_TOKEN_FILE}"

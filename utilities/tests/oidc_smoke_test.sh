@@ -119,7 +119,7 @@ _PUB_TOKEN="$(mktemp)"
 buildkite-agent oidc request-token \
     --audience "sts.amazonaws.com" \
     --lifetime 600 \
-    --aws-session-tag "organization_slug,organization_id,pipeline_slug,pipeline_id,cluster_id,build_branch,build_number,build_commit,step_key,job_id,agent_id" \
+    --aws-session-tag "organization_id,pipeline_id,cluster_id,step_key" \
     > "${_PUB_TOKEN}"
 PUBLISH_ROLE_ARN="${AWS_ROLE_ARN%/*}/julia-oidc-publish"
 if OUT="$(aws sts assume-role-with-web-identity \
