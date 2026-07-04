@@ -1,6 +1,6 @@
 # OS     TRIPLET                DOCKER_TAG   TIMEOUT
-windows  x86_64-w64-mingw32     v7.10        .
-windows  i686-w64-mingw32       v7.10        .
+windows  x86_64-w64-mingw32     v8.3        .
+windows  i686-w64-mingw32       v8.3        .
 
 # These special lines allow us to embed default values for the columns above.
 # Any column without a default mapping here will simply substitute a `.` to the empty string
