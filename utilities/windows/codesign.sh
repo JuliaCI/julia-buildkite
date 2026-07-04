@@ -1,65 +1,118 @@
 #!/usr/bin/env bash
 # This file is a part of Julia. License is MIT: https://julialang.org/license
+#
+# Authenticode-sign Windows PE files with Azure Trusted Signing -- from
+# LINUX. Signatures are produced by jsign (https://ebourg.github.io/jsign/,
+# storetype TRUSTEDSIGNING); authentication is Buildkite OIDC exchanged for
+# an Entra access token via workload identity federation (client_assertion
+# grant, no AZURE_CLIENT_SECRET -- see ops/terraform/azure).
+#
+# Usage: codesign.sh <file-or-directory>
+#
+# Besides direct invocation from upload_julia.sh, this script is also the
+# target of Inno Setup's compile-time SignTool: ISCC runs under Wine and
+# bridges back to this host-side script via wine_signtool.cmd, passing a
+# Windows-style path (translated back with winepath below).
 
 set -euo pipefail
 
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
-DLIB_DEFAULT_PATH='C:\Program Files\TrustedSigning\bin\x64\Azure.CodeSigning.Dlib.dll'
-DLIB_PATH="${DLIB_DEFAULT_PATH}"
-METADATA_JSON_PATH="$(cygpath -w "${SCRIPT_DIR}/codesign_metadata.json")"
+JSIGN="${JSIGN:-jsign}"
+METADATA_JSON="${SCRIPT_DIR}/codesign_metadata.json"
 
 usage() {
-    echo "Usage: $0 [--dlib-path=<path>] <target>"
+    echo "Usage: $0 <target>"
     echo
-    echo "Parameter descriptions:"
-    echo
-    echo "  dlib-path: The path to the Trusted Signing .dlib file (defaults to ${DLIB_DEFAULT_PATH})."
-    echo
-    echo "    target: A file or directory to codesign (must come last!)"
+    echo "    target: A PE file or a directory to codesign (all *.exe / *.dll within)"
 }
 
-abspath() {
-    echo "$(cd "$(dirname "$1")"; pwd -P)/$(basename "$1")"
-}
-
-if [ "$#" -lt 1 ]; then
+if [ "$#" -ne 1 ]; then
     usage
     exit 1
 fi
+TARGET="${1}"
 
-while [ "$#" -gt 1 ]; do
-    case "${1}" in
-        --dlib-path)
-            DLIB_PATH="$2"
-            shift
-            shift
-            ;;
-        --dlib-path=*)
-            DLIB_PATH="${1#*=}"
-            shift
-            ;;
-        *)
-            echo "Unknown argument '$1'"
-            usage
-            exit 1
-            ;;
-    esac
+# When invoked from the Wine-side Inno Setup hook, the argument is a
+# Windows path; translate it back to a host path. The publish sandbox maps
+# Wine's Z: drive to the filesystem root, so translate Z: paths mechanically
+# rather than via `winepath -u`: each winepath call spawns a slow (and, in
+# this sandbox, page-faulting) Wine process, and that latency is enough for
+# ISCC's freshly-written uninstaller temp to disappear before we sign it.
+if [[ "${TARGET}" =~ ^[Zz]:[\\/] ]]; then
+    TARGET="/${TARGET:3}"
+    TARGET="${TARGET//\\//}"
+elif [[ "${TARGET}" =~ ^[A-Za-z]: ]]; then
+    TARGET="$(winepath -u "${TARGET}")"
+fi
+
+# The hook can also reach us before ISCC's just-written target is flushed and
+# visible on the bind mount shared with the Wine process; wait briefly for it.
+for _ in $(seq 1 40); do
+    [ -e "${TARGET}" ] && break
+    sleep 0.25
 done
-DLIB_PATH="$(cygpath -w "${DLIB_PATH}")"
 
+# The non-production publish test stack sets PUBLISH_SKIP_WINDOWS_SIGN=1:
+# Windows Authenticode signing is Azure Trusted Signing, which has no
+# KMS/self-signed equivalent. No-op (exit 0) so that ISCC's compile-time
+# SignTool hook and the direct PE-signing pass both "succeed" while producing
+# UNSIGNED binaries. (upload_julia.sh skips the check_signed.py tripwire in
+# this mode, since the installer is intentionally unsigned.)
+if [[ "${PUBLISH_SKIP_WINDOWS_SIGN:-0}" == "1" ]]; then
+    echo "PUBLISH_SKIP_WINDOWS_SIGN=1: not Authenticode-signing ${TARGET}" >&2
+    exit 0
+fi
+
+# AZURE_TENANT_ID / AZURE_CLIENT_ID identify the Trusted Signing app
+# registration; they are not secrets and are set in the pipeline yml.
 if [[ -z "${AZURE_TENANT_ID:-}" ]] ||
-   [[ -z "${AZURE_CLIENT_ID:-}" ]] ||
-   [[ -z "${AZURE_CLIENT_SECRET:-}" ]]; then
-    echo "ERROR: Missing AZURE_* secret variables!" >&2
+   [[ -z "${AZURE_CLIENT_ID:-}" ]]; then
+    echo "ERROR: Missing AZURE_TENANT_ID / AZURE_CLIENT_ID variables!" >&2
     exit 1
 fi
 
-if [[ ! -f "${DLIB_PATH}" ]]; then
-    echo "ERROR: No Trusted Signing dlib found at '${DLIB_PATH}'" >&2
-    exit 1
-fi
+# Trusted Signing account coordinates (not secrets).
+read -r TS_ENDPOINT TS_ALIAS < <(python3 - "${METADATA_JSON}" <<'EOF'
+import json, sys
+m = json.load(open(sys.argv[1]))
+print(m["Endpoint"].rstrip("/"), f'{m["CodeSigningAccountName"]}/{m["CertificateProfileName"]}')
+EOF
+)
 
+# Exchange a Buildkite OIDC token for an Entra access token scoped to the
+# Trusted Signing service. Cached on disk so that the per-file invocations
+# from the Inno Setup hook don't re-authenticate every time.
+TOKEN_CACHE="${AZURE_TS_TOKEN_CACHE:-${TMPDIR:-/tmp}/azure-trusted-signing-token-$(id -u)}"
+get_access_token() {
+    if [[ -f "${TOKEN_CACHE}" ]] && [[ -n "$(find "${TOKEN_CACHE}" -mmin -45 2>/dev/null)" ]]; then
+        cat "${TOKEN_CACHE}"
+        return 0
+    fi
+
+    local oidc_token response
+    oidc_token="$(buildkite-agent oidc request-token \
+        --audience "api://AzureADTokenExchange" \
+        --subject-claim pipeline_id \
+        --skip-redaction \
+        --lifetime 3600)"
+
+    response="$(curl --fail --silent --show-error \
+        -X POST "https://login.microsoftonline.com/${AZURE_TENANT_ID}/oauth2/v2.0/token" \
+        --data-urlencode "grant_type=client_credentials" \
+        --data-urlencode "client_id=${AZURE_CLIENT_ID}" \
+        --data-urlencode "scope=https://codesigning.azure.net/.default" \
+        --data-urlencode "client_assertion_type=urn:ietf:params:oauth:client-assertion-type:jwt-bearer" \
+        --data-urlencode "client_assertion=${oidc_token}")"
+
+    python3 -c 'import json,sys; print(json.load(sys.stdin)["access_token"])' \
+        <<<"${response}" > "${TOKEN_CACHE}.tmp"
+    chmod 600 "${TOKEN_CACHE}.tmp"
+    mv "${TOKEN_CACHE}.tmp" "${TOKEN_CACHE}"
+    cat "${TOKEN_CACHE}"
+}
+
+ACCESS_TOKEN="$(get_access_token)"
 
 # We will try to codesign, using multiple timestamping servers in case one is down
 SERVERS=(
@@ -69,10 +122,21 @@ SERVERS=(
 )
 NUM_RETRIES=3
 
-function do_codesign() {
+# Sign a batch of files with one jsign invocation (one JVM start signs many
+# files). --replace keeps retries idempotent.
+do_codesign() {
     for _ in $(seq 1 ${NUM_RETRIES}); do
         for SERVER in "${SERVERS[@]}"; do
-            if MSYS2_ARG_CONV_EXCL='*' signtool sign /q /fd SHA256 /tr "${SERVER}" /td SHA256 /dlib "${DLIB_PATH}" /dmdf "${METADATA_JSON_PATH}" "$1"; then
+            if "${JSIGN}" \
+                    --storetype TRUSTEDSIGNING \
+                    --keystore "${TS_ENDPOINT}" \
+                    --storepass "${ACCESS_TOKEN}" \
+                    --alias "${TS_ALIAS}" \
+                    --alg SHA-256 \
+                    --tsmode RFC3161 \
+                    --tsaurl "${SERVER}" \
+                    --replace \
+                    "$@"; then
                 return 0
             fi
         done
@@ -82,35 +146,24 @@ function do_codesign() {
     return 1
 }
 
-# This codesign script only works on files
-if [ -f "${1}" ]; then
-    # If we're codesigning a single file, directly invoke codesign on that file
-    echo "Codesigning file ${1}"
-    do_codesign "${1}"
-elif [ -d "${1}" ]; then
-    # Create a fifo to communicate from `find` to `while`
-    trap 'rm -rf $TMPFIFODIR' EXIT
-    TMPFIFODIR="$(mktemp -d)"
-    mkfifo "$TMPFIFODIR/findpipe"
+if [ -f "${TARGET}" ]; then
+    echo "Codesigning file ${TARGET}"
+    do_codesign "${TARGET}"
+elif [ -d "${TARGET}" ]; then
+    # Collect every PE file in the directory, then sign in batches.
+    PE_FILES=()
+    while IFS= read -r -d '' pe_file; do
+        PE_FILES+=( "${pe_file}" )
+    done < <(find "${TARGET}" -type f \( -iname '*.exe' -o -iname '*.dll' \) -print0)
 
-    # If we're codesigning a whole directory, use `find` to discover every
-    # executable file within the directory, then pass that off to a while
-    # read loop.  This safely handles whitespace in filenames.
-    find "${1}" -type f -perm -0111 -print0 > "$TMPFIFODIR/findpipe" &
-
-    # This while loop reads in from the fifo, and invokes `do_codesign`,
-    # but it does so in a background task, so that the codesigning can
-    # happen in parallel.  This speeds things up by a few seconds.
-    echo "Codesigning dir ${1}"
-    NUM_CODESIGNS=0
-    while IFS= read -r -d '' exe_file; do
-        do_codesign "${exe_file}" &
-        NUM_CODESIGNS="$((NUM_CODESIGNS + 1))"
-    done < "${TMPFIFODIR}/findpipe"
-    wait
-    echo "Codesigned ${NUM_CODESIGNS} files"
+    echo "Codesigning ${#PE_FILES[@]} files in dir ${TARGET}"
+    BATCH=50
+    for ((i = 0; i < ${#PE_FILES[@]}; i += BATCH)); do
+        do_codesign "${PE_FILES[@]:i:BATCH}"
+    done
+    echo "Codesigned ${#PE_FILES[@]} files"
 else
-    echo "Given codesigning target '${1}' not a file or directory!" >&2
+    echo "Given codesigning target '${TARGET}' not a file or directory!" >&2
     usage
     exit 1
 fi
