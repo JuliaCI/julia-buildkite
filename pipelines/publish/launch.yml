@@ -1,0 +1,90 @@
+# Launched by the julia-publish pipeline. A single trusted step signs and
+# promotes every staged build to its final release location, then deploys
+# docs. This is the only place release secrets (KMS signing keys) are used.
+steps:
+  - group: "Publish"
+    steps:
+      - label: ":lock: publish all"
+        key: "publish_all"
+        # No in-pipeline build dependency: reads the unsigned tarballs from
+        # the commit-sha-gated staging area in S3 (written by the build
+        # pipeline). One job, all triplets.
+        concurrency: 1
+        concurrency_group: 'publish/julialangnightlies'
+        concurrency_method: eager
+        plugins:
+          - JuliaCI/external-buildkite#v1:
+              version: "./.buildkite-external-version"
+              repo_url: "https://github.com/JuliaCI/julia-buildkite"
+          - JuliaCI/julia#v1:
+              # OUTER julia: runs on the bare agent, only to launch Sandbox.jl
+              # (the sandbox plugin requires a host julia). Plugins *before*
+              # sandbox#v2 run outside the sandbox, so this one is NOT visible
+              # inside it -- the inner julia#v1 below provides the in-sandbox julia.
+              persist_depot_dirs: packages,artifacts,compiled
+              version: '1.10' # GREP_ME: Keep this updated to LTS. Do not set it to '1' or 'stable' or 'latest'.
+          - JuliaCI/sandbox#v2:
+              # Run inside the julia_publish rootfs, which carries the full
+              # signing/packaging toolchain (aws CLI, p7zip, libdmg-hfsplus +
+              # newfs_hfs, wine + Inno Setup, jsign, python). Without this the
+              # step runs on a bare agent and fails with `aws: command not
+              # found`. x86_64-only image; built by JuliaCI/rootfs-images.
+              rootfs_url: https://github.com/JuliaCI/rootfs-images/releases/download/v8.6/julia_publish.x86_64.tar.gz
+              rootfs_treehash: "8b28c5b8937f25827c1ad4b6a3bc1bb90c9e9087"
+              uid: 1000
+              gid: 1000
+              workspaces:
+                # Mount the git object cache so upload_julia.sh's version
+                # introspection (git describe) resolves cleanly inside the
+                # sandbox, same as the build_linux step.
+                - "/cache/repos:/cache/repos"
+                # Mount the julia plugin's install + depot so the inner julia
+                # plugin below reuses the already-downloaded julia instead of
+                # re-fetching it inside the sandbox.
+                - "/cache/julia-buildkite-plugin:/cache/julia-buildkite-plugin"
+          - JuliaCI/julia#v1:
+              # INNER julia: plugins after sandbox#v2 run *inside* the sandbox,
+              # so this puts `julia` on PATH within the rootfs. upload_julia.sh
+              # uses it to patch the pkgimage checksums inside the (foreign-
+              # platform) signed install trees -- the published binaries cannot
+              # run on this agent.
+              version: '1.10' # GREP_ME: Keep in sync with the outer julia version.
+        timeout_in_minutes: 180
+        commands: "bash .buildkite/utilities/publish.sh"
+        agents:
+          # The signing/packaging toolchain is provided by the julia_publish
+          # rootfs via the sandbox plugin above (rcodesign is fetched at
+          # runtime). The agent only needs to be able to nest a Sandbox.jl
+          # sandbox, hence sandbox_capable.
+          queue: "default"
+          sandbox_capable: "true"
+          os: "linux"
+          arch: "x86_64"
+        env:
+          # The Inno Setup 6 prefix is baked into the julia_publish rootfs at
+          # /home/juliaci/.wine (owned by uid 1000). upload_julia.sh runs
+          # `wine ISCC.exe` without setting WINEPREFIX, so it would otherwise
+          # default to $HOME/.wine -- pin it here so the baked prefix is used
+          # regardless of what HOME the sandbox sets.
+          WINEPREFIX: "/home/juliaci/.wine"
+          # Identify the Azure Trusted Signing app registration for Windows
+          # Authenticode signing (not secrets; auth is via Buildkite OIDC
+          # workload identity federation -- see windows/codesign.sh and
+          # ops/terraform/azure).
+          AZURE_TENANT_ID: "8d3de454-9fdc-4091-90af-9cf79dcabe79"
+          AZURE_CLIENT_ID: "a1fa180a-5312-4673-a98c-7cde383bae9c"
+
+      # Launcher only: uploads the docs-deploy pipeline and touches no AWS, so
+      # it must NOT carry key "deploy_docs" -- that key belongs to the actual
+      # role-assuming "upload docs" job (see misc/deploy_docs.yml), and a
+      # duplicate key across the build is rejected.
+      - label: "deploy docs"
+        plugins:
+          - JuliaCI/external-buildkite#v1:
+              version: "./.buildkite-external-version"
+              repo_url: "https://github.com/JuliaCI/julia-buildkite"
+        commands: "buildkite-agent pipeline upload .buildkite/pipelines/main/misc/deploy_docs.yml"
+        agents:
+          queue: "default"
+          os: "linux"
+          arch: "x86_64"
