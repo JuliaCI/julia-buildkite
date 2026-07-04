@@ -1,0 +1,28 @@
+# Launch the scheduled coverage pipeline.
+#
+# Historically this launched "signed pipelines" (treehash-verified by the
+# cryptic plugin) because they carried decryption rights for static
+# secrets. There are no pipeline-held secrets anymore: jobs obtain
+# credentials at runtime via Buildkite OIDC, and AWS IAM decides what each
+# job identity (pipeline/ref/step) may do.
+#
+# The no-GPL upload relay jobs are gone too: the no-GPL build steps stage
+# their unsigned tarballs directly to the julia-ci ephemeral staging bucket
+# (under the bin-nogpl prefix; see build_envs.sh). Signing + promotion to
+# the julialang-nogpl bucket belongs in the julia-publish pipeline (TODO:
+# wire the no-GPL triplets into utilities/publish.sh).
+steps:
+  - group: "Launch scheduled jobs"
+    steps:
+      - label: "Launch upload jobs"
+        plugins:
+          - JuliaCI/external-buildkite#v1:
+              version: "./.buildkite-external-version"
+              repo_url: "https://github.com/JuliaCI/julia-buildkite"
+        commands: |
+          # Launch the code coverage job
+          buildkite-agent pipeline upload .buildkite/pipelines/scheduled/coverage/coverage.yml
+        agents:
+          queue: "build"
+          os: "linux"
+          arch: "x86_64" # prevent from running on PiBots

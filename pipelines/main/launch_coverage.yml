@@ -1,0 +1,26 @@
+# Launch the coverage pipeline.
+#
+# Coverage is launched here (a SEPARATE pipeline upload from the build/test
+# launchers) so that it is NOT behind the publish barrier: a long scheduled
+# coverage run must never delay the julia-publish trigger. The wait+trigger
+# live at the end of launch_untrusted_builders.yml instead, inlined with the
+# build/test groups they gate.
+steps:
+  - group: "Upload"
+    steps:
+      - label: "Launch coverage"
+        plugins:
+          - JuliaCI/external-buildkite#v1:
+              version: "./.buildkite-external-version"
+              repo_url: "https://github.com/JuliaCI/julia-buildkite"
+        commands: |
+          # Launch the code coverage job (scheduled julia-ci builds and
+          # "needs full CI"-labeled PRs; PR builds hold no coverage tokens,
+          # so they collect coverage without uploading it -- see the
+          # conditionals inside)
+          buildkite-agent pipeline upload .buildkite/pipelines/scheduled/coverage/coverage.yml
+
+        agents:
+          queue: "build"
+          os: "linux"
+          arch: "x86_64" # prevent from running on PiBots
