@@ -134,6 +134,10 @@ if [[ "${OS}" == "macos" || "${OS}" == "macosnogpl" ]]; then
     UPLOAD_EXTENSIONS+=( "dmg" )
 elif [[ "${OS}" == "windows" || "${OS}" == "windowsnogpl" ]]; then
     echo "--- [windows] Extract pre-built Julia"
+    # JULIA_INSTALL_DIR is shared across the triplets published sequentially
+    # by publish.sh; clear out the previous triplet's tree (e.g. the signed
+    # macOS one, .dylibs and all) so it cannot leak into the Windows products.
+    rm -rf "${JULIA_INSTALL_DIR}"
     mkdir -p "${JULIA_INSTALL_DIR}"
     tar zxf "${UPLOAD_FILENAME}.tar.gz" -C "${JULIA_INSTALL_DIR}" --strip-components 1
 
