@@ -214,6 +214,9 @@ elif [[ "${OS}" == "windows" || "${OS}" == "windowsnogpl" ]]; then
 
     # Use 7z (p7zip) to create a `.zip` file to upload as well
     echo "--- [windows] make zip"
+    # `7z a` merges into an existing archive; start fresh so a leftover zip
+    # from an earlier run in the same workdir can't contribute stale entries.
+    rm -f "${UPLOAD_FILENAME}.zip"
     7z a "${UPLOAD_FILENAME}.zip" "${JULIA_INSTALL_DIR}"
     UPLOAD_EXTENSIONS+=( "zip" )
 fi
