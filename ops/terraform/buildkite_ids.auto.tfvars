@@ -13,10 +13,7 @@ buildkite_pipeline_ids = {
   "julia-pr"           = "019ebd61-5b1f-428e-b08c-1b5a2111e001"
   "julia-ci"           = "019ebd63-635e-4155-b60a-9d2815900786"
   "julia-publish"      = "019ebd63-df36-4f53-a07f-4b31064df0f8"
-  # TODO(create pipeline): fill with the julia-buildkite-ci UUID once the
-  # self-test pipeline exists (validation refuses the zero UUID, so apply
-  # is impossible until then).
-  "julia-buildkite-ci" = "00000000-0000-0000-0000-000000000000"
+  "julia-buildkite-ci" = "019f3d33-d54f-4087-b70f-767d53b801d4"
 }
 
 buildkite_cluster_ids = {
