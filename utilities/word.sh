@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# (Sourced file: deliberately no `set` of shell options here -- they would
+# leak into the calling script; strict mode belongs to the entrypoints.)
 
 case "${ARCH}" in
     x86_64)

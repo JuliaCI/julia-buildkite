@@ -114,4 +114,35 @@ if [[ "${JULIA_BINARYDIST_FILENAME}.tar.gz" != "${UPLOAD_FILENAME}.tar.gz" ]]; t
 fi
 
 echo "--- Upload build artifacts to buildkite"
+# Other jobs in this build (tests, misc checks) consume the tarball as a
+# buildkite artifact.
 buildkite-agent artifact upload "${UPLOAD_FILENAME}.tar.gz"
+
+echo "--- Stage unsigned tarball to s3://${STAGING_TARGET}.tar.gz"
+# Stage straight from the build job (no relay through buildkite artifacts):
+# a write-once upload to this pipeline's ephemeral staging bucket, gated by
+# this build's commit sha. The untrusted `stage` role can do nothing else.
+# shellcheck source=SCRIPTDIR/aws_oidc.sh
+source .buildkite/utilities/aws_oidc.sh stage
+# shellcheck source=SCRIPTDIR/upload_to_s3.sh
+source .buildkite/utilities/upload_to_s3.sh
+# The staging buckets disable object ACLs (public read via bucket policy)
+UPLOAD_TO_S3_ACL=none upload_to_s3 "${UPLOAD_FILENAME}.tar.gz" "${STAGING_TARGET}.tar.gz"
+
+# macOS: assemble the Julia.app here and stage it too. The build runs on a Mac,
+# so contrib/mac/app's tooling (osacompile, etc.) is available; the trusted
+# publish step then only has to codesign + repackage the .app into the signed
+# .dmg -- it needs no app-building tools and no Mac. The .app is staged
+# UNSIGNED (MACOS_CODESIGN_IDENTITY is unset) under a separate key; the tree
+# tarball above is unchanged (test jobs still consume it).
+if [[ "${OS}" == "macos" || "${OS}" == "macosnogpl" ]]; then
+    echo "--- [mac] Assemble the unsigned Julia.app"
+    # Pass the same MFLAGS as the main build (esp. TAGGED_RELEASE_BANNER): the
+    # contrib/mac/app rule re-runs binary-dist, and without the matching flags
+    # build_h.jl regenerates with a different banner, going stale and forcing a
+    # full system-image rebuild. With them it collapses to a fast re-install+re-tar.
+    MACOS_CODESIGN_IDENTITY="" ${MAKE} "${MFLAGS[@]}" -C contrib/mac/app "dmg/Julia-${MAJMIN?}.app"
+    tar zcf "${UPLOAD_FILENAME}.app.tar.gz" -C contrib/mac/app/dmg "Julia-${MAJMIN?}.app"
+    echo "--- [mac] Stage the unsigned .app to s3://${STAGING_TARGET}.app.tar.gz"
+    UPLOAD_TO_S3_ACL=none upload_to_s3 "${UPLOAD_FILENAME}.app.tar.gz" "${STAGING_TARGET}.app.tar.gz"
+fi

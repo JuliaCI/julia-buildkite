@@ -11,9 +11,9 @@ steps:
               # Drop default "registries" directory, so it is not persisted from execution to execution
               persist_depot_dirs: packages,artifacts,compiled
               version: '1.10' # GREP_ME: Keep this updated to LTS. Do not set it to '1' or 'stable' or 'latest'.
-          - staticfloat/sandbox#v2:
-              rootfs_url: https://github.com/JuliaCI/rootfs-images/releases/download/v6.00/llvm_passes.x86_64.tar.gz
-              rootfs_treehash: "0badf5d8794e21a03ac2ff2d46c1ab538ac02571"
+          - JuliaCI/sandbox#v2:
+              rootfs_url: https://github.com/JuliaCI/rootfs-images/releases/download/v8.5/llvm_passes.x86_64.tar.gz
+              rootfs_treehash: "630126d5595f428ef824651b9be020ffc485eb6f"
               workspaces:
                 # Include `/cache/repos` so that our `git` version introspection works.
                 - "/cache/repos:/cache/repos"

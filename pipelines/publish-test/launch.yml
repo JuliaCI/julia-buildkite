@@ -1,0 +1,92 @@
+# Launched by the julia-publish-test-nosecrets pipeline. Runs the exact same
+# publish.sh flow as production, but the env below redirects every signing key
+# to a THROWAWAY *-test KMS key (self-signed cert) and every bucket to the
+# isolated julialang-test-publish bucket, and skips the two signers that have
+# no non-production equivalent (Windows Azure Trusted Signing, macOS Apple
+# notarization). Nothing here can touch a production key, bucket, or pointer.
+#
+# See ops/terraform/test_publish.tf (test keys + bucket + julia-oidc-publish-test
+# role) and ops/seed_test_staging.sh (seed the staged input).
+steps:
+  - group: "Publish (test)"
+    steps:
+      - label: ":test_tube: publish all (test)"
+        key: "publish_all"
+        concurrency: 1
+        concurrency_group: 'publish-test/julialangnightlies'
+        concurrency_method: eager
+        plugins:
+          - JuliaCI/external-buildkite#v1:
+              version: "./.buildkite-external-version"
+              repo_url: "https://github.com/JuliaCI/julia-buildkite"
+          - JuliaCI/julia#v1:
+              # OUTER julia: runs on the bare agent, only to launch Sandbox.jl
+              # (the sandbox plugin requires a host julia). NOT visible inside
+              # the sandbox -- plugins before sandbox#v2 run outside it.
+              persist_depot_dirs: packages,artifacts,compiled
+              version: '1.10' # GREP_ME: Keep this updated to LTS. Do not set it to '1' or 'stable' or 'latest'.
+          - JuliaCI/sandbox#v2:
+              # Same toolchain image as the production publish step.
+              rootfs_url: https://github.com/JuliaCI/rootfs-images/releases/download/v8.6/julia_publish.x86_64.tar.gz
+              rootfs_treehash: "8b28c5b8937f25827c1ad4b6a3bc1bb90c9e9087"
+              uid: 1000
+              gid: 1000
+              workspaces:
+                - "/cache/repos:/cache/repos"
+                # Mount the julia plugin's install + depot so the INNER julia
+                # plugin below reuses the already-downloaded julia instead of
+                # re-fetching it inside the sandbox.
+                - "/cache/julia-buildkite-plugin:/cache/julia-buildkite-plugin"
+          - JuliaCI/julia#v1:
+              # INNER julia: plugins after sandbox#v2 run *inside* the sandbox,
+              # so this puts `julia` on PATH within the rootfs. upload_julia.sh
+              # uses it to patch pkgimage checksums in the cross-built (foreign
+              # platform) trees -- the published binaries can't run on this agent.
+              version: '1.10' # GREP_ME: Keep in sync with the outer julia version.
+        timeout_in_minutes: 180
+        commands: "bash .buildkite/utilities/publish.sh"
+        agents:
+          queue: "default"
+          sandbox_capable: "true"
+          os: "linux"
+          arch: "x86_64"
+        env:
+          # Scope the test to the Linux + macOS triplets. Linux exercises the
+          # GPG-sign path (content-agnostic). macOS unpacks the staged unsigned
+          # Julia.app (assembled by the build_ step), rcodesign-codesigns its
+          # mach-o with the test KMS key + self-signed cert, runs the cross-mode
+          # pkgimage checksum patch, and builds the .dmg (notarization skipped).
+          PUBLISH_ARCHES_FILES: ".buildkite/pipelines/main/platforms/upload_linux.arches .buildkite/pipelines/main/platforms/upload_macos.arches"
+          # Assume the throwaway test role (test keys + test bucket only).
+          PUBLISH_OIDC_MODE: "publish-test"
+          # Read staged input from the julia-ci ephemeral bucket (where a real
+          # build stages its unsigned tarballs/.app -- the bucket is public-read,
+          # so the test role can GetObject), but PROMOTE only to the throwaway
+          # test bucket. So this consumes real staged artifacts and exercises the
+          # full sign+promote without touching any production release path.
+          STAGING_BUCKET: "julialang-ephemeral-ci"
+          S3_BUCKET: "julialang-test-publish"
+          S3_BUCKET_PREFIX: "bin"
+          # The test bucket disables object ACLs (BucketOwnerEnforced, public
+          # read via bucket policy), so the promote must not send --acl.
+          UPLOAD_TO_S3_ACL: "none"
+          # Allow re-publishing the same commit repeatedly ("test to our heart's
+          # content"): overwrite unconditionally instead of write-once. Safe only
+          # because the throwaway test role permits unconditional PutObject; the
+          # production publish role's IAM denies it regardless of this flag.
+          UPLOAD_TO_S3_OVERWRITE: "1"
+          # Throwaway signing material (test KMS keys + self-signed cert/pubkey).
+          MACOS_CODESIGN_KMS_KEY: "alias/julia-macos-codesigning-test"
+          MACOS_CODESIGN_CERT: ".buildkite/utilities/macos/developer_id_test.pem"
+          TARBALL_SIGNING_KMS_KEY: "alias/julia-tarball-signing-test"
+          # Derive the GPG pubkey identity from KMS at runtime (GetPublicKey +
+          # DescribeKey for the creation date) instead of committing a throwaway
+          # test pubkey. Empty PUBKEY selects derive mode.
+          TARBALL_SIGNING_PUBKEY: ""
+          # The two signers with no non-production equivalent are skipped:
+          # Windows Authenticode (Azure Trusted Signing) and macOS notarization
+          # (Apple App Store Connect). The .dmg is still built and codesigned.
+          PUBLISH_SKIP_WINDOWS_SIGN: "1"
+          PUBLISH_SKIP_NOTARIZATION: "1"
+          # Inno Setup prefix baked into the rootfs (as in production publish).
+          WINEPREFIX: "/home/juliaci/.wine"

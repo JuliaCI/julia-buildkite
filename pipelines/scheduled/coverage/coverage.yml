@@ -1,6 +1,10 @@
 steps:
   - group: "Coverage"
-    if: (pipeline.slug == "julia-buildkite-scheduled") || (pipeline.slug == "julia-master-scheduled") || (build.pull_request.labels includes "needs full CI")
+    # Scheduled (julia-ci) builds, plus "needs full CI"-labeled PRs. Only
+    # julia-ci holds the codecov / coveralls bearer tokens; PR builds run
+    # the same coverage collection but skip the uploads (the lcov tarball
+    # is still available as a buildkite artifact).
+    if: (build.source == "schedule") || (build.pull_request.labels includes "needs full CI")
     notify:
       - github_commit_status:
           context: "Coverage"
@@ -15,17 +19,27 @@ steps:
               # Drop default "registries" directory, so it is not persisted from execution to execution
               persist_depot_dirs: packages,artifacts,compiled
               version: '1.11' # GREP_ME: Keep this updated. Do not set it to '1' or 'stable' or 'latest'.
-          - staticfloat/sandbox#v2:
-              rootfs_url: https://github.com/JuliaCI/rootfs-images/releases/download/v6.00/package_linux.x86_64.tar.gz
-              rootfs_treehash: "4dcde853eb5baaa0a8f087b633eaf955dc94b5dc"
+          - JuliaCI/sandbox#v2:
+              rootfs_url: https://github.com/JuliaCI/rootfs-images/releases/download/v8.5/package_linux.x86_64.tar.gz
+              rootfs_treehash: "8b46765146862479f0a8946f2ef783a8bf93b20f"
               uid: 1000
               gid: 1000
-          - JuliaCI/cryptic#v2:
-              variables:
-                - CODECOV_TOKEN="U2FsdGVkX19l0fhdBabbuiEdysyEabkJLRHfxm7CNRkuGbnwPV365sxxC7Czs/CVcws0N1oB4pVwALRRMe36oA=="
-                - COVERALLS_TOKEN="U2FsdGVkX19zopI0hMNzzi2UUOvNVFD8Y0iisFnO/ryVxU7Tit8ZEaeN+gxodRx4CosUUh192F1+q3dTMWRIvw=="
         timeout_in_minutes: 600 # 10h
         commands: |
+          echo "--- Obtain coverage tokens"
+          # Coverage tokens are fetched from SSM Parameter Store with this
+          # job's OIDC identity; no static secrets exist in CI config.
+          # Only julia-ci holds tokens (PR builds and the julia-buildkite
+          # self-test have no tokens role): collect coverage anyway, skip
+          # the uploads below.
+          if [[ "$${BUILDKITE_PIPELINE_SLUG}" != "julia-ci" ]]; then
+            echo "No coverage tokens in this pipeline; coverage uploads will be skipped"
+          else
+            source .buildkite/utilities/aws_oidc.sh tokens
+            export CODECOV_TOKEN="$$(aws ssm get-parameter --with-decryption --name /julia-ci/tokens/codecov_token --query Parameter.Value --output text)"
+            export COVERALLS_TOKEN="$$(aws ssm get-parameter --with-decryption --name /julia-ci/tokens/coveralls_token --query Parameter.Value --output text)"
+          fi
+
           echo "--- Build Julia from source"
           make --output-sync -j$${JULIA_NUM_THREADS}
 
@@ -52,7 +66,11 @@ steps:
           buildkite-agent artifact upload lcov_files.tar.gz
 
           echo "--- Process and upload coverage information"
-          ./julia --color=yes .buildkite/pipelines/scheduled/coverage/upload_coverage.jl
+          if [[ -n "$${CODECOV_TOKEN:-}" ]]; then
+            ./julia --color=yes .buildkite/pipelines/scheduled/coverage/upload_coverage.jl
+          else
+            echo "No coverage tokens; skipping upload"
+          fi
         agents:
           queue: "test"
           # Only run on `sandbox.jl` machines (not `docker`-isolated ones) since we need nestable sandboxing
@@ -60,8 +78,6 @@ steps:
           os: "linux"
           arch: "x86_64"
         env:
-          # Receive cryptic token from parent job
-          BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET: ${BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET?}
           # Set build number for Coveralls parallel mode
           COVERALLS_SERVICE_NUMBER: ${BUILDKITE_BUILD_NUMBER}
 
@@ -75,12 +91,22 @@ steps:
               # Drop default "registries" directory, so it is not persisted from execution to execution
               persist_depot_dirs: packages,artifacts,compiled
               version: '1.11' # GREP_ME: Keep this updated. Do not set it to '1' or 'stable' or 'latest'.
-          - JuliaCI/cryptic#v2:
-              variables:
-                - CODECOV_TOKEN="U2FsdGVkX19l0fhdBabbuiEdysyEabkJLRHfxm7CNRkuGbnwPV365sxxC7Czs/CVcws0N1oB4pVwALRRMe36oA=="
-                - COVERALLS_TOKEN="U2FsdGVkX19zopI0hMNzzi2UUOvNVFD8Y0iisFnO/ryVxU7Tit8ZEaeN+gxodRx4CosUUh192F1+q3dTMWRIvw=="
         timeout_in_minutes: 300 # 5h
         commands: |
+          echo "--- Obtain coverage tokens"
+          # Coverage tokens are fetched from SSM Parameter Store with this
+          # job's OIDC identity; no static secrets exist in CI config.
+          # Only julia-ci holds tokens (PR builds and the julia-buildkite
+          # self-test have no tokens role): collect coverage anyway, skip
+          # the uploads below.
+          if [[ "$${BUILDKITE_PIPELINE_SLUG}" != "julia-ci" ]]; then
+            echo "No coverage tokens in this pipeline; coverage uploads will be skipped"
+          else
+            source .buildkite/utilities/aws_oidc.sh tokens
+            export CODECOV_TOKEN="$$(aws ssm get-parameter --with-decryption --name /julia-ci/tokens/codecov_token --query Parameter.Value --output text)"
+            export COVERALLS_TOKEN="$$(aws ssm get-parameter --with-decryption --name /julia-ci/tokens/coveralls_token --query Parameter.Value --output text)"
+          fi
+
           echo "--- Build Julia from source"
           make -j$${JULIA_NUM_THREADS}
 
@@ -107,15 +133,17 @@ steps:
           buildkite-agent artifact upload lcov_files.tar.gz
 
           echo "--- Process and upload coverage information"
-          ./julia --color=yes .buildkite/pipelines/scheduled/coverage/upload_coverage.jl
+          if [[ -n "$${CODECOV_TOKEN:-}" ]]; then
+            ./julia --color=yes .buildkite/pipelines/scheduled/coverage/upload_coverage.jl
+          else
+            echo "No coverage tokens; skipping upload"
+          fi
         agents:
           queue: "test"
           os: "macos"
           arch: "aarch64"
         env:
           JULIA_SHELL: "/bin/bash"
-          # Receive cryptic token from parent job
-          BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET: ${BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET?}
           # Set build number for Coveralls parallel mode
           COVERALLS_SERVICE_NUMBER: ${BUILDKITE_BUILD_NUMBER}
 
@@ -129,14 +157,18 @@ steps:
               # Drop default "registries" directory, so it is not persisted from execution to execution
               persist_depot_dirs: packages,artifacts,compiled
               version: '1.11' # GREP_ME: Keep this updated. Do not set it to '1' or 'stable' or 'latest'.
-          - JuliaCI/cryptic#v2:
-              variables:
-                - CODECOV_TOKEN="U2FsdGVkX19l0fhdBabbuiEdysyEabkJLRHfxm7CNRkuGbnwPV365sxxC7Czs/CVcws0N1oB4pVwALRRMe36oA=="
-                - COVERALLS_TOKEN="U2FsdGVkX19zopI0hMNzzi2UUOvNVFD8Y0iisFnO/ryVxU7Tit8ZEaeN+gxodRx4CosUUh192F1+q3dTMWRIvw=="
           - docker#v3.13.0:
-              image: "juliapackaging/package-windows-x86_64:v7.10"
+              image: "juliapackaging/package-windows-x86_64:v8.5"
               always-pull: true
               command: ["bash", "-c", "
+                echo '--- Obtain coverage tokens' &&
+                if [[ $${BUILDKITE_PIPELINE_SLUG} == julia-pr ]]; then
+                  echo 'PR build: no coverage tokens; coverage uploads will be skipped';
+                else
+                  source .buildkite/utilities/aws_oidc.sh tokens &&
+                  export CODECOV_TOKEN=$$(aws ssm get-parameter --with-decryption --name /julia-ci/tokens/codecov_token --query Parameter.Value --output text) &&
+                  export COVERALLS_TOKEN=$$(aws ssm get-parameter --with-decryption --name /julia-ci/tokens/coveralls_token --query Parameter.Value --output text);
+                fi &&
                 echo '--- Build Julia from source' &&
                 make -j$${JULIA_NUM_THREADS} VERBOSE=1 &&
                 echo '--- Print Julia version info' &&
@@ -157,7 +189,11 @@ steps:
                 tar -zcf lcov_files.tar.gz lcov_files/ &&
                 buildkite-agent artifact upload lcov_files.tar.gz &&
                 echo '--- Process and upload coverage information' &&
-                ./usr/bin/julia.exe --color=yes .buildkite/pipelines/scheduled/coverage/upload_coverage.jl
+                if [[ -n $${CODECOV_TOKEN:-} ]]; then
+                  ./usr/bin/julia.exe --color=yes .buildkite/pipelines/scheduled/coverage/upload_coverage.jl;
+                else
+                  echo 'No coverage tokens (PR build); skipping upload';
+                fi
                 "]
               propagate-environment: true
               volumes:
@@ -175,9 +211,8 @@ steps:
                 - "BUILDKITE_BUILD_AUTHOR_EMAIL"
                 - "BUILDKITE_BUILD_CREATOR_EMAIL"
                 - "BUILDKITE_PULL_REQUEST"
-                - "CODECOV_TOKEN"
-                - "COVERALLS_TOKEN"
                 - "BUILDKITE_BUILD_NUMBER"
+                - "BUILDKITE_PIPELINE_SLUG"
         timeout_in_minutes: 540 # 9h
         agents:
           queue: "test"
@@ -185,8 +220,6 @@ steps:
           arch: "x86_64"
         env:
           JULIA_SHELL: "/bin/bash"
-          # Receive cryptic token from parent job
-          BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET: ${BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET?}
           # Set build number for Coveralls parallel mode
           COVERALLS_SERVICE_NUMBER: ${BUILDKITE_BUILD_NUMBER}
 
@@ -207,19 +240,24 @@ steps:
               # Drop default "registries" directory, so it is not persisted from execution to execution
               persist_depot_dirs: packages,artifacts,compiled
               version: '1.11' # GREP_ME: Keep this updated. Do not set it to '1' or 'stable' or 'latest'.
-          - JuliaCI/cryptic#v2:
-              variables:
-                - COVERALLS_TOKEN="U2FsdGVkX19zopI0hMNzzi2UUOvNVFD8Y0iisFnO/ryVxU7Tit8ZEaeN+gxodRx4CosUUh192F1+q3dTMWRIvw=="
         timeout_in_minutes: 10
         commands: |
           echo "--- Signal completion of parallel coverage uploads"
-          julia --color=yes .buildkite/pipelines/scheduled/coverage/finish_parallel_coverage.jl
+          # PR builds hold no tokens and did not upload anything, so there
+          # is nothing to finalize there.
+          if [[ "$${BUILDKITE_PIPELINE_SLUG}" == "julia-pr" ]]; then
+            echo "PR build: nothing was uploaded; nothing to finalize"
+          else
+            # The coveralls token is fetched from SSM Parameter Store with
+            # this job's OIDC identity; no static secrets exist in CI config.
+            source .buildkite/utilities/aws_oidc.sh tokens
+            export COVERALLS_TOKEN="$$(aws ssm get-parameter --with-decryption --name /julia-ci/tokens/coveralls_token --query Parameter.Value --output text)"
+            julia --color=yes .buildkite/pipelines/scheduled/coverage/finish_parallel_coverage.jl
+          fi
         agents:
           queue: "test"
           os: "linux"
           arch: "x86_64"
         env:
-          # Receive cryptic token from parent job
-          BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET: ${BUILDKITE_PLUGIN_CRYPTIC_BASE64_SIGNED_JOB_ID_SECRET?}
           # Set build number for Coveralls parallel mode
           COVERALLS_SERVICE_NUMBER: ${BUILDKITE_BUILD_NUMBER}

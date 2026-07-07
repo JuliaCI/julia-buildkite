@@ -1,5 +1,13 @@
 #!/usr/bin/env bash
 
+# Repository hook for the julia-buildkite SELF-TEST pipeline: its jobs
+# check out this repository, and this hook then (1) swaps the working
+# directory for a JuliaLang/julia checkout (pinned once per build via
+# meta-data, so every job tests the same julia commit) and (2) points the
+# external-buildkite plugin's meta-data at this build's commit -- so the
+# whole build/test flow runs against the proposed julia-buildkite code.
+# See .buildkite/README.md.
+
 set -euo pipefail
 
 # Buildkite users can trigger new builds with these values overridden to
@@ -7,12 +15,12 @@ set -euo pipefail
 UPSTREAM_URL="${UPSTREAM_URL:-https://github.com/JuliaLang/julia.git}"
 UPSTREAM_BRANCH="${UPSTREAM_BRANCH:-master}"
 
-# All of our workers are required to provide a default for the julia cache dir
-# We're going to cache repositories in here, just like buildkite itself would:
-UPSTREAM_CACHE="${BUILDKITE_PLUGIN_JULIA_CACHE_DIR?}/repos/$(tr ':/.' '---' <<<"${UPSTREAM_URL}")"
+# Cache repositories in the worker's julia cache dir (if it provides one),
+# just like buildkite itself would:
+UPSTREAM_CACHE="${BUILDKITE_PLUGIN_JULIA_CACHE_DIR:-}/repos/$(tr ':/.' '---' <<<"${UPSTREAM_URL}")"
 
 DISABLE_UPSTREAM_CACHE="false"
-if [[ "$(uname)" == "FreeBSD" ]]; then
+if [[ "$(uname)" == "FreeBSD" || -z "${BUILDKITE_PLUGIN_JULIA_CACHE_DIR:-}" ]]; then
     DISABLE_UPSTREAM_CACHE="true"
 fi
 
@@ -96,6 +104,7 @@ if ! buildkite-agent meta-data exists BUILDKITE_JULIA_VERSION; then
     buildkite-agent meta-data set BUILDKITE_JULIA_BRANCH "${UPSTREAM_BRANCH}"
 fi
 
-# Export S3_BUCKET and S3_BUCKET_PREFIX, to force our CI to upload to a different S3 target than the actual CI pipeline would.
-export S3_BUCKET="julialang-ephemeral"
-export S3_BUCKET_PREFIX="julia-buildkite-uploads/bin"
+# No S3 redirection is needed here: staging-bucket selection is keyed on
+# the pipeline slug (utilities/build_envs.sh), so self-test jobs stage to
+# the pipeline's own ephemeral bucket, and IAM only grants this pipeline's
+# OIDC identity that bucket anyway (see ops/terraform/iam.tf).

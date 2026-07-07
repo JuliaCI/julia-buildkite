@@ -13,9 +13,9 @@ steps:
               # Drop default "registries" directory, so it is not persisted from execution to execution
               persist_depot_dirs: packages,artifacts,compiled
               version: '1.11' # GREP_ME: Keep this updated. Do not set it to '1' or 'stable' or 'latest'.
-          - staticfloat/sandbox#v2:
-              rootfs_url: https://github.com/JuliaCI/rootfs-images/releases/download/v6.00/package_linux.x86_64.tar.gz
-              rootfs_treehash: "4dcde853eb5baaa0a8f087b633eaf955dc94b5dc"
+          - JuliaCI/sandbox#v2:
+              rootfs_url: https://github.com/JuliaCI/rootfs-images/releases/download/v8.5/package_linux.x86_64.tar.gz
+              rootfs_treehash: "8b46765146862479f0a8946f2ef783a8bf93b20f"
               uid: 1000
               gid: 1000
               workspaces:
@@ -41,6 +41,38 @@ steps:
 
           echo "--- Compress and upload HTML docs"
           buildkite-agent artifact upload "$${DOCUMENTER_ARCHIVE}"
+
+          echo "--- Stage HTML docs to S3 for the publish pipeline"
+          # Mirror the binary handoff (build_julia.sh): a write-once upload to
+          # this build's commit-sha-gated staging path via the untrusted
+          # `stage` role, which can do nothing else. The trusted julia-publish
+          # docs-deploy phase reads it back from the same path (see
+          # misc/deploy_docs.yml). STAGING_BUCKET selection mirrors
+          # build_envs.sh; docs are not platform/no-GPL specific, so the prefix
+          # is the default `bin`.
+          cd ..
+          # Documenter only produces the archive when it decides to deploy,
+          # which it refuses to do for pull-request builds -- on those there
+          # is nothing to stage (and no publish pipeline consumes it).
+          if [[ ! -f "doc/$${DOCUMENTER_ARCHIVE}" ]]; then
+              echo "No $${DOCUMENTER_ARCHIVE} produced (pull-request build); skipping staging."
+              exit 0
+          fi
+          if [[ "$${BUILDKITE_PIPELINE_SLUG:-}" == "julia-pr" ]]; then
+              STAGING_BUCKET="julialang-ephemeral-pr"
+          elif [[ "$${BUILDKITE_PIPELINE_SLUG:-}" == julia-buildkite* ]]; then
+              STAGING_BUCKET="julialang-ephemeral-buildkite"
+          else
+              STAGING_BUCKET="julialang-ephemeral-ci"
+          fi
+          source .buildkite/utilities/aws_oidc.sh stage
+          source .buildkite/utilities/upload_to_s3.sh
+          # Stage under a stable, version-independent key so the publish
+          # pipeline's docs-deploy job can fetch it by exact key (a single
+          # public GetObject -- the staging bucket is public-read) rather than
+          # listing the bucket, which would need an S3 ListBucket grant.
+          UPLOAD_TO_S3_ACL=none upload_to_s3 "doc/$${DOCUMENTER_ARCHIVE}" \
+              "$${STAGING_BUCKET}/$${S3_BUCKET_PREFIX:-bin}/$${BUILDKITE_COMMIT?}/julia-htmldocs.tar.gz"
         env:
           # Give a fake documenter key to get Documenter to try and deploy for us
           DOCUMENTER_KEY: ""

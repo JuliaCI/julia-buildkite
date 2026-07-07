@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# (Sourced file: deliberately no `set` of shell options here -- they would
+# leak into the calling script; strict mode belongs to the entrypoints.)
 
 # Extract information from our triplet
 # Here is an example of a triplet: `x86_64-linux-gnu`
