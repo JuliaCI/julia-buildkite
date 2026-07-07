@@ -12,8 +12,8 @@ steps:
               persist_depot_dirs: packages,artifacts,compiled
               version: '1.10' # GREP_ME: Keep this updated to LTS. Do not set it to '1' or 'stable' or 'latest'.
           - JuliaCI/sandbox#v2:
-              rootfs_url: https://github.com/JuliaCI/rootfs-images/releases/download/v8.2/llvm_passes.x86_64.tar.gz
-              rootfs_treehash: "ae548c7af53970ea76a9a3bd415292b7cc128688"
+              rootfs_url: https://github.com/JuliaCI/rootfs-images/releases/download/v8.5/llvm_passes.x86_64.tar.gz
+              rootfs_treehash: "630126d5595f428ef824651b9be020ffc485eb6f"
               workspaces:
                 # Include `/cache/repos` so that our `git` version introspection works.
                 - "/cache/repos:/cache/repos"

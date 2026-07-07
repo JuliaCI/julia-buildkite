@@ -14,8 +14,8 @@ steps:
               persist_depot_dirs: packages,artifacts,compiled
               version: '1.11' # GREP_ME: Keep this updated. Do not set it to '1' or 'stable' or 'latest'.
           - JuliaCI/sandbox#v2:
-              rootfs_url: https://github.com/JuliaCI/rootfs-images/releases/download/v8.2/package_linux.x86_64.tar.gz
-              rootfs_treehash: "3446de08cb5b6239c00910e1f7afe432a53d2932"
+              rootfs_url: https://github.com/JuliaCI/rootfs-images/releases/download/v8.5/package_linux.x86_64.tar.gz
+              rootfs_treehash: "8b46765146862479f0a8946f2ef783a8bf93b20f"
               uid: 1000
               gid: 1000
               workspaces:
