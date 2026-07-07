@@ -36,13 +36,13 @@ variable "buildkite_organization_id" {
 }
 
 variable "buildkite_pipeline_ids" {
-  description = "UUIDs of the three Buildkite pipelines, keyed by slug"
+  description = "UUIDs of the four Buildkite pipelines, keyed by slug"
   type        = map(string)
   nullable    = false
 
   validation {
-    condition     = var.buildkite_pipeline_ids == null ? true : keys(var.buildkite_pipeline_ids) == tolist(["julia-ci", "julia-pr", "julia-publish"])
-    error_message = "buildkite_pipeline_ids must have exactly the keys julia-ci, julia-pr, julia-publish."
+    condition     = var.buildkite_pipeline_ids == null ? true : keys(var.buildkite_pipeline_ids) == tolist(["julia-buildkite-ci", "julia-ci", "julia-pr", "julia-publish"])
+    error_message = "buildkite_pipeline_ids must have exactly the keys julia-buildkite-ci, julia-ci, julia-pr, julia-publish."
   }
   validation {
     condition = var.buildkite_pipeline_ids == null ? true : alltrue([
@@ -74,20 +74,6 @@ variable "s3_bucket_prefix" {
   default     = "bin"
 }
 
-# Bucket + prefix the julia-buildkite repo's own CI uploads to
-# (see .buildkite/hooks/post-checkout)
-variable "s3_ephemeral_bucket" {
-  description = "S3 bucket used by julia-buildkite's own self-test CI"
-  type        = string
-  default     = "julialang-ephemeral"
-}
-
-variable "s3_ephemeral_prefix" {
-  description = "Prefix under s3_ephemeral_bucket"
-  type        = string
-  default     = "julia-buildkite-uploads/bin"
-}
-
 # Bucket + prefix for the scheduled no-GPL builds
 # (see pipelines/scheduled/platforms/upload_*.no_gpl.yml)
 variable "s3_nogpl_bucket" {
@@ -113,8 +99,13 @@ variable "s3_staging_buckets" {
   description = "Ephemeral staging bucket per untrusted pipeline, keyed by pipeline slug"
   type        = map(string)
   default = {
-    "julia-pr" = "julialang-ephemeral-pr"
-    "julia-ci" = "julialang-ephemeral-ci"
+    "julia-pr"           = "julialang-ephemeral-pr"
+    "julia-ci"           = "julialang-ephemeral-ci"
+    # The julia-buildkite repo's own self-test CI: nothing consumes these
+    # artifacts (the builds only prove the pipeline code works), and the
+    # bucket separation means a self-test build can never place anything
+    # juliaup or julia-publish would read.
+    "julia-buildkite-ci" = "julialang-ephemeral-buildkite"
   }
 }
 
@@ -123,9 +114,11 @@ variable "staging_expiry_days" {
   type        = map(number)
   default = {
     # PR binaries are consumed by juliaup while the PR is open
-    "julia-pr" = 90
+    "julia-pr"           = 90
     # publish promotes within hours of staging
-    "julia-ci" = 30
+    "julia-ci"           = 30
+    # self-test artifacts have no consumers; keep them briefly for humans
+    "julia-buildkite-ci" = 14
   }
 }
 

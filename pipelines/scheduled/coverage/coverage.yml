@@ -29,10 +29,11 @@ steps:
           echo "--- Obtain coverage tokens"
           # Coverage tokens are fetched from SSM Parameter Store with this
           # job's OIDC identity; no static secrets exist in CI config.
-          # PR builds hold no tokens at all (there is no tokens role for
-          # julia-pr): collect coverage anyway, skip the uploads below.
-          if [[ "$${BUILDKITE_PIPELINE_SLUG}" == "julia-pr" ]]; then
-            echo "PR build: no coverage tokens; coverage uploads will be skipped"
+          # Only julia-ci holds tokens (PR builds and the julia-buildkite
+          # self-test have no tokens role): collect coverage anyway, skip
+          # the uploads below.
+          if [[ "$${BUILDKITE_PIPELINE_SLUG}" != "julia-ci" ]]; then
+            echo "No coverage tokens in this pipeline; coverage uploads will be skipped"
           else
             source .buildkite/utilities/aws_oidc.sh tokens
             export CODECOV_TOKEN="$$(aws ssm get-parameter --with-decryption --name /julia-ci/tokens/codecov_token --query Parameter.Value --output text)"
@@ -68,7 +69,7 @@ steps:
           if [[ -n "$${CODECOV_TOKEN:-}" ]]; then
             ./julia --color=yes .buildkite/pipelines/scheduled/coverage/upload_coverage.jl
           else
-            echo "No coverage tokens (PR build); skipping upload"
+            echo "No coverage tokens; skipping upload"
           fi
         agents:
           queue: "test"
@@ -95,10 +96,11 @@ steps:
           echo "--- Obtain coverage tokens"
           # Coverage tokens are fetched from SSM Parameter Store with this
           # job's OIDC identity; no static secrets exist in CI config.
-          # PR builds hold no tokens at all (there is no tokens role for
-          # julia-pr): collect coverage anyway, skip the uploads below.
-          if [[ "$${BUILDKITE_PIPELINE_SLUG}" == "julia-pr" ]]; then
-            echo "PR build: no coverage tokens; coverage uploads will be skipped"
+          # Only julia-ci holds tokens (PR builds and the julia-buildkite
+          # self-test have no tokens role): collect coverage anyway, skip
+          # the uploads below.
+          if [[ "$${BUILDKITE_PIPELINE_SLUG}" != "julia-ci" ]]; then
+            echo "No coverage tokens in this pipeline; coverage uploads will be skipped"
           else
             source .buildkite/utilities/aws_oidc.sh tokens
             export CODECOV_TOKEN="$$(aws ssm get-parameter --with-decryption --name /julia-ci/tokens/codecov_token --query Parameter.Value --output text)"
@@ -134,7 +136,7 @@ steps:
           if [[ -n "$${CODECOV_TOKEN:-}" ]]; then
             ./julia --color=yes .buildkite/pipelines/scheduled/coverage/upload_coverage.jl
           else
-            echo "No coverage tokens (PR build); skipping upload"
+            echo "No coverage tokens; skipping upload"
           fi
         agents:
           queue: "test"

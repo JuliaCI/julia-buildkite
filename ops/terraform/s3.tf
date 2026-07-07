@@ -3,9 +3,8 @@
 # commit sha, publicly readable (juliaup fetches PR binaries from the
 # julia-pr bucket anonymously), and expired by lifecycle policy.
 #
-# The release buckets (julialangnightlies, julialang-nogpl, and the
-# julialang-ephemeral self-test bucket) predate this module and are not
-# managed here.
+# The release buckets (julialangnightlies, julialang-nogpl) predate this
+# module and are not managed here.
 
 resource "aws_s3_bucket" "staging" {
   for_each = var.s3_staging_buckets

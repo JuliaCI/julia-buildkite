@@ -44,6 +44,13 @@ only trust the publish pipeline's slug. There are three pipelines:
   scheduled nightlies (untrusted to sign, but it is what triggers publish).
 - **`julia-publish`** — the trusted pipeline that signs + promotes.
 
+A fourth, untrusted pipeline, **`julia-buildkite-ci`**, is the
+julia-buildkite repository's own self-test CI (see `.buildkite/README.md`):
+it builds julia with *proposed* pipeline code, staging write-once to its own
+bucket (`julialang-ephemeral-buildkite`, role `julia-oidc-stage-buildkite`)
+that neither juliaup nor julia-publish ever reads. It gets no tokens and no
+publish trigger, exactly like `julia-pr`.
+
 ```
  julia-pr  (pull requests)            julia-ci  (master / release-* / tags / scheduled)
    build ──► s3://julialang-ephemeral-pr/      build ──► s3://julialang-ephemeral-ci/
@@ -142,7 +149,7 @@ and which carry AWS session tags (`step_key`, `build_commit`, `pipeline_slug`, .
 One-time setup, in order (admin AWS credentials; region and bucket names
 are Terraform variables with the production defaults):
 
-1. Create the three Buildkite pipelines and set their WebUI steps:
+1. Create the four Buildkite pipelines and set their WebUI steps:
    - `julia-pr` — builds pull requests; WebUI = `pipelines/main/0_webui.yml`.
    - `julia-ci` — builds master / release-* / tags / schedule (no PRs);
      WebUI = `pipelines/main/0_webui.yml` (same launch flow; the rendered
@@ -150,6 +157,10 @@ are Terraform variables with the production defaults):
      `utilities/render_launch_pipeline.py`).
    - `julia-publish` — PRs OFF, branch-limited, triggered by `julia-ci`;
      WebUI = `pipelines/publish/0_webui.yml`.
+   - `julia-buildkite-ci` — repository `JuliaCI/julia-buildkite`, PRs ON
+     (incl. forks), branch builds limited to `main`; WebUI =
+     `pipelines/main/0_webui.yml` again (the repository hook
+     `.buildkite/hooks/post-checkout` does the julia checkout swap).
    All are plain `buildkite-agent pipeline upload` (no cryptic plugin, no
    `cryptic_capable` agent targeting).
 2. Record the organization / pipeline / cluster UUIDs that the IAM trust
@@ -223,6 +234,10 @@ are Terraform variables with the production defaults):
     `julia_ci_aws_account_id` Terraform output).
 11. Once green: revoke the legacy static AWS IAM user, delete the cryptic
     agent keys from the agents, decommission `cryptic_capable` queues,
+    turn off webhook builds on the legacy `julia-buildkite` /
+    `julia-buildkite-scheduled` self-test pipelines (superseded by
+    `julia-buildkite-ci`) and retire the old `julialang-ephemeral`
+    self-test bucket,
     revoke the old Apple Developer ID certificate, the Apple ID
     app-specific password, the old SSH deploy key, and the
     `AZURE_CLIENT_SECRET`. Revoke the old GPG release signing key (its

@@ -22,6 +22,19 @@
 # each job identity may do (PR builds: write-once staging uploads only).
 # The trusted signing/promotion steps run in julia-publish (see
 # pipelines/publish/0_webui.yml), never here.
+#
+# The same steps are ALSO pasted into a third untrusted pipeline:
+#
+#   julia-buildkite-ci -- self-test CI for the julia-buildkite repository.
+#                Its pipeline repository is JuliaCI/julia-buildkite (not
+#                JuliaLang/julia), so its jobs run the repository hook
+#                .buildkite/hooks/post-checkout, which swaps in a julia
+#                checkout and pins the external-buildkite meta-data to the
+#                julia-buildkite commit under test. Settings:
+#                  * Trigger builds after pushing code: ON, branch limit: main
+#                  * Build pull requests: ON (including from third-party
+#                    forked repositories)
+#                See .buildkite/README.md.
 steps:
   - group: "Launch"
     steps:

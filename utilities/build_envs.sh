@@ -270,10 +270,14 @@ export UPLOAD_FILENAME="julia-${TAR_VERSION?}-${OS?}-${ARCH?}"
 #  - For master/release/tag builds the ci bucket is the input the TRUSTED
 #    publish pipeline reads, signs, and promotes to the canonical
 #    UPLOAD_TARGETS.
-# The prefix separates the normal / no-GPL / julia-buildkite-self-test
-# artifact families within each bucket.
+# The prefix separates the normal / no-GPL artifact families within each
+# bucket.
 if [[ "${BUILDKITE_PIPELINE_SLUG:-}" == "julia-pr" ]]; then
     STAGING_BUCKET="${STAGING_BUCKET:-julialang-ephemeral-pr}"
+elif [[ "${BUILDKITE_PIPELINE_SLUG:-}" == julia-buildkite* ]]; then
+    # The julia-buildkite repository's own self-test CI stages to its own
+    # bucket, which nothing (juliaup, julia-publish) ever consumes.
+    STAGING_BUCKET="${STAGING_BUCKET:-julialang-ephemeral-buildkite}"
 else
     # julia-ci stages here; julia-publish reads its staged artifacts back
     STAGING_BUCKET="${STAGING_BUCKET:-julialang-ephemeral-ci}"

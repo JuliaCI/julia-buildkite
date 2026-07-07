@@ -60,6 +60,8 @@ steps:
           fi
           if [[ "$${BUILDKITE_PIPELINE_SLUG:-}" == "julia-pr" ]]; then
               STAGING_BUCKET="julialang-ephemeral-pr"
+          elif [[ "$${BUILDKITE_PIPELINE_SLUG:-}" == julia-buildkite* ]]; then
+              STAGING_BUCKET="julialang-ephemeral-buildkite"
           else
               STAGING_BUCKET="julialang-ephemeral-ci"
           fi

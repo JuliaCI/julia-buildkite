@@ -15,6 +15,11 @@
 #                     julia-ci's). No KMS, no final-location write. Because
 #                     the permissions are harmless, the spoofable `ref`
 #                     component of the sub claim does not matter here.
+#   julia-oidc-stage-buildkite  UNTRUSTED. Same shape for the
+#                     julia-buildkite repository's own self-test pipeline
+#                     (julia-buildkite-ci), which builds julia with
+#                     proposed pipeline code: write-once staging to its
+#                     own bucket, which nothing downstream consumes.
 #   julia-oidc-tokens-ci  Telemetry bearer tokens from SSM; julia-ci ONLY.
 #                     PR builds get no tokens whatsoever: a malicious pull
 #                     request executes code inside the job and could read
@@ -52,8 +57,10 @@ locals {
   # Any ref is allowed: the stage/token roles these map to are deliberately
   # harmless, so we do not (and must not) rely on the ref component for trust.
   build_pipelines = {
-    "julia-pr" = "pr"
-    "julia-ci" = "ci"
+    "julia-pr"           = "pr"
+    "julia-ci"           = "ci"
+    # the julia-buildkite repository's own self-test CI
+    "julia-buildkite-ci" = "buildkite"
   }
 
   # The TRUSTED publish pipeline. julia-publish MUST be configured in
@@ -85,6 +92,11 @@ locals {
       sub_patterns      = ["organization:${var.bk_org}:pipeline:julia-ci:*"]
       step_key_patterns = null
     }
+    stage-buildkite = {
+      pipelines         = ["julia-buildkite-ci"]
+      sub_patterns      = ["organization:${var.bk_org}:pipeline:julia-buildkite-ci:*"]
+      step_key_patterns = null
+    }
     # NB: there is deliberately no tokens-pr. A pull request executes
     # attacker-controlled code inside the job, which could exfiltrate any
     # bearer token the job can read -- so PR builds get NO tokens at all.
@@ -113,12 +125,11 @@ locals {
   }
 
   # Artifact-family prefixes inside each staging bucket (normal release /
-  # no-GPL / julia-buildkite self-test; see S3_BUCKET_PREFIX selection in
-  # utilities/build_envs.sh) and the final release locations.
+  # no-GPL; see S3_BUCKET_PREFIX selection in utilities/build_envs.sh)
+  # and the final release locations.
   staging_prefixes = [
     var.s3_bucket_prefix,
     var.s3_nogpl_prefix,
-    var.s3_ephemeral_prefix,
   ]
   staging_bucket_arns = {
     for slug, bucket in var.s3_staging_buckets : slug => "arn:aws:s3:::${bucket}"
@@ -126,7 +137,6 @@ locals {
   final_paths = [
     "arn:aws:s3:::${var.s3_bucket}/${var.s3_bucket_prefix}",
     "arn:aws:s3:::${var.s3_nogpl_bucket}/${var.s3_nogpl_prefix}",
-    "arn:aws:s3:::${var.s3_ephemeral_bucket}/${var.s3_ephemeral_prefix}",
   ]
 }
 

@@ -65,14 +65,19 @@ case "${_OIDC_ROLE_SUFFIX}" in
     stage)
         if [[ "${BUILDKITE_PIPELINE_SLUG:-}" == "julia-pr" ]]; then
             _OIDC_ROLE_SUFFIX="stage-pr"
+        elif [[ "${BUILDKITE_PIPELINE_SLUG:-}" == julia-buildkite* ]]; then
+            # The julia-buildkite repository's own self-test CI.
+            _OIDC_ROLE_SUFFIX="stage-buildkite"
         else
             _OIDC_ROLE_SUFFIX="stage-ci"
         fi
         ;;
     tokens)
-        # There is no tokens-pr role on purpose (see ops/terraform/iam.tf).
-        if [[ "${BUILDKITE_PIPELINE_SLUG:-}" == "julia-pr" || "${BUILDKITE_PULL_REQUEST:-false}" != "false" ]]; then
-            echo "ERROR: bearer tokens are not available on pull request builds" >&2
+        # Only julia-ci has a tokens role (see ops/terraform/iam.tf): PR
+        # builds and the julia-buildkite self-test run untrusted code that
+        # could exfiltrate any bearer token available to the job.
+        if [[ "${BUILDKITE_PIPELINE_SLUG:-}" != "julia-ci" || "${BUILDKITE_PULL_REQUEST:-false}" != "false" ]]; then
+            echo "ERROR: bearer tokens are only available to julia-ci branch builds" >&2
             return 1 2>/dev/null || exit 1
         fi
         _OIDC_ROLE_SUFFIX="tokens-ci"
@@ -83,7 +88,7 @@ esac
 # IAM trust policies pin organization_id / pipeline_id / cluster_id so a
 # recreated or renamed pipeline with a matching slug cannot assume a role.
 case "${_OIDC_ROLE_SUFFIX}" in
-    stage-pr|stage-ci)
+    stage-pr|stage-ci|stage-buildkite)
         # Trust: org/pipeline/cluster IDs. Permission policy: own commit path.
         _OIDC_AWS_SESSION_TAGS="organization_id,pipeline_id,cluster_id,build_commit"
         ;;

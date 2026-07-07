@@ -207,10 +207,10 @@ if compgen -G "${JULIA_INSTALL_DIR}/share/julia/test/results*.json"; then
     # (no relay job, no artifact handoff). The bearer token is fetched from
     # SSM Parameter Store with this job's OIDC identity; no static secrets
     # exist in CI config. Best-effort: never fail the test job over it.
-    # Pull request builds hold no bearer tokens at all (a PR runs
-    # attacker-controlled code in this very job), so skip there.
-    if [[ "${BUILDKITE_PIPELINE_SLUG:-}" == "julia-pr" ]]; then
-        echo "PR build: no analytics token available, skipping Test Analytics upload"
+    # Only julia-ci holds bearer tokens: PR builds and the julia-buildkite
+    # self-test run attacker-controlled code in this very job, so skip there.
+    if [[ "${BUILDKITE_PIPELINE_SLUG:-}" != "julia-ci" ]]; then
+        echo "No analytics token available to this pipeline, skipping Test Analytics upload"
     elif command -v aws >/dev/null 2>&1; then
         (
             # Subshell so the OIDC credential env doesn't outlive the upload.
