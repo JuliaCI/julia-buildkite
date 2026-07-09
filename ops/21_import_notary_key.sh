@@ -10,6 +10,7 @@
 # machine; securely delete the .p8 afterwards.
 set -euo pipefail
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+# shellcheck source=SCRIPTDIR/common.sh
 source "${SCRIPT_DIR}/common.sh"
 
 P8_FILE="${1:?usage: $0 AuthKey.p8 <issuer-id> <key-id>}"

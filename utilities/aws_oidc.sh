@@ -28,6 +28,9 @@
 # (Sourced file: deliberately no `set -euo pipefail` here -- shell options
 # set in a sourced file leak into the calling script; strict mode belongs
 # to the entrypoints.)
+#
+# shellcheck disable=SC2317  # `return ... || exit ...`: if mistakenly executed instead of sourced, top-level `return` is an
+# error that bash continues past -- the `exit` keeps these guards fail-closed
 
 # AWS account that holds the Julia CI roles (not a secret).
 JULIA_CI_AWS_ACCOUNT_ID="${JULIA_CI_AWS_ACCOUNT_ID:-873569884612}"
@@ -132,7 +135,8 @@ buildkite-agent oidc request-token \
 
 export AWS_WEB_IDENTITY_TOKEN_FILE="${_OIDC_TOKEN_FILE}"
 export AWS_ROLE_ARN="arn:aws:iam::${JULIA_CI_AWS_ACCOUNT_ID}:role/julia-oidc-${_OIDC_ROLE_SUFFIX}"
-export AWS_ROLE_SESSION_NAME="bk-$(tr -dc 'a-zA-Z0-9=,.@-' <<<"${BUILDKITE_STEP_KEY:-job}" | cut -c1-48)-${BUILDKITE_BUILD_NUMBER:-0}"
+AWS_ROLE_SESSION_NAME="bk-$(tr -dc 'a-zA-Z0-9=,.@-' <<<"${BUILDKITE_STEP_KEY:-job}" | cut -c1-48)-${BUILDKITE_BUILD_NUMBER:-0}"
+export AWS_ROLE_SESSION_NAME
 export AWS_DEFAULT_REGION="${JULIA_CI_AWS_REGION}"
 export AWS_REGION="${JULIA_CI_AWS_REGION}"
 

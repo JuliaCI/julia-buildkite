@@ -20,6 +20,7 @@
 # set), then commit the output. Requires the patched rcodesign and openssl.
 set -euo pipefail
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+# shellcheck source=SCRIPTDIR/common.sh
 source "${SCRIPT_DIR}/common.sh"
 
 RCODESIGN="${RCODESIGN:-rcodesign}"

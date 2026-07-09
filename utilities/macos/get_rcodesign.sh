@@ -13,6 +13,7 @@ set -euo pipefail
 
 RCODESIGN_VERSION="0.29.0+1"
 RCODESIGN_CRATE_VERSION="0.29.0"
+# shellcheck disable=SC2034  # read via ${!SHA_VAR} indirection below
 RCODESIGN_SHA256_x86_64_linux_gnu="9756d1cf93358e3bfcd12457450950d538c858325550cb8589f397beffbbaa06"
 RCODESIGN_BASE_URL="${RCODESIGN_BASE_URL:-https://github.com/JuliaBinaryWrappers/rcodesign_jll.jl/releases/download/rcodesign-v0.29.0%2B1}"
 
