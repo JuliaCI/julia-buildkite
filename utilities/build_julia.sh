@@ -12,6 +12,9 @@ source .buildkite/utilities/build_envs.sh
 # shellcheck source=SCRIPTDIR/word.sh
 source .buildkite/utilities/word.sh
 
+# Build jobs emit the sysimage from one process, so use the full CPU budget.
+export JULIA_IMAGE_THREADS="${JULIA_CPU_THREADS}"
+
 echo "--- Print software versions"
 uname -a
 echo
