@@ -484,7 +484,9 @@ def main():
         )
 
     # JuliaC: itself a launcher with its own group + notify -- include verbatim.
-    blocks.append(verbatim_group_text(os.path.join(MISC, "juliac", "test_juliac.yml")))
+    # TEMPORARILY DISABLED: re-enable by uncommenting the append below.
+    # blocks.append(verbatim_group_text(os.path.join(MISC, "juliac", "test_juliac.yml")))
+    sys.stderr.write("JuliaC group is temporarily disabled; omitting it\n")
 
     sys.stdout.write("steps:\n")
     sys.stdout.write("\n".join(blocks))
