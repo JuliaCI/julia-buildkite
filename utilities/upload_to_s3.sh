@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # Shared write-once S3 upload helper. Source this file, then call
 # `upload_to_s3 <local-file> <bucket/key>`; AWS credentials come from
 # Buildkite OIDC (source aws_oidc.sh first).
