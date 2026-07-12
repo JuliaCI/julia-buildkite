@@ -132,20 +132,10 @@ source .buildkite/utilities/upload_to_s3.sh
 # The staging buckets disable object ACLs (public read via bucket policy)
 UPLOAD_TO_S3_ACL=none upload_to_s3 "${UPLOAD_FILENAME}.tar.gz" "${STAGING_TARGET}.tar.gz"
 
-# macOS: assemble the Julia.app here and stage it too. The build runs on a Mac,
-# so contrib/mac/app's tooling (osacompile, etc.) is available; the trusted
-# publish step then only has to codesign + repackage the .app into the signed
-# .dmg -- it needs no app-building tools and no Mac. The .app is staged
-# UNSIGNED (MACOS_CODESIGN_IDENTITY is unset) under a separate key; the tree
-# tarball above is unchanged (test jobs still consume it).
-if [[ "${OS}" == "macos" || "${OS}" == "macosnogpl" ]]; then
-    echo "--- [mac] Assemble the unsigned Julia.app"
-    # Pass the same MFLAGS as the main build (esp. TAGGED_RELEASE_BANNER): the
-    # contrib/mac/app rule re-runs binary-dist, and without the matching flags
-    # build_h.jl regenerates with a different banner, going stale and forcing a
-    # full system-image rebuild. With them it collapses to a fast re-install+re-tar.
-    MACOS_CODESIGN_IDENTITY="" ${MAKE} "${MFLAGS[@]}" -C contrib/mac/app "dmg/Julia-${MAJMIN?}.app"
-    tar zcf "${UPLOAD_FILENAME}.app.tar.gz" -C contrib/mac/app/dmg "Julia-${MAJMIN?}.app"
-    echo "--- [mac] Stage the unsigned .app to s3://${STAGING_TARGET}.app.tar.gz"
-    UPLOAD_TO_S3_ACL=none upload_to_s3 "${UPLOAD_FILENAME}.app.tar.gz" "${STAGING_TARGET}.app.tar.gz"
-fi
+# macOS: the Julia.app is NOT assembled here. Since the app is now a pure
+# repackage of the .tar (contrib/mac/app needs no osacompile/plutil and no Mac),
+# it is assembled off the critical build->test path from the staged .tar instead:
+# julia-pr does it in a separate Linux app-builder (see stage_macos_app.sh), and
+# julia-ci does it in the trusted publish step (see upload_julia.sh). Both share
+# utilities/macos/assemble_app.sh. Keeping it out of this job shortens the build
+# that the test jobs wait on.
