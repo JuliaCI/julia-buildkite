@@ -4,6 +4,10 @@ steps:
       - label: ":macos: build ${TRIPLET?}"
         key: "build_${TRIPLET?}"
         plugins:
+          - JuliaCI/coreupload#v2:
+              core_pattern: "**/*.core"
+              compressor: "zstd"
+              create_bundle: "true"
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
@@ -18,3 +22,4 @@ steps:
           # Receive some environment mappings from our templating engine
           TRIPLET: "${TRIPLET?}"
           MAKE_FLAGS: "${MAKE_FLAGS?}"
+          BUILDKITE_CANCEL_SIGNAL: "SIGQUIT"

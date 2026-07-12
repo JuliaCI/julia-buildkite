@@ -14,3 +14,9 @@ cryptic-buildkite-plugin/
 # Ignore IDE files
 .vscode/
 
+__pycache__/
+
+# Terraform working directories (provider binaries); lock files are committed
+.terraform/
+*.tfstate
+*.tfstate.*

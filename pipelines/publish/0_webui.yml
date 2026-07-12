@@ -1,0 +1,33 @@
+# This file records the steps configured in the julia-publish pipeline's
+# webUI; modifying this file has no effect -- paste it into the webUI when
+# it changes.
+#
+# SECURITY: the julia-publish pipeline is the trust boundary. It MUST be
+# configured in Buildkite with:
+#   * Trigger builds after pushing code: OFF
+#   * Build pull requests: OFF (including from third-party forked
+#     repositories)
+#   * Branch limiting: master release-* (and build tags v*)
+# Builds are created only by the `trigger` step at the end of julia-ci
+# (the inlined wait+trigger at the end of pipelines/main/launch_untrusted_builders.yml).
+# Because a pull request can never produce a build under this pipeline slug,
+# the slug itself is what the julia-oidc-publish / julia-oidc-docs-deploy IAM
+# roles trust -- not the (PR-spoofable) branch name. The publish jobs also
+# run verify_trusted_commit.sh as a backstop.
+#
+# This webUI step loads its launch steps from a pinned julia-buildkite (via
+# the external-buildkite plugin), NOT from the triggered build's tree, so a
+# malicious build commit cannot alter the publish steps.
+steps:
+  - group: "Publish"
+    steps:
+      - label: "Launch publish jobs"
+        agents:
+          queue: "default"
+          os: "linux"
+        plugins:
+          - JuliaCI/external-buildkite#v1:
+              version: "./.buildkite-external-version"
+              repo_url: "https://github.com/JuliaCI/julia-buildkite"
+        commands: |
+          buildkite-agent pipeline upload .buildkite/pipelines/publish/launch.yml

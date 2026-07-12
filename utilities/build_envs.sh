@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# (Sourced file: deliberately no `set` of shell options here -- they would
+# leak into the calling script; strict mode belongs to the entrypoints.)
 
 # First, extract information from our triplet
 # shellcheck source=SCRIPTDIR/extract_triplet.sh
@@ -77,8 +79,9 @@ case "${ARCH?}" in
                     "carmel,clone_all"
                     # Apple M1
                     "apple-m1,base(3)"
-                    # Vector-length-agnostic common denominator between Neoverse V1 and V2, recent Arm server architectures
-                    "neoverse-512tvb,base(3)"
+                    # Vector-length-agnostic common denominator between Neoverse V1 and V2, recent Arm server architectures.
+                    # Disable little used rand and fpac features which would prevent matching on many systems.
+                    "neoverse-512tvb,-rand,-fpac,base(3)"
                 )
                 ;;
         esac
@@ -104,8 +107,6 @@ fi
 # Join and output
 JULIA_CPU_TARGET="$(printf ";%s" "${JULIA_CPU_TARGETS[@]}")"
 export JULIA_CPU_TARGET="${JULIA_CPU_TARGET:1}"
-
-export JULIA_IMAGE_THREADS="$JULIA_CPU_THREADS"
 
 
 # Extract git information
@@ -166,14 +167,20 @@ fi
 export JULIA_INSTALL_DIR="julia-${TAR_VERSION}"
 JULIA_BINARY="${JULIA_INSTALL_DIR}/bin/julia${EXE}"
 
-# By default, we upload to `julialangnightlies/bin`, but we allow this to be overridden
-S3_BUCKET="${S3_BUCKET:-julialangnightlies}"
-S3_BUCKET_PREFIX="${S3_BUCKET_PREFIX:-bin}"
+# By default, we upload to `julialangnightlies/bin` (no-GPL builds to
+# `julialang-nogpl/bin-nogpl`), but we allow this to be overridden
+if [[ "${OS?}" == *nogpl ]]; then
+    S3_BUCKET="${S3_BUCKET:-julialang-nogpl}"
+    S3_BUCKET_PREFIX="${S3_BUCKET_PREFIX:-bin-nogpl}"
+else
+    S3_BUCKET="${S3_BUCKET:-julialangnightlies}"
+    S3_BUCKET_PREFIX="${S3_BUCKET_PREFIX:-bin}"
+fi
 
 # We generally upload to multiple upload targets
 UPLOAD_TARGETS=()
 
-if [[ "${BUILDKITE_BRANCH}" == master ]] || [[ "${BUILDKITE_BRANCH}" == release-* ]] || [[ "${BUILDKITE_TAG:-}" == v* ]] || [[ "${BUILDKITE_PIPELINE_SLUG}" == "julia-buildkite" ]]; then
+if [[ "${BUILDKITE_BRANCH}" == master ]] || [[ "${BUILDKITE_BRANCH}" == release-* ]] || [[ "${BUILDKITE_TAG:-}" == v* ]] || [[ "${BUILDKITE_PIPELINE_SLUG}" == "julia-publish" ]]; then
     # First, we have the canonical fully-specified upload target
     UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/${ARCH?}/${MAJMIN?}/julia-${TAR_VERSION?}-${OS?}-${ARCH?}" )
 
@@ -243,14 +250,45 @@ if [[ "${BUILDKITE_BRANCH}" == master ]] || [[ "${BUILDKITE_BRANCH}" == release-
     fi
 fi
 
-# If we're a pull request build, upload to a special `-prXXXX` location
-if [[ "${BUILDKITE_PULL_REQUEST}" != "false" ]]; then
-    UPLOAD_TARGETS+=( "${S3_BUCKET}/${S3_BUCKET_PREFIX}/${OS?}/${ARCH?}/julia-pr${BUILDKITE_PULL_REQUEST}-${OS?}-${ARCH?}" )
-fi
-
 # This is the "main" filename that is used.  We technically don't need this for uploading,
 # but it's very convenient for shuttling binaries between buildkite steps.
 export UPLOAD_FILENAME="julia-${TAR_VERSION?}-${OS?}-${ARCH?}"
+
+# Staging target: the build step writes the unsigned tarball (write-once,
+# directly from the build job) to a commit-sha-gated path in a per-pipeline
+# EPHEMERAL bucket (lifecycle-expired; created by ops/terraform). julia-pr
+# and julia-ci stage to SEPARATE buckets, and the trusted publish pipeline
+# only ever reads the julia-ci bucket -- so a pull-request build can never
+# place (or, since paths are write-once, pre-claim) anything the publish
+# pipeline would consume. IAM additionally only lets a build write below
+# its own commit's staging path within its own pipeline's bucket.
+#  - For pull requests the pr bucket is the final consumable location
+#    (juliaup resolves PR number -> head sha via the GitHub API and
+#    fetches from here).
+#  - For master/release/tag builds the ci bucket is the input the TRUSTED
+#    publish pipeline reads, signs, and promotes to the canonical
+#    UPLOAD_TARGETS.
+# The prefix separates the normal / no-GPL artifact families within each
+# bucket.
+if [[ "${BUILDKITE_PIPELINE_SLUG:-}" == "julia-pr" ]]; then
+    STAGING_BUCKET="${STAGING_BUCKET:-julialang-ephemeral-pr}"
+elif [[ "${BUILDKITE_PIPELINE_SLUG:-}" == julia-buildkite* ]]; then
+    # The julia-buildkite repository's own self-test CI stages to its own
+    # bucket, which nothing (juliaup, julia-publish) ever consumes.
+    STAGING_BUCKET="${STAGING_BUCKET:-julialang-ephemeral-buildkite}"
+else
+    # julia-ci stages here; julia-publish reads its staged artifacts back
+    STAGING_BUCKET="${STAGING_BUCKET:-julialang-ephemeral-ci}"
+fi
+export STAGING_BUCKET
+# Keyed by BUILDKITE_COMMIT: IAM only allows writing below the
+# Buildkite-attested build_commit session tag, and BUILDKITE_COMMIT is
+# that same attested value (the pipelines build JuliaLang/julia, so it is
+# the julia commit). `git rev-parse HEAD` would normally agree, but the
+# attested value is the one that cannot drift from the IAM condition.
+# The publish trigger and deploy_docs pass BUILDKITE_COMMIT along, so
+# reads agree with what was staged.
+export STAGING_TARGET="${STAGING_BUCKET}/${S3_BUCKET_PREFIX}/${BUILDKITE_COMMIT?}/${UPLOAD_FILENAME}"
 
 echo "--- Print the full and short commit hashes"
 echo "The full commit is:                      ${LONG_COMMIT}"
@@ -258,8 +296,14 @@ echo "The short commit is:                     ${SHORT_COMMIT}"
 echo "Julia will be installed to:        ${JULIA_BINARY}"
 echo "Detected Julia version:            ${MAJMIN}  (${JULIA_VERSION})"
 echo "Detected build platform:           ${TRIPLET}  (${ARCH}, ${OS})"
-echo "Julia will be uploaded to:         s3://${UPLOAD_TARGETS[0]}.tar.gz"
-echo "With additional upload targets:"
-for UPLOAD_TARGET in "${UPLOAD_TARGETS[@]:1}"; do
-    echo " -> s3://${UPLOAD_TARGET}.tar.gz"
-done
+# PR (and other non-master/release/tag) builds have no canonical upload targets:
+# they only stage to the ephemeral bucket, so UPLOAD_TARGETS is empty here.
+if [[ "${#UPLOAD_TARGETS[@]}" -gt 0 ]]; then
+    echo "Julia will be uploaded to:         s3://${UPLOAD_TARGETS[0]}.tar.gz"
+    echo "With additional upload targets:"
+    for UPLOAD_TARGET in "${UPLOAD_TARGETS[@]:1}"; do
+        echo " -> s3://${UPLOAD_TARGET}.tar.gz"
+    done
+else
+    echo "Staging only (no canonical upload targets): s3://${STAGING_TARGET}.tar.gz"
+fi

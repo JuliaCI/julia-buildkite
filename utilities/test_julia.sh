@@ -137,8 +137,7 @@ echo "Pipeline is: ${pipeline}"
 # We test all external stdlibs in the following cases:
 if [[ "${branch}" == release-* ]] || \
    [[ "${branch}" == backports-release-* ]] || \
-   [[ "${pipeline}" == "julia-master-scheduled" ]] || \
-   [[ "${pipeline}" == "julia-buildkite-scheduled" ]]; then
+   [[ "${BUILDKITE_SOURCE:-}" == "schedule" ]]; then
     echo "On important branch '${branch}' or pipeline '${pipeline}': running all external stdlib tests"
 else
     # Skip all external stdlibs that aren't in CHANGED_STDLIB_VERSIONS
@@ -170,6 +169,7 @@ export JL_TERM_TIMEOUT="$((${BUILDKITE_TIMEOUT:?}-45))m"
 echo "--- Print the list of test sets, and other useful environment variables"
 echo "JULIA_CMD_FOR_TESTS is:    ${JULIA_CMD_FOR_TESTS:?}"
 echo "JULIA_NUM_THREADS is:      ${JULIA_NUM_THREADS:?}"
+echo "JULIA_IMAGE_THREADS is:    ${JULIA_IMAGE_THREADS:-<unset>}"
 echo "NCORES_FOR_TESTS is:       ${NCORES_FOR_TESTS:?}"
 echo "OPENBLAS_NUM_THREADS is:   ${OPENBLAS_NUM_THREADS:?}"
 echo "TESTS is:                  ${TESTS:?}"
@@ -200,14 +200,67 @@ else
 fi
 
 echo "--- Upload results.json report"
-# store the test job id so that the upload job can assign the results to the right job id
-buildkite-agent meta-data set "BUILDKITE_TEST_JOB_ID_${BUILDKITE_STEP_KEY}" "${BUILDKITE_JOB_ID}"
-echo "meta-data BUILDKITE_TEST_JOB_ID_${BUILDKITE_STEP_KEY} has been set to \"$(buildkite-agent meta-data get "BUILDKITE_TEST_JOB_ID_${BUILDKITE_STEP_KEY}")\""
 if compgen -G "${JULIA_INSTALL_DIR}/share/julia/test/results*.json"; then
+    # Keep the raw results around as a buildkite artifact (for humans).
     (cd "${JULIA_INSTALL_DIR}/share/julia/test"; tar -czf results.tar.gz results*.json && buildkite-agent artifact upload "results.tar.gz")
+
+    # Push the results to Buildkite Test Analytics directly from this job
+    # (no relay job, no artifact handoff). The bearer token is fetched from
+    # SSM Parameter Store with this job's OIDC identity; no static secrets
+    # exist in CI config. Best-effort: never fail the test job over it.
+    # Only julia-ci holds bearer tokens: PR builds and the julia-buildkite
+    # self-test run attacker-controlled code in this very job, so skip there.
+    if [[ "${BUILDKITE_PIPELINE_SLUG:-}" != "julia-ci" ]]; then
+        echo "No analytics token available to this pipeline, skipping Test Analytics upload"
+    elif command -v aws >/dev/null 2>&1; then
+        (
+            # Subshell so the OIDC credential env doesn't outlive the upload.
+            # shellcheck source=SCRIPTDIR/aws_oidc.sh
+            source .buildkite/utilities/aws_oidc.sh tokens
+            export AWS_EC2_METADATA_DISABLED=true
+            BUILDKITE_ANALYTICS_TOKEN="$(aws ssm get-parameter --with-decryption \
+                --name /julia-ci/tokens/buildkite_analytics_token \
+                --query Parameter.Value --output text)"
+
+            shopt -s nullglob
+            for file in "${JULIA_INSTALL_DIR}"/share/julia/test/results*.json; do
+                echo "Uploading ${file} to Test Analytics..."
+                # We can't use the test-collector plugin because it doesn't
+                # let us attach more than one results file to a job.
+                curl \
+                  -X POST \
+                  --silent \
+                  --show-error \
+                  --max-time 300 \
+                  -H "Authorization: Token token=\"${BUILDKITE_ANALYTICS_TOKEN}\"" \
+                  -F "data=@\"${file}\"" \
+                  -F "format=json" \
+                  -F "run_env[CI]=buildkite" \
+                  -F "run_env[key]=\"${BUILDKITE_BUILD_ID}\"" \
+                  -F "run_env[url]=\"${BUILDKITE_BUILD_URL}\"" \
+                  -F "run_env[branch]=\"${BUILDKITE_BRANCH}\"" \
+                  -F "run_env[commit_sha]=\"${BUILDKITE_COMMIT}\"" \
+                  -F "run_env[number]=\"${BUILDKITE_BUILD_NUMBER}\"" \
+                  -F "run_env[job_id]=\"${BUILDKITE_JOB_ID}\"" \
+                  -F "run_env[message]=\"${BUILDKITE_MESSAGE}\"" \
+                  https://analytics-api.buildkite.com/v1/uploads
+                echo ""
+            done
+        ) || echo "WARNING: Test Analytics upload failed (non-fatal)"
+    else
+        echo "aws CLI not available; skipping Test Analytics upload"
+    fi
 else
     echo "no JSON results files found"
 fi
 echo "--- Done"
+
+if [[ "${exitVal}" -ne 0 ]] && [[ "${OS}" == linux* || "${OS}" == "musl" || "${OS}" == "freebsd" ]]; then
+    echo "--- Upload dmesg to diagnose potential OOM killer activity"
+    dmesg > dmesg.log || true
+    if [[ -s dmesg.log ]]; then
+        buildkite-agent artifact upload dmesg.log || true
+    fi
+fi
 
 exit $exitVal

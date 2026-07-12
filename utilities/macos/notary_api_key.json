@@ -1,0 +1,6 @@
+{
+  "issuer_id": "69a6de82-7ea6-47e3-e053-5b8c7c11a4d1",
+  "key_id": "V8W5RG5668",
+  "aws_kms_key": "arn:aws:kms:us-east-1:873569884612:key/3a9c20f8-f34d-447f-b08d-043d863b7a3e",
+  "aws_kms_region": "us-east-1"
+}
