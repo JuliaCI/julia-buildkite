@@ -472,19 +472,15 @@ def main():
         allow_fail_group_text(),
     ]
 
-    # JuliaSyntax: gated on ./JuliaSyntax/Project.toml existing in the julia
-    # checkout (same conditional the old Check step used). Included verbatim
-    # as its own group (it is itself a launcher with its own notify).
-    juliasyntax_project = os.path.join(os.getcwd(), "JuliaSyntax", "Project.toml")
-    if os.path.exists(juliasyntax_project):
-        blocks.append(verbatim_group_text(os.path.join(MISC, "juliasyntax.launch.yml")))
-    else:
-        sys.stderr.write(
-            "./JuliaSyntax/Project.toml does NOT exist; omitting JuliaSyntax group\n"
-        )
-
-    # JuliaC: itself a launcher with its own group + notify -- include verbatim.
-    blocks.append(verbatim_group_text(os.path.join(MISC, "juliac", "test_juliac.yml")))
+    # NOTE (release-julia-1.13): the JuliaSyntax and JuliaC launch groups that
+    # `main` emits here are intentionally omitted on the release branch -- they
+    # are not part of release-1.13's CI job set (the pre-#544 launch flow never
+    # uploaded juliasyntax.launch.yml or juliac/test_juliac.yml). This port
+    # changes only the trust/routing architecture, not which jobs run; per-
+    # release job-set differences are expressed as branch content selected by
+    # julia's in-repo .buildkite-external-version pointer. To opt release-1.13
+    # into either group, re-add the corresponding `blocks.append(...)` from
+    # `main` (the juliasyntax.* / juliac/ YAMLs are already present in-tree).
 
     sys.stdout.write("steps:\n")
     sys.stdout.write("\n".join(blocks))
