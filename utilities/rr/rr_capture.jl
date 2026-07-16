@@ -94,6 +94,8 @@ mktempdir(temp_parent_dir) do dir
         new_env["RR_LOG_BUFFER"] = "100000"
         new_env["JULIA_RR"] = capture_script_path
         new_env["JL_TERM_SIGTERM"] = "true"
+        new_env["JL_TERM_SIGQUIT"] = "false"
+        new_env["JL_TEARDOWN_TIMEOUT"] = "30m"
         t_start = time()
 
         global proc = run(ignorestatus(setenv(`$(Base.julia_cmd()) $(timeout_script_path) $(rr_path) record --num-cores=$(num_cores) $ARGS`, new_env)))

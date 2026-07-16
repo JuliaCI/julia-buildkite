@@ -53,6 +53,10 @@ if [[ "${OS}" != "windows" ]]; then
     # Tell timeout.jl to detach the process group, so we get core dumps from
     # each process.
     export JL_TERM_DETACH="true"
+    # On timeout, SIGTERM the test driver before core-dumping it, so that it
+    # can core-dump the (detached, otherwise unreachable) workers that are
+    # still running tests.  See the escalation pipeline in timeout.jl.
+    export JL_TERM_SIGTERM="true"
 fi
 
 # Make sure that temp files and temp directories are created in a location that is
@@ -164,7 +168,7 @@ else
 fi
 
 # Auto-set timeout to buildkite timeout minus 45m for most users
-export JL_TERM_TIMEOUT="$((${BUILDKITE_TIMEOUT:?}-45))m"
+export JL_TEST_TIMEOUT="$((${BUILDKITE_TIMEOUT:?}-45))m"
 
 echo "--- Print the list of test sets, and other useful environment variables"
 echo "JULIA_CMD_FOR_TESTS is:    ${JULIA_CMD_FOR_TESTS:?}"
@@ -174,7 +178,7 @@ echo "NCORES_FOR_TESTS is:       ${NCORES_FOR_TESTS:?}"
 echo "OPENBLAS_NUM_THREADS is:   ${OPENBLAS_NUM_THREADS:?}"
 echo "TESTS is:                  ${TESTS:?}"
 echo "USE_RR is:                 ${USE_RR-}"
-echo "JL_TERM_TIMEOUT is:        ${JL_TERM_TIMEOUT}"
+echo "JL_TEST_TIMEOUT is:        ${JL_TEST_TIMEOUT}"
 if [[ "${#EXTERNAL_STDLIB_SKIP_LIST[@]}" -gt 0 ]]; then
     echo "EXTERNAL_STDLIBS_SKIPPED:  ${EXTERNAL_STDLIB_SKIP_LIST[*]}"
 fi
