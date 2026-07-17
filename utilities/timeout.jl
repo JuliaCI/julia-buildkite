@@ -7,13 +7,26 @@
 #
 # Relevant environment variables:
 #
-#  - JL_TERM_TIMEOUT: How long to wait for a task to complete before sending a SIGTERM signal.
-#                     Defaults to 2 hours.
-#  - JL_KILL_TIMEOUT: How long to wait (after the JL_TERM_TIMEOUT) before sending SIGKILL.
-#                     Defaults to 30 minutes.
+#  - JL_TEST_TIMEOUT:     How long to wait for the task to complete before starting the
+#                         teardown escalation pipeline (SIGTERM -> SIGQUIT -> SIGKILL).
+#                         Defaults to 2 hours.
+#  - JL_TEARDOWN_TIMEOUT: How long to wait for the process group to exit after SIGTERM
+#                         before escalating.  This covers graceful teardown work, e.g.
+#                         the test driver core-dumping its stuck workers, or `rr`
+#                         finishing off its recording, which can take a long time.
+#                         Defaults to 10 minutes.
+#  - JL_KILL_TIMEOUT:     How long to wait for the process group to exit after SIGQUIT
+#                         (including time spent writing core dumps) before escalating
+#                         to SIGKILL.  Defaults to 10 minutes.
+#  - JL_TERM_SIGTERM:     Whether to start the escalation with SIGTERM, which asks the
+#                         test driver to core-dump its stuck workers (they run in
+#                         detached sessions, out of reach of our process-group signals;
+#                         see test/runtests.jl in JuliaLang/julia).  Defaults to false.
+#  - JL_TERM_SIGQUIT:     Whether to include the SIGQUIT (coredump) stage.  Defaults to
+#                         true.
 #
 # Example:
-#   - JL_TERM_TIMEOUT=2h30m JL_KILL_TIMEOUT=600s julia timeout.jl cmd...
+#   - JL_TEST_TIMEOUT=2h30m JL_KILL_TIMEOUT=600s julia timeout.jl cmd...
 
 include(joinpath(@__DIR__, "proc_utils.jl"))
 
@@ -42,12 +55,14 @@ end
 
 parse_bool(str) = str == "true" ? true :
                   str == "false" ? false :
-                  errror("Expected `true` or `false`, got `$str`")
+                  error("Expected `true` or `false`, got `$str`")
 
 # Parse our timeouts
-term_timeout = parse_time_period(get(ENV, "JL_TERM_TIMEOUT", "2h"))
-kill_timeout = parse_time_period(get(ENV, "JL_KILL_TIMEOUT", "30m"))
+test_timeout = parse_time_period(get(ENV, "JL_TEST_TIMEOUT", "2h"))
+teardown_timeout = parse_time_period(get(ENV, "JL_TEARDOWN_TIMEOUT", "10m"))
+kill_timeout = parse_time_period(get(ENV, "JL_KILL_TIMEOUT", "10m"))
 do_term = parse_bool(get(ENV, "JL_TERM_SIGTERM", "false"))
+do_quit = parse_bool(get(ENV, "JL_TERM_SIGQUIT", "true"))
 do_detach = parse_bool(get(ENV, "JL_TERM_DETACH", "false"))
 
 if Sys.iswindows() && do_detach
@@ -74,25 +89,61 @@ end
 
 kill_proc_or_pgid(sig) = do_detach ? ccall(:kill, Cint, (Cpid_t, Cint), -proc_pid, sig) : kill(proc, sig)
 
+# Set when the watchdog fires, so we know to wait for the teardown of the
+# wrapped process' children before exiting
+timed_out = Ref(false)
+
+# Whether any process in the wrapped process' group is still alive.
+function pg_alive()
+    do_detach || return isopen(proc)
+    return ccall(:kill, Cint, (Cpid_t, Cint), -proc_pid, 0) == 0
+end
+
+# Wait (up to `timeout` seconds) for every process in the group to exit.
+# Returns true if the group emptied out, false if the timeout elapsed.
+function await_group_exit(timeout)
+    deadline = time() + timeout
+    while pg_alive() && time() < deadline
+        sleep(1)
+    end
+    return !pg_alive()
+end
+
 # Start a watchdog task
 timer_task = @async begin
-    sleep(term_timeout)
+    sleep(test_timeout)
 
-    # If the process is still running, ask it nicely to terminate
+    # If the process is still running, run the escalation pipeline:
+    #   SIGTERM -> SIGQUIT -> SIGKILL
     if isopen(proc)
+        timed_out[] = true
         pid_or_pgid = do_detach ? "PGID" : "PID"
-        signame = do_term ? "(SIGTERM)" : "and coredump (SIGQUIT)"
-        println(stderr, "\n\nProcess failed to exit within $(term_timeout)s, requesting termination $signame of $pid_or_pgid $(proc_pid).")
-        kill_proc_or_pgid(do_term ? Base.SIGTERM : Base.SIGQUIT)
-        println(stderr, "\n\nSent termination signal to $pid_or_pgid $(proc_pid).")
 
-        # If the process doesn't stop after a further `kill_timeout`, force-kill it
-        sleep(kill_timeout)
-        if isopen(proc)
-            println(stderr, "\n\nProcess failed to cleanup within $(kill_timeout)s, force-killing (SIGKILL) $pid_or_pgid $(proc_pid)!")
+        # SIGTERM: ask nicely.  The test driver will respond by SIGQUIT-ing the
+        # workers that are still running tests, so that we collect core dumps
+        # of the processes that are actually stuck (the workers run in detached
+        # sessions out of reach of our signals).
+        if pg_alive() && do_term
+            println(stderr, "\n\nProcess group still alive after $(test_timeout)s; sending SIGTERM to $(pid_or_pgid) $(proc_pid) so the test driver can tear down and core-dump its stuck workers.")
+            kill_proc_or_pgid(Base.SIGTERM)
+            await_group_exit(teardown_timeout)
+        end
+
+        # SIGQUIT: anything that could not tear itself down in response to
+        # SIGTERM is wedged (or SIGTERM was skipped); core-dump it.
+        if pg_alive() && do_quit
+            println(stderr, "\n\nProcess group still alive; sending SIGQUIT to $(pid_or_pgid) $(proc_pid) to core-dump the processes that could not tear themselves down.")
+            kill_proc_or_pgid(Base.SIGQUIT)
+            await_group_exit(kill_timeout)
+        end
+
+        # SIGKILL: if the group still isn't gone (e.g. a core dump is truly
+        # stuck), force-kill it.  (The group cannot refuse SIGKILL; this wait
+        # just bounds the time until the last member is reaped.)
+        if pg_alive()
+            println(stderr, "\n\nProcess group still alive; sending SIGKILL to $(pid_or_pgid) $(proc_pid) to force-kill the remaining processes.")
             kill_proc_or_pgid(Base.SIGKILL)
-            println(stderr, "\n\nSent SIGKILL to $pid_or_pgid $(proc_pid).")
-            exit(1)
+            await_group_exit(kill_timeout)
         end
     end
 end
@@ -103,6 +154,9 @@ end
 
 # Wait for the process to finish
 wait(proc)
+
+# Wait also for the whole process group to finish, in case anyone is dumping cores, etc.
+timed_out[] && wait(timer_task)
 
 # Upload all log files in the `JULIA_TEST_VERBOSE_LOGS_DIR` directory
 if is_buildkite
