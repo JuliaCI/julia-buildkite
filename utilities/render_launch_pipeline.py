@@ -346,7 +346,9 @@ CHECK_STATIC = [
     "doctest.yml",
     "pdf_docs/build_pdf_docs.yml",
     "embedding.yml",
-    "trimming.yml",
+    # trimming.yml omitted: juliac/trimming does not exist on release-1.10
+    # (the misc/trimming.yml version gate only applies to branch builds, not
+    # fork PRs, so it must be dropped here rather than relying on the gate).
     "llvmpasses.yml",
     "sanitizers/asan.yml",
     "sanitizers/tsan.yml",
@@ -472,19 +474,15 @@ def main():
         allow_fail_group_text(),
     ]
 
-    # JuliaSyntax: gated on ./JuliaSyntax/Project.toml existing in the julia
-    # checkout (same conditional the old Check step used). Included verbatim
-    # as its own group (it is itself a launcher with its own notify).
-    juliasyntax_project = os.path.join(os.getcwd(), "JuliaSyntax", "Project.toml")
-    if os.path.exists(juliasyntax_project):
-        blocks.append(verbatim_group_text(os.path.join(MISC, "juliasyntax.launch.yml")))
-    else:
-        sys.stderr.write(
-            "./JuliaSyntax/Project.toml does NOT exist; omitting JuliaSyntax group\n"
-        )
-
-    # JuliaC: itself a launcher with its own group + notify -- include verbatim.
-    blocks.append(verbatim_group_text(os.path.join(MISC, "juliac", "test_juliac.yml")))
+    # NOTE (release-1.10): the JuliaSyntax and JuliaC launch groups that
+    # `main` emits here are intentionally omitted on the release branch -- they
+    # are not part of release-1.10's CI job set (the pre-#544 launch flow never
+    # uploaded juliasyntax.launch.yml or juliac/test_juliac.yml). This port
+    # changes only the trust/routing architecture, not which jobs run; per-
+    # release job-set differences are expressed as branch content selected by
+    # julia's in-repo .buildkite-external-version pointer. To opt release-1.10
+    # into either group, re-add the corresponding `blocks.append(...)` from
+    # `main` (the juliasyntax.* / juliac/ YAMLs are already present in-tree).
 
     sys.stdout.write("steps:\n")
     sys.stdout.write("\n".join(blocks))
