@@ -91,6 +91,16 @@ is_macho() {
     esac
 }
 
+# Inode number of $1, portable across GNU coreutils `stat -c`, BSD/macOS
+# `stat -f`, and a `ls -di` fallback. Used to sign each physical inode only
+# once: the bundle contains hardlinked Mach-Os (see the signing loop), and a
+# single filesystem holds the whole tree, so the inode alone identifies a file.
+inode_of() {
+    stat -c '%i' -- "${1}" 2>/dev/null \
+        || stat -f '%i' -- "${1}" 2>/dev/null \
+        || ls -di -- "${1}" 2>/dev/null | awk '{print $1}'
+}
+
 do_adhoc_codesign() {
     # Ad-hoc signing needs no key; use the system codesign as before.
     codesign --sign "-" \
@@ -200,6 +210,8 @@ elif [ -d "${TARGET}" ]; then
     STATUS_DIR="$(mktemp -d)"
     NUM_CODESIGNS=0
     NUM_SKIPPED=0
+    # Inodes already dispatched for signing, so each is signed at most once.
+    declare -A SIGNED_INODES=()
     while IFS= read -r -d '' exe_file; do
         # Skip files the KMS signer (rcodesign) can't sign -- they need no
         # signature, and the ad-hoc `codesign` handles them, so only filter on
@@ -215,6 +227,21 @@ elif [ -d "${TARGET}" ]; then
             NUM_SKIPPED="$((NUM_SKIPPED + 1))"
             continue
         fi
+        # Hardlink de-duplication. The bundle contains Mach-Os that are hardlinks
+        # to one inode -- notably julia's launcher, where the .app rule `ln`s
+        # Contents/Resources/julia/bin/julia-terminal to bin/julia. rcodesign
+        # signs a Mach-O IN PLACE, so handing two hardlinked paths to the
+        # parallel pool lets two signers mutate the SAME inode at once, tearing
+        # the signature -- Apple's notary then rejects every such path with "The
+        # signature of the binary is invalid." Sign each inode ONCE; the other
+        # hardlinks to it already carry that one valid signature.
+        exe_inode="$(inode_of "${exe_file}")"
+        if [[ -n "${exe_inode}" && -n "${SIGNED_INODES[${exe_inode}]:-}" ]]; then
+            echo "Skipping hardlink to already-signed inode ${exe_inode}: ${exe_file}"
+            NUM_SKIPPED="$((NUM_SKIPPED + 1))"
+            continue
+        fi
+        [[ -n "${exe_inode}" ]] && SIGNED_INODES["${exe_inode}"]=1
         # Block until a worker slot frees up before launching the next signer.
         while (( "$(jobs -rp | wc -l)" >= MAX_JOBS )); do wait -n 2>/dev/null || true; done
         { do_codesign "${exe_file}" || touch "${STATUS_DIR}/fail.${NUM_CODESIGNS}"; } &
