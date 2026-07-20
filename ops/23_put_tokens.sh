@@ -13,6 +13,7 @@
 #   23_put_tokens.sh buildkite_analytics_token
 set -euo pipefail
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+# shellcheck source=SCRIPTDIR/common.sh
 source "${SCRIPT_DIR}/common.sh"
 
 NAME="${1:?usage: $0 <token-name>}"

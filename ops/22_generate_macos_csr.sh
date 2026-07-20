@@ -11,6 +11,7 @@
 # and AWS credentials with kms:GetPublicKey + kms:Sign on the key.
 set -euo pipefail
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+# shellcheck source=SCRIPTDIR/common.sh
 source "${SCRIPT_DIR}/common.sh"
 
 RCODESIGN="${RCODESIGN:-rcodesign}"

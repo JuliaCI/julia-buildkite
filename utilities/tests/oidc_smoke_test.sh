@@ -71,9 +71,11 @@ echo "--- Negative: overwrite of an existing object"
 if OUT="$(put "${MY_BUCKET}" "${KEY}")"; then
     bad "overwrite unexpectedly succeeded"
 else
-    [[ "${OUT}" == *"PreconditionFailed"* || "${OUT}" == *"412"* || "${OUT}" == *"AccessDenied"* ]] \
-        && ok "overwrite refused" \
-        || bad "overwrite failed with unexpected error: ${OUT}"
+    if [[ "${OUT}" == *"PreconditionFailed"* || "${OUT}" == *"412"* || "${OUT}" == *"AccessDenied"* ]]; then
+        ok "overwrite refused"
+    else
+        bad "overwrite failed with unexpected error: ${OUT}"
+    fi
 fi
 
 echo "--- Negative: other pipeline's staging bucket"
@@ -100,12 +102,14 @@ fi
 
 echo "--- Bearer tokens"
 if [[ "${SLUG}" == "julia-pr" ]]; then
+    # shellcheck source=SCRIPTDIR/../aws_oidc.sh
     if (source .buildkite/utilities/aws_oidc.sh tokens) 2>/dev/null; then
         bad "tokens role obtainable on julia-pr"
     else
         ok "tokens refused on julia-pr (by aws_oidc.sh)"
     fi
 else
+    # shellcheck source=SCRIPTDIR/../aws_oidc.sh
     if (source .buildkite/utilities/aws_oidc.sh tokens \
             && aws sts get-caller-identity --query Arn --output text | grep -q tokens-ci); then
         ok "tokens-ci role assumable from julia-ci"
@@ -121,6 +125,7 @@ buildkite-agent oidc request-token \
     --lifetime 600 \
     --aws-session-tag "organization_id,pipeline_id,cluster_id,step_key" \
     > "${_PUB_TOKEN}"
+# shellcheck disable=SC2031  # the tokens checks re-source aws_oidc.sh in a subshell on purpose; this uses the top-level `stage` value
 PUBLISH_ROLE_ARN="${AWS_ROLE_ARN%/*}/julia-oidc-publish"
 if OUT="$(aws sts assume-role-with-web-identity \
         --role-arn "${PUBLISH_ROLE_ARN}" \
