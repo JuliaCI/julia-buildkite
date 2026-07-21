@@ -88,6 +88,26 @@ if [[ "${OS}" == "macos" || "${OS}" == "macosnogpl" ]]; then
     tar zxf "${UPLOAD_FILENAME}.app.tar.gz"
     chmod -R u+w "${APP_NAME}"
 
+    # Break the julia/julia-terminal hardlink before signing. contrib/mac/app
+    # builds the launcher as a hardlink: bin/julia-terminal and bin/julia are ONE
+    # inode with two names. The bundle's main executable is julia-terminal (via
+    # the Contents/MacOS/julia-terminal symlink), so the seal signs that inode
+    # with the MAIN-EXECUTABLE signature -- which lands on bin/julia too. Apple's
+    # notary then validates bin/julia as an ordinary nested binary, finds the
+    # main-executable signature, and rejects BOTH paths: "The signature of the
+    # binary is invalid." Split the inode into two independent regular files so
+    # each carries its own correct signature (nested for julia, main-executable
+    # for julia-terminal). A full copy keeps the name-based loader dispatch (see
+    # cli/loader_exe.c) and the bin/ rpath, exactly like the hardlink; bin/julia
+    # is the small loader, so the extra copy is negligible.
+    julia_bin="${APP_NAME}/Contents/Resources/julia/bin/julia"
+    julia_terminal="${APP_NAME}/Contents/Resources/julia/bin/julia-terminal"
+    if [[ -f "${julia_terminal}" && "${julia_terminal}" -ef "${julia_bin}" ]]; then
+        echo "--- [mac] Break julia/julia-terminal hardlink (independent signatures for notarization)"
+        rm -f "${julia_terminal}"
+        cp -p "${julia_bin}" "${julia_terminal}"
+    fi
+
     # Signing is split across three steps because the stdlib pkgimage checksum
     # fixup has to happen in the middle. Codesigning rewrites every pkgimage
     # Mach-O (.dylib), which changes its crc32c; the .ji caches embed that
