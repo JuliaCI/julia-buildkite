@@ -326,6 +326,15 @@ ALLOW_FAIL_BUILD_ARCHES = [
     ("build_macos.soft_fail.arches", "build_macos.yml"),
 ]
 
+# julia-pr-only: a Linux job per macOS arch that downloads the staged tree
+# tarball and repackages it into the unsigned .app (see stage_macos_app.sh).
+# Each rendered step carries `if: pipeline.slug == "julia-pr"`, so in julia-ci
+# (where publish assembles + signs the .app) these steps are emitted but skipped.
+# It depends only on the matching build_ job, so it sits OFF the build->test path.
+STAGE_APP_ARCHES = [
+    ("stage_macos_app.arches", "stage_macos_app.yml"),
+]
+
 ALLOW_FAIL_TEST_ARCHES = [
     ("test_linux.soft_fail.arches",   "test_linux.yml"),
     # PowerPC (test_linux.powerpc.soft_fail) intentionally omitted -- no-op on
@@ -451,6 +460,13 @@ def allow_fail_group_text():
     return emit_group("Allow Fail", "\n".join(c for c in chunks if c))
 
 
+def stage_app_group_text():
+    chunks = []
+    for arches, yml in STAGE_APP_ARCHES:
+        chunks.append(render_arches_group_text(arches, yml, "Stage App", "false"))
+    return emit_group("Stage App", "\n".join(c for c in chunks if c))
+
+
 # Trailing barrier + trigger of the trusted julia-publish pipeline (inlined
 # verbatim so the wait reliably barriers all dynamically-uploaded jobs).
 TRAILER = '''\
@@ -470,6 +486,7 @@ def main():
         check_group_text(),
         test_group_text(),
         allow_fail_group_text(),
+        stage_app_group_text(),
     ]
 
     # JuliaSyntax: gated on ./JuliaSyntax/Project.toml existing in the julia

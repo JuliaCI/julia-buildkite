@@ -1,0 +1,49 @@
+steps:
+  - group: "${GROUP?}"
+    steps:
+      - label: ":linux::macos: stage app ${TRIPLET?}"
+        key: "stage_app_${TRIPLET?}"
+        # julia-pr ONLY. In julia-ci the .app is assembled + signed in the
+        # trusted publish step (see upload_julia.sh), so this off-critical-path
+        # builder would be redundant there. Mirrors the slug guard the publish
+        # trigger uses at the end of the rendered launch pipeline.
+        if: pipeline.slug == "julia-pr"
+        # Depend only on the macOS build (which stages the tree tarball), NOT on
+        # the tests -- so this runs in parallel with the tests and never delays
+        # the build->test critical path.
+        depends_on:
+          - "build_${TRIPLET?}"
+        plugins:
+          - JuliaCI/external-buildkite#v1:
+              version: "./.buildkite-external-version"
+              repo_url: "https://github.com/JuliaCI/julia-buildkite"
+          - JuliaCI/sandbox#v2:
+              # The .app is repackaged from the downloaded macOS tree on a Linux
+              # host (needs make/sed/tar/git/aws), so run in the standard
+              # package_linux rootfs. Keep pinned in sync with the x86_64 row of
+              # build_linux.arches.
+              rootfs_url: https://github.com/JuliaCI/rootfs-images/releases/download/v8.5/package_linux.x86_64.tar.gz
+              rootfs_treehash: "8b46765146862479f0a8946f2ef783a8bf93b20f"
+              uid: 1000
+              gid: 1000
+              workspaces:
+                # `git describe` (contrib/mac/app's Makefile) resolves against
+                # the object cache, same as the build_linux step.
+                - "/cache/repos:/cache/repos"
+        timeout_in_minutes: ${TIMEOUT?}
+        soft_fail: ${ALLOW_FAIL?}
+        commands: "bash .buildkite/utilities/stage_macos_app.sh"
+        agents:
+          # Always a Linux x86_64 host regardless of the macOS TRIPLET: repacking
+          # a tree into a .app runs no target binaries, so it is host-agnostic.
+          queue: "build"
+          # The sandbox#v2 plugin needs nestable sandboxing (`sandbox.jl`
+          # machines, not `docker`-isolated ones), same as build_linux.
+          sandbox_capable: "true"
+          os: "linux"
+          arch: "x86_64"
+        env:
+          # TRIPLET selects which macOS tarball to download + which staging path
+          # to write; the agent itself is Linux.
+          TRIPLET: "${TRIPLET?}"
+          BUILDKITE_CANCEL_SIGNAL: "SIGQUIT"
