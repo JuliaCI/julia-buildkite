@@ -16,10 +16,7 @@ source .buildkite/utilities/word.sh
 export JULIA_IMAGE_THREADS="${JULIA_CPU_THREADS}"
 # Julia 1.14+ shares a single CPU-thread budget across the parallel precompile
 # workers of the stdlib pkgimage phase via a jobserver (JuliaLang/julia#61958);
-# size it to this runner's allotment so the workers don't oversubscribe the
-# machine.  It takes precedence over `JULIA_IMAGE_THREADS` for those workers
-# (JuliaLang/julia#62495), so the sysimage steps above still get the full
-# thread count.  Older Julia versions ignore this variable.
+# size it to this runner's allotment so the workers don't oversubscribe the machine.
 export JULIA_PRECOMPILE_THREADS="${JULIA_CPU_THREADS}"
 
 echo "--- Print software versions"
