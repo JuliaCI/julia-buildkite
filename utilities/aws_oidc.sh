@@ -144,3 +144,4 @@ export AWS_REGION="${JULIA_CI_AWS_REGION}"
 unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
 
 echo "AWS credentials: ${AWS_ROLE_ARN} (via Buildkite OIDC)"
+echo "AWS CLI: $(aws --version 2>&1 || true)"
