@@ -71,9 +71,11 @@ echo "--- Negative: overwrite of an existing object"
 if OUT="$(put "${MY_BUCKET}" "${KEY}")"; then
     bad "overwrite unexpectedly succeeded"
 else
-    [[ "${OUT}" == *"PreconditionFailed"* || "${OUT}" == *"412"* || "${OUT}" == *"AccessDenied"* ]] \
-        && ok "overwrite refused" \
-        || bad "overwrite failed with unexpected error: ${OUT}"
+    if [[ "${OUT}" == *"PreconditionFailed"* || "${OUT}" == *"412"* || "${OUT}" == *"AccessDenied"* ]]; then
+        ok "overwrite refused"
+    else
+        bad "overwrite failed with unexpected error: ${OUT}"
+    fi
 fi
 
 echo "--- Negative: other pipeline's staging bucket"
