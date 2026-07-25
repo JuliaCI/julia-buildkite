@@ -125,6 +125,9 @@ variable "staging_expiry_days" {
     "julia-ci"           = 30
     # self-test artifacts have no consumers; keep them briefly for humans
     "julia-buildkite-ci" = 14
+    # requested binaries are consumed by PkgEval right after staging; keep
+    # them a month so repeat evaluations of the same commit can reuse them
+    "julia-build-request" = 30
   }
 }
 

@@ -100,6 +100,11 @@ locals {
       sub_patterns      = ["organization:${var.bk_org}:pipeline:julia-buildkite-ci:*"]
       step_key_patterns = null
     }
+    stage-request = {
+      pipelines         = ["julia-build-request"]
+      sub_patterns      = ["organization:${var.bk_org}:pipeline:julia-build-request:*"]
+      step_key_patterns = null
+    }
     # NB: there is deliberately no tokens-pr. A pull request executes
     # attacker-controlled code inside the job, which could exfiltrate any
     # bearer token the job can read -- so PR builds get NO tokens at all.
