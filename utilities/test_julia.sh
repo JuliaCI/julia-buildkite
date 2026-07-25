@@ -48,6 +48,10 @@ export OPENBLAS_NUM_THREADS="${JULIA_CPU_THREADS}"
 export JULIA_TEST_IS_BASE_CI="true"
 unset JULIA_DEPOT_PATH
 unset JULIA_PKG_SERVER
+# Budget the parallel-precompilation jobserver (Julia 1.14+, ignored by older
+# versions; JuliaLang/julia#61958) to this runner's CPU allotment, so the
+# precompile workers don't oversubscribe the machine.
+export JULIA_PRECOMPILE_THREADS="${JULIA_CPU_THREADS}"
 
 if [[ "${OS}" != "windows" ]]; then
     # Tell timeout.jl to detach the process group, so we get core dumps from
@@ -174,6 +178,7 @@ echo "--- Print the list of test sets, and other useful environment variables"
 echo "JULIA_CMD_FOR_TESTS is:    ${JULIA_CMD_FOR_TESTS:?}"
 echo "JULIA_NUM_THREADS is:      ${JULIA_NUM_THREADS:?}"
 echo "JULIA_IMAGE_THREADS is:    ${JULIA_IMAGE_THREADS:-<unset>}"
+echo "JULIA_PRECOMPILE_THREADS:  ${JULIA_PRECOMPILE_THREADS:?}"
 echo "NCORES_FOR_TESTS is:       ${NCORES_FOR_TESTS:?}"
 echo "OPENBLAS_NUM_THREADS is:   ${OPENBLAS_NUM_THREADS:?}"
 echo "TESTS is:                  ${TESTS:?}"
