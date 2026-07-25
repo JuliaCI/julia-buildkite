@@ -49,12 +49,16 @@ case "${_OIDC_ROLE_SUFFIX}" in
     publish|docs-deploy|publish-test)
         if [[ "${BUILDKITE_PIPELINE_SLUG:-}" != *publish* ]]; then
             echo "ERROR: ${_OIDC_ROLE_SUFFIX} role requested from non-publish pipeline '${BUILDKITE_PIPELINE_SLUG:-}'" >&2
+            # Support both sourcing and direct execution.
+            # shellcheck disable=SC2317
             return 1 2>/dev/null || exit 1
         fi
         ;;&
     publish|docs-deploy)
         if [[ "${BUILDKITE_PULL_REQUEST:-false}" != "false" ]]; then
             echo "ERROR: ${_OIDC_ROLE_SUFFIX} role must not be requested on a pull request build" >&2
+            # Support both sourcing and direct execution.
+            # shellcheck disable=SC2317
             return 1 2>/dev/null || exit 1
         fi
         ;;
@@ -78,6 +82,8 @@ case "${_OIDC_ROLE_SUFFIX}" in
         # could exfiltrate any bearer token available to the job.
         if [[ "${BUILDKITE_PIPELINE_SLUG:-}" != "julia-ci" || "${BUILDKITE_PULL_REQUEST:-false}" != "false" ]]; then
             echo "ERROR: bearer tokens are only available to julia-ci branch builds" >&2
+            # Support both sourcing and direct execution.
+            # shellcheck disable=SC2317
             return 1 2>/dev/null || exit 1
         fi
         _OIDC_ROLE_SUFFIX="tokens-ci"
@@ -103,6 +109,8 @@ case "${_OIDC_ROLE_SUFFIX}" in
         ;;
     *)
         echo "ERROR: unknown OIDC role suffix '${_OIDC_ROLE_SUFFIX}'" >&2
+        # Support both sourcing and direct execution.
+        # shellcheck disable=SC2317
         return 1 2>/dev/null || exit 1
         ;;
 esac
