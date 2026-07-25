@@ -10,17 +10,24 @@
 buildkite_organization_id = "d409823c-5fa7-41c8-9033-7269c5fde4f3"
 
 buildkite_pipeline_ids = {
-  "julia-pr"           = "019ebd61-5b1f-428e-b08c-1b5a2111e001"
-  "julia-ci"           = "019ebd63-635e-4155-b60a-9d2815900786"
-  "julia-publish"      = "019ebd63-df36-4f53-a07f-4b31064df0f8"
-  "julia-buildkite-ci" = "019f3d33-d54f-4087-b70f-767d53b801d4"
+  "julia-pr"            = "019ebd61-5b1f-428e-b08c-1b5a2111e001"
+  "julia-ci"            = "019ebd63-635e-4155-b60a-9d2815900786"
+  "julia-publish"       = "019ebd63-df36-4f53-a07f-4b31064df0f8"
+  "julia-buildkite-ci"  = "019f3d33-d54f-4087-b70f-767d53b801d4"
+  "julia-build-request" = "019f9b49-354f-41ba-bfbf-a42d685724de"
 }
 
+# julia-build-request is pinned to the Julia (build) cluster like the other
+# untrusted build pipelines. Until the pipeline is actually moved there
+# (it was created in the JuliaCI cluster, which has no launch/build queues),
+# this fails closed: tokens minted from any other cluster don't match the
+# condition and the stage role cannot be assumed.
 buildkite_cluster_ids = {
-  "julia-pr"           = "ae7e6bd1-fde8-433d-bac7-9d2d01108ed6"
-  "julia-ci"           = "ae7e6bd1-fde8-433d-bac7-9d2d01108ed6"
-  "julia-buildkite-ci" = "ae7e6bd1-fde8-433d-bac7-9d2d01108ed6"
-  "julia-publish"      = "fd6c2af4-60c1-40ee-bdd5-88ecb6698fbc"
+  "julia-pr"            = "ae7e6bd1-fde8-433d-bac7-9d2d01108ed6"
+  "julia-ci"            = "ae7e6bd1-fde8-433d-bac7-9d2d01108ed6"
+  "julia-buildkite-ci"  = "ae7e6bd1-fde8-433d-bac7-9d2d01108ed6"
+  "julia-build-request" = "ae7e6bd1-fde8-433d-bac7-9d2d01108ed6"
+  "julia-publish"       = "fd6c2af4-60c1-40ee-bdd5-88ecb6698fbc"
 }
 
 # Isolated NON-PRODUCTION publish test stack (ops/terraform/test_publish.tf).
