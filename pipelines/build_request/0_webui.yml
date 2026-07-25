@@ -10,7 +10,10 @@
 #                  * Build pull requests: OFF
 #                  * builds are created only through the REST API, by a
 #                    machine user whose team access covers this pipeline
-#                    and nothing else
+#                    and nothing else. With branch webhook builds disabled,
+#                    the create-build POST must pass
+#                    "ignore_pipeline_branch_filters": true or the API
+#                    refuses it ("Branches have been disabled").
 #
 # Like julia-pr and julia-ci this pipeline is UNTRUSTED and holds no
 # secrets: it obtains credentials at runtime via Buildkite OIDC (see
