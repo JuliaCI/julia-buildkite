@@ -42,6 +42,7 @@ echo "  agent: $(buildkite-agent --version 2>/dev/null || echo unknown)"
 source .buildkite/utilities/aws_oidc.sh stage
 export AWS_EC2_METADATA_DISABLED=true
 IDENTITY="$(aws sts get-caller-identity --query Arn --output text)" || IDENTITY=""
+PUBLISH_ROLE_ARN="${AWS_ROLE_ARN%/*}/julia-oidc-publish"
 echo "  caller identity: ${IDENTITY}"
 if [[ "${IDENTITY}" == *"${MY_ROLE}"* ]]; then
     ok "assumed ${MY_ROLE}"
@@ -125,7 +126,6 @@ buildkite-agent oidc request-token \
     --lifetime 600 \
     --aws-session-tag "organization_id,pipeline_id,cluster_id,step_key" \
     > "${_PUB_TOKEN}"
-PUBLISH_ROLE_ARN="${AWS_ROLE_ARN%/*}/julia-oidc-publish"
 if OUT="$(aws sts assume-role-with-web-identity \
         --role-arn "${PUBLISH_ROLE_ARN}" \
         --role-session-name smoke-test \
