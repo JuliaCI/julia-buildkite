@@ -102,12 +102,14 @@ fi
 
 echo "--- Bearer tokens"
 if [[ "${SLUG}" == "julia-pr" ]]; then
+    # shellcheck source=SCRIPTDIR/../aws_oidc.sh
     if (source .buildkite/utilities/aws_oidc.sh tokens) 2>/dev/null; then
         bad "tokens role obtainable on julia-pr"
     else
         ok "tokens refused on julia-pr (by aws_oidc.sh)"
     fi
 else
+    # shellcheck source=SCRIPTDIR/../aws_oidc.sh
     if (source .buildkite/utilities/aws_oidc.sh tokens \
             && aws sts get-caller-identity --query Arn --output text | grep -q tokens-ci); then
         ok "tokens-ci role assumable from julia-ci"
