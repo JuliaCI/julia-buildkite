@@ -68,6 +68,8 @@ case "${_OIDC_ROLE_SUFFIX}" in
     stage)
         if [[ "${BUILDKITE_PIPELINE_SLUG:-}" == "julia-pr" ]]; then
             _OIDC_ROLE_SUFFIX="stage-pr"
+        elif [[ "${BUILDKITE_PIPELINE_SLUG:-}" == "julia-build-request" ]]; then
+            _OIDC_ROLE_SUFFIX="stage-request"
         elif [[ "${BUILDKITE_PIPELINE_SLUG:-}" == julia-buildkite* ]]; then
             # The julia-buildkite repository's own self-test CI.
             _OIDC_ROLE_SUFFIX="stage-buildkite"

@@ -61,6 +61,9 @@ locals {
     "julia-ci"           = "ci"
     # the julia-buildkite repository's own self-test CI
     "julia-buildkite-ci" = "buildkite"
+    # on-demand single-commit builds (REST API only, see
+    # pipelines/build_request/0_webui.yml)
+    "julia-build-request" = "request"
   }
 
   # The TRUSTED publish pipeline. julia-publish MUST be configured in

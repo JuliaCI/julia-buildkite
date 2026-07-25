@@ -1,0 +1,45 @@
+# This file records the steps configured in the Buildkite webUI; modifying
+# this file has no effect -- paste it into the webUI when it changes.
+#
+# These steps belong to:
+#
+#   julia-build-request -- builds a single commit on demand, for consumers
+#                that need a binary for a commit CI did not build (or whose
+#                ephemeral artifact has expired). Settings:
+#                  * Trigger builds after pushing code: OFF
+#                  * Build pull requests: OFF
+#                  * builds are created only through the REST API, by a
+#                    machine user whose team access covers this pipeline
+#                    and nothing else
+#
+# Like julia-pr and julia-ci this pipeline is UNTRUSTED and holds no
+# secrets: it obtains credentials at runtime via Buildkite OIDC (see
+# utilities/aws_oidc.sh) and AWS IAM decides what the resulting identity
+# may do -- here, write-once uploads below its own attested commit in the
+# julia-build-request staging bucket, and nothing else.
+#
+# It may therefore be asked to build an arbitrary commit. That is
+# deliberate and safe for the same reason julia-pr is: the commit is
+# attested by Buildkite, the staging role can only write below that
+# commit's own path, and the bucket is separate from the one juliaup and
+# julia-publish read. A requested build can never masquerade as a CI
+# build of a different commit.
+#
+# The requester chooses the build variant with a build environment
+# variable:
+#
+#   PKGEVAL_BUILD_VARIANT=linux         (default)  x86_64-linux-gnu
+#   PKGEVAL_BUILD_VARIANT=linuxassert              x86_64-linux-gnuassert
+steps:
+  - group: "Launch"
+    steps:
+      - label: "Launch build"
+        agents:
+          queue: "launch"
+          os: "linux"
+        plugins:
+          - JuliaCI/external-buildkite#v1:
+              version: "./.buildkite-external-version"
+              repo_url: "https://github.com/JuliaCI/julia-buildkite"
+        commands: |
+          buildkite-agent pipeline upload .buildkite/pipelines/build_request/launch.yml
