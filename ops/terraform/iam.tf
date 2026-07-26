@@ -61,6 +61,9 @@ locals {
     "julia-ci"           = "ci"
     # the julia-buildkite repository's own self-test CI
     "julia-buildkite-ci" = "buildkite"
+    # on-demand single-commit builds (REST API only, see
+    # pipelines/build_request/0_webui.yml)
+    "julia-build-request" = "request"
   }
 
   # The TRUSTED publish pipeline. julia-publish MUST be configured in
@@ -95,6 +98,11 @@ locals {
     stage-buildkite = {
       pipelines         = ["julia-buildkite-ci"]
       sub_patterns      = ["organization:${var.bk_org}:pipeline:julia-buildkite-ci:*"]
+      step_key_patterns = null
+    }
+    stage-request = {
+      pipelines         = ["julia-build-request"]
+      sub_patterns      = ["organization:${var.bk_org}:pipeline:julia-build-request:*"]
       step_key_patterns = null
     }
     # NB: there is deliberately no tokens-pr. A pull request executes

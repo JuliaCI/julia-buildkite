@@ -36,13 +36,13 @@ variable "buildkite_organization_id" {
 }
 
 variable "buildkite_pipeline_ids" {
-  description = "UUIDs of the four Buildkite pipelines, keyed by slug"
+  description = "UUIDs of the Buildkite pipelines, keyed by slug"
   type        = map(string)
   nullable    = false
 
   validation {
-    condition     = var.buildkite_pipeline_ids == null ? true : keys(var.buildkite_pipeline_ids) == tolist(["julia-buildkite-ci", "julia-ci", "julia-pr", "julia-publish"])
-    error_message = "buildkite_pipeline_ids must have exactly the keys julia-buildkite-ci, julia-ci, julia-pr, julia-publish."
+    condition     = var.buildkite_pipeline_ids == null ? true : keys(var.buildkite_pipeline_ids) == tolist(["julia-build-request", "julia-buildkite-ci", "julia-ci", "julia-pr", "julia-publish"])
+    error_message = "buildkite_pipeline_ids must have exactly the keys julia-build-request, julia-buildkite-ci, julia-ci, julia-pr, julia-publish."
   }
   validation {
     condition = var.buildkite_pipeline_ids == null ? true : alltrue([
@@ -106,6 +106,12 @@ variable "s3_staging_buckets" {
     # bucket separation means a self-test build can never place anything
     # juliaup or julia-publish would read.
     "julia-buildkite-ci" = "julialang-ephemeral-buildkite"
+    # On-demand builds of a single commit, requested through the REST API.
+    # A separate bucket for the same reason as the self-test one above: these
+    # builds can be for an arbitrary commit, so keeping them out of the
+    # julia-pr bucket means nothing juliaup reads can ever come from a
+    # requested build.
+    "julia-build-request" = "julialang-ephemeral-request"
   }
 }
 
@@ -119,6 +125,9 @@ variable "staging_expiry_days" {
     "julia-ci"           = 30
     # self-test artifacts have no consumers; keep them briefly for humans
     "julia-buildkite-ci" = 14
+    # requested binaries are consumed by PkgEval right after staging; keep
+    # them a month so repeat evaluations of the same commit can reuse them
+    "julia-build-request" = 30
   }
 }
 

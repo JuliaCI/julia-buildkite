@@ -68,6 +68,8 @@ case "${_OIDC_ROLE_SUFFIX}" in
     stage)
         if [[ "${BUILDKITE_PIPELINE_SLUG:-}" == "julia-pr" ]]; then
             _OIDC_ROLE_SUFFIX="stage-pr"
+        elif [[ "${BUILDKITE_PIPELINE_SLUG:-}" == "julia-build-request" ]]; then
+            _OIDC_ROLE_SUFFIX="stage-request"
         elif [[ "${BUILDKITE_PIPELINE_SLUG:-}" == julia-buildkite* ]]; then
             # The julia-buildkite repository's own self-test CI.
             _OIDC_ROLE_SUFFIX="stage-buildkite"
@@ -91,7 +93,7 @@ esac
 # IAM trust policies pin organization_id / pipeline_id / cluster_id so a
 # recreated or renamed pipeline with a matching slug cannot assume a role.
 case "${_OIDC_ROLE_SUFFIX}" in
-    stage-pr|stage-ci|stage-buildkite)
+    stage-pr|stage-ci|stage-buildkite|stage-request)
         # Trust: org/pipeline/cluster IDs. Permission policy: own commit path.
         _OIDC_AWS_SESSION_TAGS="organization_id,pipeline_id,cluster_id,build_commit"
         ;;

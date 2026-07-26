@@ -272,6 +272,11 @@ export UPLOAD_FILENAME="julia-${TAR_VERSION?}-${OS?}-${ARCH?}"
 # bucket.
 if [[ "${BUILDKITE_PIPELINE_SLUG:-}" == "julia-pr" ]]; then
     STAGING_BUCKET="${STAGING_BUCKET:-julialang-ephemeral-pr}"
+elif [[ "${BUILDKITE_PIPELINE_SLUG:-}" == "julia-build-request" ]]; then
+    # On-demand builds of a single commit. Deliberately its own bucket: these
+    # may be for an arbitrary commit, so they must not land where juliaup
+    # (julia-pr) or julia-publish (julia-ci) read.
+    STAGING_BUCKET="${STAGING_BUCKET:-julialang-ephemeral-request}"
 elif [[ "${BUILDKITE_PIPELINE_SLUG:-}" == julia-buildkite* ]]; then
     # The julia-buildkite repository's own self-test CI stages to its own
     # bucket, which nothing (juliaup, julia-publish) ever consumes.
