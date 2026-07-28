@@ -1,0 +1,34 @@
+# Render the one platform that was requested. Unlike the main pipeline we do
+# not iterate an `.arches` file: a build request is for a single commit and a
+# single variant, so the matching row is selected out of the linux arches file
+# and templated on its own.
+steps:
+  - label: ":hammer: render build request"
+    agents:
+      queue: "launch"
+      os: "linux"
+    plugins:
+      - JuliaCI/external-buildkite#v1:
+          version: "./.buildkite-external-version"
+          repo_url: "https://github.com/JuliaCI/julia-buildkite"
+    commands: |
+      # linux (default) or linuxassert; anything else is a caller error
+      VARIANT="${PKGEVAL_BUILD_VARIANT:-linux}"
+      case "$${VARIANT}" in
+          linux)       TRIPLET="x86_64-linux-gnu" ;;
+          linuxassert) TRIPLET="x86_64-linux-gnuassert" ;;
+          *) echo "ERROR: unknown PKGEVAL_BUILD_VARIANT '$${VARIANT}'" >&2; exit 1 ;;
+      esac
+      echo "--- Requested $${TRIPLET} at $${BUILDKITE_COMMIT}"
+
+      # Take just the requested row from the linux arches file, so the build
+      # step is templated exactly as the main pipeline would template it.
+      # GROUP and ALLOW_FAIL are the two template variables the arches row
+      # does not provide (same env-prefix convention as the scheduled launcher).
+      ARCHES=".buildkite/pipelines/main/platforms/build_linux.arches"
+      grep -E "^\s*#|^\s*$|\s$${TRIPLET}\s" "$${ARCHES}" > /tmp/build_request.arches
+      GROUP="Build" \
+          ALLOW_FAIL="false" \
+          bash .buildkite/utilities/arches_pipeline_upload.sh \
+          /tmp/build_request.arches \
+          .buildkite/pipelines/main/platforms/build_linux.yml
