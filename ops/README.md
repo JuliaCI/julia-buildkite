@@ -139,6 +139,17 @@ and which carry AWS session tags (`step_key`, `build_commit`, `pipeline_slug`, .
   uploads of already-existing objects fail. The only exception is the
   `julia-latest-*` pointer objects, which release builds intentionally
   repoint. Object versioning on the bucket is recommended belt-and-braces.
+  Write-once is per *commit*, not per build: every object carries a
+  `build-commit` metadata stamp (the Buildkite-attested commit), and
+  `upload_to_s3.sh` treats an existing object from the same commit as
+  success (first upload wins). Builds are not byte-reproducible, so this
+  is what lets a rebuild of an already-staged commit, concurrent sibling
+  builds of the same commit sharing a key (the doctest htmldocs archive
+  during a release-branch + tag double build), and a re-run publish all
+  succeed idempotently instead of going red. A conflict across
+  *different* commits (e.g. a repointed release tag at the final
+  locations) is still a hard error; replacing published artifacts is a
+  deliberate manual operation.
 * Signing never exposes key material: every signature (macOS code signature,
   notarization JWT, GPG tarball signature, docs-deploy SSH authentication)
   is a `kms:Sign` call, conditioned on the calling job's step
