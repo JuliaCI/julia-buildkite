@@ -16,7 +16,7 @@ function read_arches_file(arches_file)
     """
     platforms = Platform[]
     for line in split(readchomp(`bash -c $triplets_script`), "\n")
-        if isempty(line) || endswith(line, "gnuassert") || endswith(line, "gnummtk") || endswith(line, "gnuprofiling")
+        if isempty(line) || endswith(line, "gnuassert") || contains(line, "gnummtk") || endswith(line, "gnuprofiling")
             continue
         end
         try
