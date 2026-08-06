@@ -26,6 +26,9 @@ case "${TRIPLET}" in
     *-gnummtk) # Using MMTk StickyImmix as the default GC (`MMTK_PLAN=StickyImmix`)
         OS="linuxmmtk"
         ;;
+    *-gnummtkconcurrent) # Using MMTk ConcurrentImmix as the default GC (`MMTK_PLAN=ConcurrentImmix`)
+        OS="linuxmmtkconcurrent"
+        ;;
     *-gnusrcassert) # both "from source" and assert
         OS="linuxsrcassert"
         ;;
