@@ -47,7 +47,14 @@ steps:
           # S3 grant (and no bucket-listing) is needed here. We still assume the
           # docs-deploy role below for the KMS-backed SSH signing of the push.
           source .buildkite/utilities/aws_oidc.sh docs-deploy
-          aws s3 cp "s3://${STAGING_BUCKET:-julialang-ephemeral-ci}/${S3_BUCKET_PREFIX:-bin}/${BUILDKITE_COMMIT}/julia-htmldocs.tar.gz" .
+          # For a tag-triggered publish (the trigger passes the tag name
+          # through as the branch), read the tag build's docs from the tag/
+          # staging flavor -- the counterpart of the doctest step's upload.
+          STAGING_FLAVOR=""
+          if [[ "$${BUILDKITE_BRANCH:-}" == v[0-9]* ]]; then
+              STAGING_FLAVOR="tag/"
+          fi
+          aws s3 cp "s3://${STAGING_BUCKET:-julialang-ephemeral-ci}/${S3_BUCKET_PREFIX:-bin}/${BUILDKITE_COMMIT}/$${STAGING_FLAVOR}julia-htmldocs.tar.gz" .
 
           echo "--- Configure SSH signing via AWS KMS"
           # The deploy key private half lives in AWS KMS and never leaves

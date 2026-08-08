@@ -67,12 +67,23 @@ steps:
           fi
           source .buildkite/utilities/aws_oidc.sh stage
           source .buildkite/utilities/upload_to_s3.sh
+          # Release (v* tag) builds stage under the tag/ path flavor, like the
+          # binary tarballs: the docs are built by the tagged julia (their
+          # version strings embed its Base.VERSION), so the tag build's docs
+          # must not contend with the release-branch twin build's. Mirrors the
+          # RELEASE_TAG_FLOW predicate in build_envs.sh; misc/deploy_docs.yml
+          # selects the same flavor on download.
+          STAGING_FLAVOR=""
+          if [[ "$${BUILDKITE_PIPELINE_SLUG:-}" == "julia-ci" ]] &&
+             [[ "$${BUILDKITE_TAG:-}" == v[0-9]* || "$${BUILDKITE_BRANCH:-}" == v[0-9]* ]]; then
+              STAGING_FLAVOR="tag/"
+          fi
           # Stage under a stable, version-independent key so the publish
           # pipeline's docs-deploy job can fetch it by exact key (a single
           # public GetObject -- the staging bucket is public-read) rather than
           # listing the bucket, which would need an S3 ListBucket grant.
           UPLOAD_TO_S3_ACL=none upload_to_s3 "doc/$${DOCUMENTER_ARCHIVE}" \
-              "$${STAGING_BUCKET}/$${S3_BUCKET_PREFIX:-bin}/$${BUILDKITE_COMMIT?}/julia-htmldocs.tar.gz"
+              "$${STAGING_BUCKET}/$${S3_BUCKET_PREFIX:-bin}/$${BUILDKITE_COMMIT?}/$${STAGING_FLAVOR}julia-htmldocs.tar.gz"
         env:
           # Give a fake documenter key to get Documenter to try and deploy for us
           DOCUMENTER_KEY: ""
