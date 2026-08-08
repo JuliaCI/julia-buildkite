@@ -121,9 +121,58 @@ MAJMIN="$(cut -d. -f1-2 <<<"${JULIA_VERSION}")"
 MAJMINPAT="$(cut -d- -f1 <<<"${JULIA_VERSION}")"
 export JULIA_VERSION MAJMIN MAJMINPAT
 
-# If we're on a tag, then our "tar version" will be the julia version.
-# Otherwise, it's the short commit.
-if git describe --tags --exact-match >/dev/null 2>/dev/null; then
+# Is this job part of the RELEASE flow for a v* tag? True for the tag
+# build itself -- BUILDKITE_TAG is set uniformly on every job of a tag
+# build, and Buildkite reports the tag name as the branch, which also
+# covers a manual re-run created with branch=v<version> -- and for the
+# julia-publish run it triggers (the trigger passes the branch through,
+# pinned to the source build's by the cluster trigger rule). The
+# release-*/master build of the very same commit deliberately does NOT
+# count: the tag build is an independent build, and only ITS artifacts
+# are promoted to the versioned release locations (see STAGING_TARGET
+# below for why the two must not be interchangeable). Restricted to the
+# pipelines that feed releases so that e.g. a julia-pr branch that
+# happens to be named v2-something cannot enter the release flow.
+RELEASE_TAG_FLOW="false"
+case "${BUILDKITE_PIPELINE_SLUG:-}" in
+    julia-ci|julia-publish*)
+        if [[ "${BUILDKITE_TAG:-}" == v[0-9]* || "${BUILDKITE_BRANCH:-}" == v[0-9]* ]]; then
+            RELEASE_TAG_FLOW="true"
+        fi
+        ;;
+esac
+export RELEASE_TAG_FLOW
+
+# The release flow names everything after JULIA_VERSION (the VERSION
+# file), so a tag that disagrees with it would publish artifacts whose
+# names contradict their content. Fail loudly and early instead.
+if [[ "${RELEASE_TAG_FLOW}" == "true" ]]; then
+    RELEASE_TAG="${BUILDKITE_TAG:-${BUILDKITE_BRANCH}}"
+    if [[ "${RELEASE_TAG}" != "v${JULIA_VERSION}" ]]; then
+        echo "ERROR: release tag '${RELEASE_TAG}' does not match the VERSION file ('${JULIA_VERSION}')" >&2
+        exit 1
+    fi
+fi
+
+# TAR_VERSION is the version identity of the artifacts this job handles:
+# the julia version for the release flow, the short commit otherwise.
+if [[ "${BUILDKITE_PIPELINE_SLUG:-}" == julia-publish* ]]; then
+    # Publish naming follows the TRIGGER identity, never checkout state:
+    # whether this checkout happens to contain any given tag depends on
+    # what the agent fetched, and `git describe` here could pick up a tag
+    # that landed only after the triggering branch build (or miss the tag
+    # of a tag-triggered publish) -- either way promoting under names that
+    # do not match the staged artifacts' content.
+    if [[ "${RELEASE_TAG_FLOW}" == "true" ]]; then
+        TAR_VERSION="${JULIA_VERSION}"
+    else
+        TAR_VERSION="${SHORT_COMMIT}"
+    fi
+elif git describe --tags --exact-match >/dev/null 2>/dev/null; then
+    # Build pipelines must agree with what `make` produces from the same
+    # checkout (Make.inc derives the julia-$(JULIA_COMMIT) install prefix
+    # and the binary-dist name from the same `git describe`), so here the
+    # checkout state IS the right source.
     TAR_VERSION="${JULIA_VERSION}"
 else
     TAR_VERSION="${SHORT_COMMIT}"
@@ -288,7 +337,27 @@ export STAGING_BUCKET
 # attested value is the one that cannot drift from the IAM condition.
 # The publish trigger and deploy_docs pass BUILDKITE_COMMIT along, so
 # reads agree with what was staged.
-export STAGING_TARGET="${STAGING_BUCKET}/${S3_BUCKET_PREFIX}/${BUILDKITE_COMMIT?}/${UPLOAD_FILENAME}"
+#
+# The release (v* tag) flow stages under an additional tag/ path flavor,
+# because the tag build is an INDEPENDENT build of its commit: tag state
+# is baked into build CONTENT, not just names. Base.VERSION keeps the
+# build-number suffix on prereleases unless the tag was visible at build
+# time (base/version.jl: a pre-tag build reports v"1.13.0-rc2.77", the
+# tag build v"1.13.0-rc2"), and Make.inc derives the julia-$(JULIA_COMMIT)
+# install prefix from the same `git describe`. Pushing a release branch
+# and its tag together fires one build for EACH, for the same commit; the
+# flavor keeps the tag build's artifacts -- the only ones fit to become
+# the release -- from contending with (or losing a first-upload-wins race
+# to) the branch build's. The staged FILENAME is commit-keyed in both
+# flavors: version names are claimed only by the final promote
+# (UPLOAD_TARGETS above), so a repointed tag never leaves a stale
+# version-named object behind in staging.
+if [[ "${RELEASE_TAG_FLOW}" == "true" ]]; then
+    STAGING_FLAVOR="tag/"
+else
+    STAGING_FLAVOR=""
+fi
+export STAGING_TARGET="${STAGING_BUCKET}/${S3_BUCKET_PREFIX}/${BUILDKITE_COMMIT?}/${STAGING_FLAVOR}julia-${SHORT_COMMIT}-${OS?}-${ARCH?}"
 
 echo "--- Print the full and short commit hashes"
 echo "The full commit is:                      ${LONG_COMMIT}"
