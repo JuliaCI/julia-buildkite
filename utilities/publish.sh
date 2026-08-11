@@ -25,7 +25,19 @@ ARCHES_FILES=(
     .buildkite/pipelines/main/platforms/upload_windows.arches
     .buildkite/pipelines/main/platforms/upload_freebsd.arches
 )
-# Allow callers (e.g. the scheduled no-GPL publish) to override the list.
+# The nightly scheduled build stages no-GPL (USE_GPL_LIBS=0) builds and
+# triggers a publish with PUBLISH_NOGPL=true (build-level env set by the
+# trigger step rendered in render_launch_pipeline.py): promote ONLY the
+# no-GPL triplets. build_envs.sh routes *nogpl triplets to the bin-nogpl
+# staging prefix and the julialang-nogpl release bucket.
+if [[ "${PUBLISH_NOGPL:-}" == "true" ]]; then
+    ARCHES_FILES=(
+        .buildkite/pipelines/scheduled/platforms/upload_linux.no_gpl.arches
+        .buildkite/pipelines/scheduled/platforms/upload_macos.no_gpl.arches
+        .buildkite/pipelines/scheduled/platforms/upload_windows.no_gpl.arches
+    )
+fi
+# Allow callers (e.g. the publish test stack) to override the list.
 if [[ -n "${PUBLISH_ARCHES_FILES:-}" ]]; then
     # shellcheck disable=SC2206
     ARCHES_FILES=( ${PUBLISH_ARCHES_FILES} )

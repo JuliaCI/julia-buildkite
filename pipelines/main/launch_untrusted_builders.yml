@@ -29,6 +29,14 @@
 #   * PowerPC is omitted: launch_powerpc.jl only uploaded powerpc arches for
 #     Julia < 1.12, and is a no-op on current master (1.14).
 #
+# NIGHTLY SCHEDULE BUILDS (julia-ci only): when BUILDKITE_SOURCE ==
+# "schedule", the renderer emits the scheduled-only workloads instead of
+# the per-commit groups -- the from-source (USE_BINARYBUILDER=0) build with
+# rr-recorded tests, the no_GPL builds, and a no-GPL-only publish trigger.
+# These replace what the pre-incident julia-master-scheduled pipeline ran.
+# Coverage is handled by launch_coverage.yml + coverage.yml's own
+# `build.source == "schedule"` conditional.
+#
 # Yes, this is creating another layer of indirection; the flow now looks like:
 #
 #   [webui] -> launch_untrusted_builders.yml -> render_launch_pipeline.py

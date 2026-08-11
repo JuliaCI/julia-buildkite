@@ -35,6 +35,14 @@ omitted (see OMITTED_POWERPC below). This matches the runtime behaviour.
 
 The result is grouped into one `group:` per label: Build, Check, Test,
 Allow Fail, JuliaSyntax, JuliaC.
+
+SCHEDULE MODE: when the build was created by the julia-ci nightly schedule
+(BUILDKITE_SOURCE == "schedule"), the per-commit groups above are replaced by
+the scheduled-only workloads (Source Build / Source Tests / no_GPL; see the
+SCHEDULE_* lists below) and the publish trigger becomes a no-GPL-only
+promotion (PUBLISH_NOGPL). Coverage is launched by the separately-uploaded
+launch_coverage.yml, whose coverage.yml is itself gated on
+`build.source == "schedule"`.
 """
 
 import os
@@ -50,6 +58,9 @@ ARCHES_ENV_SH = os.path.join(UTIL_DIR, "arches_env.sh")
 
 PLATFORMS = os.path.join(ROOT, "pipelines", "main", "platforms")
 MISC = os.path.join(ROOT, "pipelines", "main", "misc")
+# Scheduled-only arches (nightly workloads); they template the SAME platform
+# YAMLs as the per-commit builds.
+SCHEDULED_PLATFORMS = os.path.join(ROOT, "pipelines", "scheduled", "platforms")
 
 
 # --------------------------------------------------------------------------
@@ -281,11 +292,11 @@ def load_group_text(path):
 
 
 def render_arches_group_text(arches_file, yaml_file, group, allow_fail,
-                             extra_env=None):
+                             extra_env=None, arches_dir=PLATFORMS):
     """Render the inner step block of an arches-templated platform YAML once
     per arch. Interpolation is applied to the source TEXT first, then the inner
     steps are sliced out. Returns the concatenated re-indented step text."""
-    arches_path = os.path.join(PLATFORMS, arches_file)
+    arches_path = os.path.join(arches_dir, arches_file)
     yaml_path = os.path.join(PLATFORMS, yaml_file)
     with open(yaml_path) as f:
         template_text = f.read()
@@ -356,6 +367,36 @@ CHECK_STATIC = [
 TEST_STATIC = [
     "gcext.yml",
     "test_revise.yml",
+]
+
+# ---------------------------------------------------------------------------
+# Scheduled (nightly) workloads. When the build was created by the julia-ci
+# nightly schedule (BUILDKITE_SOURCE == "schedule"), we do NOT re-render the
+# per-commit Build/Check/Test groups -- the schedule fires on master HEAD,
+# which the push build already covered. Instead we render only the workloads
+# too expensive (or too special) for per-commit CI, mirroring what the
+# pre-incident julia-master-scheduled pipeline launched:
+#   * "Source Build" / "Source Tests (Allow Fail)": a from-source
+#     (USE_BINARYBUILDER=0) assertion build, tested under rr / rr-net.
+#   * "no_GPL": USE_GPL_LIBS=0 builds for linux/macos/windows; these stage
+#     to the bin-nogpl prefix (see build_envs.sh) and are promoted by the
+#     julia-publish trigger below (PUBLISH_NOGPL).
+# Coverage is not launched here: launch_coverage.yml is uploaded separately
+# by the webUI step, and coverage.yml itself is gated on
+# `build.source == "schedule"`.
+
+SCHEDULE_SOURCE_BUILD_ARCHES = [
+    ("build_linux.schedule.arches", "build_linux.yml"),
+]
+
+SCHEDULE_SOURCE_TEST_ARCHES = [
+    ("test_linux.schedule.arches", "test_linux.yml"),
+]
+
+SCHEDULE_NOGPL_ARCHES = [
+    ("build_linux.no_gpl.arches",   "build_linux.yml"),
+    ("build_macos.no_gpl.arches",   "build_macos.yml"),
+    ("build_windows.no_gpl.arches", "build_windows.yml"),
 ]
 
 
@@ -451,6 +492,14 @@ def allow_fail_group_text():
     return emit_group("Allow Fail", "\n".join(c for c in chunks if c))
 
 
+def schedule_group_text(label, arches_list, allow_fail):
+    chunks = []
+    for arches, yml in arches_list:
+        chunks.append(render_arches_group_text(
+            arches, yml, label, allow_fail, arches_dir=SCHEDULED_PLATFORMS))
+    return emit_group(label, "\n".join(c for c in chunks if c))
+
+
 # Trailing barrier + trigger of the trusted julia-publish pipeline (inlined
 # verbatim so the wait reliably barriers all dynamically-uploaded jobs).
 TRAILER = '''\
@@ -463,8 +512,40 @@ TRAILER = '''\
       branch: "${BUILDKITE_BRANCH}"
       message: "publish: ${BUILDKITE_MESSAGE}"'''
 
+# Schedule-build variant: same barrier + trigger, but the triggered publish
+# promotes ONLY the no-GPL triplets staged by the no_GPL group above
+# (PUBLISH_NOGPL is read by utilities/publish.sh; build-level env propagates
+# to every job of the triggered build). The commit's regular artifacts were
+# already promoted by the push build's publish trigger.
+SCHEDULE_TRAILER = '''\
+  - wait: ~
+  - trigger: "julia-publish"
+    label: ":rocket: trigger publish (no-GPL)"
+    if: pipeline.slug == "julia-ci"
+    build:
+      commit: "${BUILDKITE_COMMIT}"
+      branch: "${BUILDKITE_BRANCH}"
+      message: "publish no-GPL: ${BUILDKITE_MESSAGE}"
+      env:
+        PUBLISH_NOGPL: "true"'''
+
 
 def main():
+    # Nightly schedule builds render ONLY the scheduled workloads (see the
+    # SCHEDULE_* lists above for what and why).
+    if os.environ.get("BUILDKITE_SOURCE") == "schedule":
+        blocks = [
+            schedule_group_text("Source Build", SCHEDULE_SOURCE_BUILD_ARCHES, "false"),
+            schedule_group_text("Source Tests (Allow Fail)", SCHEDULE_SOURCE_TEST_ARCHES, "true"),
+            schedule_group_text("no_GPL", SCHEDULE_NOGPL_ARCHES, "false"),
+        ]
+        sys.stdout.write("steps:\n")
+        sys.stdout.write("\n".join(blocks))
+        sys.stdout.write("\n")
+        sys.stdout.write(SCHEDULE_TRAILER)
+        sys.stdout.write("\n")
+        return
+
     blocks = [
         build_group_text(),
         check_group_text(),

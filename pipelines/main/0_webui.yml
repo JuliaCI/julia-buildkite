@@ -12,7 +12,14 @@
 #                    branch limit: master release-*
 #                  * Build tags: ON (v*)
 #                  * Build pull requests: OFF
-#                  * the nightly build schedule lives here
+#                  * the nightly build schedule lives here (a "Nightly"
+#                    schedule on master, e.g. cron "0 8 * * *"). Schedule
+#                    builds do NOT re-run the per-commit groups: the
+#                    renderer sees BUILDKITE_SOURCE == "schedule" and emits
+#                    only the scheduled workloads (from-source + rr tests,
+#                    no_GPL builds + no-GPL publish trigger), and
+#                    coverage.yml's own `if:` starts matching. See
+#                    utilities/render_launch_pipeline.py (SCHEDULE MODE).
 #
 # Keeping the two configurations identical is deliberate: the only
 # difference in behavior is downstream, where the rendered julia-publish
