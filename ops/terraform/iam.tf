@@ -75,6 +75,9 @@ locals {
     "organization:${var.bk_org}:pipeline:julia-publish:ref:refs/heads/master:*",
     "organization:${var.bk_org}:pipeline:julia-publish:ref:refs/heads/release-*:*",
     "organization:${var.bk_org}:pipeline:julia-publish:ref:refs/tags/v*:*",
+    # The release tag flow: the julia-ci trigger step can only pass the tag
+    # name as `branch`, so the triggered publish build's ref is refs/heads/v*.
+    "organization:${var.bk_org}:pipeline:julia-publish:ref:refs/heads/v*:*",
   ]
 
   # Per-role trust: which pipeline (by slug pattern in `sub` AND by
