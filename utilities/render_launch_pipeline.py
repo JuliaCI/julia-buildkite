@@ -18,7 +18,8 @@ It reproduces, exactly, what `launch_untrusted_builders.yml` used to upload:
     relevant.)
 
   * The static / nested misc YAMLs (misc/analyzegc.yml, misc/gcext.yml, the
-    juliac / juliasyntax launchers, ...) are emitted VERBATIM. We do NOT
+    juliac / juliasyntax launchers, the julialowering smoke job, ...) are
+    emitted VERBATIM. We do NOT
     pre-resolve their variables: they contain only `$$`-runtime escapes and/or
     launch-agent-env vars (e.g. `${ALLOW_FAIL?}` on gcext/test_revise). The
     final single `buildkite-agent pipeline upload` of this combined document
@@ -34,7 +35,7 @@ current master (1.14) it is a no-op, so the powerpc arches are intentionally
 omitted (see OMITTED_POWERPC below). This matches the runtime behaviour.
 
 The result is grouped into one `group:` per label: Build, Check, Test,
-Allow Fail, JuliaSyntax, JuliaC.
+Allow Fail, JuliaSyntax, JuliaLowering, JuliaC.
 """
 
 import os
@@ -239,7 +240,9 @@ def extract_inner_steps_text(text, where):
             group_indent = ind
             group_idx = i
             break
-    assert group_idx is not None, f"{where}: no group line found"
+    assert group_idx is not None and group_indent is not None, (
+        f"{where}: no group line found"
+    )
 
     # Find the group's own `steps:` key (the first `steps:` AFTER the group line
     # that is indented deeper than the group line).
@@ -251,7 +254,7 @@ def extract_inner_steps_text(text, where):
             continue
         if ind <= group_indent:
             break  # left the group without finding steps:
-        if re.match(rf'\s*steps:\s*$', line):
+        if re.match(r"\s*steps:\s*$", line):
             start = i + 1
             break
     assert start is not None, f"{where}: group has no steps: key"
@@ -481,6 +484,16 @@ def main():
     else:
         sys.stderr.write(
             "./JuliaSyntax/Project.toml does NOT exist; omitting JuliaSyntax group\n"
+        )
+
+    # JuliaLowering: run its Julia 1.12 load/precompile smoke test when present.
+    julialowering_project = os.path.join(os.getcwd(), "JuliaLowering", "Project.toml")
+    if os.path.exists(julialowering_project):
+        blocks.append(verbatim_group_text(os.path.join(MISC, "julialowering.yml")))
+    else:
+        sys.stderr.write(
+            "./JuliaLowering/Project.toml does NOT exist; "
+            "omitting JuliaLowering group\n"
         )
 
     # JuliaC: itself a launcher with its own group + notify -- include verbatim.
