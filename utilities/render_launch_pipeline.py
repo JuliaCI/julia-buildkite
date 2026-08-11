@@ -33,16 +33,8 @@ PowerPC: `launch_powerpc.jl` only uploads powerpc arches for Julia < 1.12. On
 current master (1.14) it is a no-op, so the powerpc arches are intentionally
 omitted (see OMITTED_POWERPC below). This matches the runtime behaviour.
 
-The result is grouped into one `group:` per label: Build, Check, Test,
-Allow Fail, JuliaSyntax, JuliaC.
-
-SCHEDULE MODE: when the build was created by the julia-ci nightly schedule
-(BUILDKITE_SOURCE == "schedule"), the per-commit groups above are replaced by
-the scheduled-only workloads (Source Build / Source Tests / no_GPL; see the
-SCHEDULE_* lists below) and the publish trigger becomes a no-GPL-only
-promotion (PUBLISH_NOGPL). Coverage is launched by the separately-uploaded
-launch_coverage.yml, whose coverage.yml is itself gated on
-`build.source == "schedule"`.
+Schedule builds emit the scheduled workload groups and a no-GPL publish
+trigger instead of the per-commit groups.
 """
 
 import os
@@ -58,8 +50,6 @@ ARCHES_ENV_SH = os.path.join(UTIL_DIR, "arches_env.sh")
 
 PLATFORMS = os.path.join(ROOT, "pipelines", "main", "platforms")
 MISC = os.path.join(ROOT, "pipelines", "main", "misc")
-# Scheduled-only arches (nightly workloads); they template the SAME platform
-# YAMLs as the per-commit builds.
 SCHEDULED_PLATFORMS = os.path.join(ROOT, "pipelines", "scheduled", "platforms")
 
 
@@ -369,34 +359,18 @@ TEST_STATIC = [
     "test_revise.yml",
 ]
 
-# ---------------------------------------------------------------------------
-# Scheduled (nightly) workloads. When the build was created by the julia-ci
-# nightly schedule (BUILDKITE_SOURCE == "schedule"), we do NOT re-render the
-# per-commit Build/Check/Test groups -- the schedule fires on master HEAD,
-# which the push build already covered. Instead we render only the workloads
-# too expensive (or too special) for per-commit CI, mirroring what the
-# pre-incident julia-master-scheduled pipeline launched:
-#   * "Source Build" / "Source Tests (Allow Fail)": a from-source
-#     (USE_BINARYBUILDER=0) assertion build, tested under rr / rr-net.
-#   * "no_GPL": USE_GPL_LIBS=0 builds for linux/macos/windows; these stage
-#     to the bin-nogpl prefix (see build_envs.sh) and are promoted by the
-#     julia-publish trigger below (PUBLISH_NOGPL).
-# Coverage is not launched here: launch_coverage.yml is uploaded separately
-# by the webUI step, and coverage.yml itself is gated on
-# `build.source == "schedule"`.
-
-SCHEDULE_SOURCE_BUILD_ARCHES = [
-    ("build_linux.schedule.arches", "build_linux.yml"),
-]
-
-SCHEDULE_SOURCE_TEST_ARCHES = [
-    ("test_linux.schedule.arches", "test_linux.yml"),
-]
-
-SCHEDULE_NOGPL_ARCHES = [
-    ("build_linux.no_gpl.arches",   "build_linux.yml"),
-    ("build_macos.no_gpl.arches",   "build_macos.yml"),
-    ("build_windows.no_gpl.arches", "build_windows.yml"),
+SCHEDULE_GROUPS = [
+    ("Source Build", "false", [
+        ("build_linux.schedule.arches", "build_linux.yml"),
+    ]),
+    ("Source Tests (Allow Fail)", "true", [
+        ("test_linux.schedule.arches", "test_linux.yml"),
+    ]),
+    ("no_GPL", "false", [
+        ("build_linux.no_gpl.arches", "build_linux.yml"),
+        ("build_macos.no_gpl.arches", "build_macos.yml"),
+        ("build_windows.no_gpl.arches", "build_windows.yml"),
+    ]),
 ]
 
 
@@ -500,49 +474,32 @@ def schedule_group_text(label, arches_list, allow_fail):
     return emit_group(label, "\n".join(c for c in chunks if c))
 
 
-# Trailing barrier + trigger of the trusted julia-publish pipeline (inlined
-# verbatim so the wait reliably barriers all dynamically-uploaded jobs).
-TRAILER = '''\
-  - wait: ~
-  - trigger: "julia-publish"
-    label: ":rocket: trigger publish"
-    if: pipeline.slug == "julia-ci"
-    build:
-      commit: "${BUILDKITE_COMMIT}"
-      branch: "${BUILDKITE_BRANCH}"
-      message: "publish: ${BUILDKITE_MESSAGE}"'''
-
-# Schedule-build variant: same barrier + trigger, but the triggered publish
-# promotes ONLY the no-GPL triplets staged by the no_GPL group above
-# (PUBLISH_NOGPL is read by utilities/publish.sh; build-level env propagates
-# to every job of the triggered build). The commit's regular artifacts were
-# already promoted by the push build's publish trigger.
-SCHEDULE_TRAILER = '''\
-  - wait: ~
-  - trigger: "julia-publish"
-    label: ":rocket: trigger publish (no-GPL)"
-    if: pipeline.slug == "julia-ci"
-    build:
-      commit: "${BUILDKITE_COMMIT}"
-      branch: "${BUILDKITE_BRANCH}"
-      message: "publish no-GPL: ${BUILDKITE_MESSAGE}"
-      env:
-        PUBLISH_NOGPL: "true"'''
+def trailer_text(nogpl=False):
+    suffix = " (no-GPL)" if nogpl else ""
+    message = "publish no-GPL" if nogpl else "publish"
+    lines = [
+        "  - wait: ~",
+        '  - trigger: "julia-publish"',
+        f'    label: ":rocket: trigger publish{suffix}"',
+        '    if: pipeline.slug == "julia-ci"',
+        "    build:",
+        '      commit: "${BUILDKITE_COMMIT}"',
+        '      branch: "${BUILDKITE_BRANCH}"',
+        f'      message: "{message}: ${{BUILDKITE_MESSAGE}}"',
+    ]
+    if nogpl:
+        lines.extend(("      env:", '        PUBLISH_NOGPL: "true"'))
+    return "\n".join(lines)
 
 
 def main():
-    # Nightly schedule builds render ONLY the scheduled workloads (see the
-    # SCHEDULE_* lists above for what and why).
     if os.environ.get("BUILDKITE_SOURCE") == "schedule":
-        blocks = [
-            schedule_group_text("Source Build", SCHEDULE_SOURCE_BUILD_ARCHES, "false"),
-            schedule_group_text("Source Tests (Allow Fail)", SCHEDULE_SOURCE_TEST_ARCHES, "true"),
-            schedule_group_text("no_GPL", SCHEDULE_NOGPL_ARCHES, "false"),
-        ]
+        blocks = [schedule_group_text(label, arches, allow_fail)
+                  for label, allow_fail, arches in SCHEDULE_GROUPS]
         sys.stdout.write("steps:\n")
         sys.stdout.write("\n".join(blocks))
         sys.stdout.write("\n")
-        sys.stdout.write(SCHEDULE_TRAILER)
+        sys.stdout.write(trailer_text(nogpl=True))
         sys.stdout.write("\n")
         return
 
@@ -570,7 +527,7 @@ def main():
     sys.stdout.write("steps:\n")
     sys.stdout.write("\n".join(blocks))
     sys.stdout.write("\n")
-    sys.stdout.write(TRAILER)
+    sys.stdout.write(trailer_text())
     sys.stdout.write("\n")
 
 

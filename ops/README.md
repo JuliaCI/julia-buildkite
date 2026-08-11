@@ -252,14 +252,9 @@ are Terraform variables with the production defaults):
    on the Buildkite organization UUID) at the cost of org-level granularity.
 10. Fill `JULIA_CI_AWS_ACCOUNT_ID` in `utilities/aws_oidc.sh` (from the
     `julia_ci_aws_account_id` Terraform output).
-11. Create the nightly schedule on `julia-ci` (webUI → Schedules → New:
-    branch `master`, cron e.g. `0 8 * * *`, message "Nightly scheduled
-    build"). This drives coverage (`coverage.yml` is gated on
-    `build.source == "schedule"`; tokens from step 5) and the scheduled
-    workloads (from-source + rr tests, no_GPL builds + no-GPL publish; see
-    the SCHEDULE MODE notes in `utilities/render_launch_pipeline.py`).
-    These replace the legacy `julia-master-scheduled` pipeline — disable
-    its schedule and archive it.
+11. Create the nightly `julia-ci` schedule on `master` at `0 8 * * *`, then
+    disable and archive the legacy `julia-master-scheduled` pipeline. See
+    `pipelines/main/README.md` for the scheduled workloads.
 12. Once green: revoke the legacy static AWS IAM user, delete the cryptic
     agent keys from the agents, decommission `cryptic_capable` queues,
     turn off webhook builds on the legacy `julia-buildkite` /
