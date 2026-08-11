@@ -15,6 +15,7 @@ buildkite_pipeline_ids = {
   "julia-publish"       = "019ebd63-df36-4f53-a07f-4b31064df0f8"
   "julia-buildkite-ci"  = "019f3d33-d54f-4087-b70f-767d53b801d4"
   "julia-build-request" = "019f9b49-354f-41ba-bfbf-a42d685724de"
+  "julia-promote"       = "019ff0fe-06b0-4394-a064-b74b242fc7a5"
 }
 
 # julia-build-request is pinned to the Julia (build) cluster like the other
@@ -28,6 +29,8 @@ buildkite_cluster_ids = {
   "julia-buildkite-ci"  = "ae7e6bd1-fde8-433d-bac7-9d2d01108ed6"
   "julia-build-request" = "ae7e6bd1-fde8-433d-bac7-9d2d01108ed6"
   "julia-publish"       = "fd6c2af4-60c1-40ee-bdd5-88ecb6698fbc"
+  # The Secure cluster, same as julia-publish.
+  "julia-promote" = "fd6c2af4-60c1-40ee-bdd5-88ecb6698fbc"
 }
 
 # Isolated NON-PRODUCTION publish test stack (ops/terraform/test_publish.tf).

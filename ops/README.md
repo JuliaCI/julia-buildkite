@@ -43,6 +43,13 @@ only trust the publish pipeline's slug. There are three pipelines:
 - **`julia-ci`** — builds trusted refs only: master, release-*, tags, and the
   scheduled nightlies (untrusted to sign, but it is what triggers publish).
 - **`julia-publish`** — the trusted pipeline that signs + promotes.
+- **`julia-promote`** — the trusted pipeline that copies a published
+  release from the nightlies bucket into the release bucket
+  (julialang2, served at julialang-s3.julialang.org). No webhook or PR
+  builds; the release manager creates its builds manually (New Build
+  with branch = `v<version>`) after the julia-publish run for that tag
+  has finished. See `pipelines/promote/0_webui.yml` and
+  `utilities/promote_release.sh`.
 
 A fourth, untrusted pipeline, **`julia-buildkite-ci`**, is the
 julia-buildkite repository's own self-test CI (see `.buildkite/README.md`):
@@ -344,6 +351,19 @@ The single publish step signs and packages for every OS on linux:
   `utilities/upload_to_s3.sh` (412, then ETag comparison for identical
   content and the `build-commit` metadata stamp for a sibling build of
   the same commit), not by allowing overwrites.
+* Promoting a release to the release bucket: after the tag's
+  `julia-publish` run passes, create a New Build on `julia-promote` with
+  branch = `v<version>` (leave commit as HEAD; Buildkite resolves it to
+  the tag). The step re-maps the published objects into the release
+  bucket's historical layout, repoints the `julia-<majmin>-latest`
+  pointers, uploads the `bin/checksums/julia-<version>` files, and purges
+  the Fastly cache. It verifies (via the `build-commit` object metadata
+  stamped at publish time) that every promoted object was built from the
+  build's own commit, so a repointed tag cannot promote stale binaries.
+  Re-running is idempotent: version-named objects are write-once and
+  identical/same-commit re-uploads are accepted. Afterwards, dispatch the
+  CI workflow on JuliaLang/VersionsJSONUtil.jl to regenerate
+  versions.json.
 * Re-running a release: use **Rebuild** on the `julia-ci` tag build, or
   create a new `julia-ci` build with the branch set to the tag name
   (`v<version>`) — both enter the release tag flow. To re-run just the
