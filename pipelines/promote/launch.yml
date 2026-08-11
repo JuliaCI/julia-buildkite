@@ -1,0 +1,39 @@
+# Launched by the julia-promote pipeline (see 0_webui.yml). A single
+# trusted step copies the published release binaries from the nightlies
+# bucket into the release bucket's layout, updates the checksum files and
+# latest pointers, and purges the CDN. No signing happens here -- the
+# artifacts were signed by julia-publish; this step only re-maps them.
+steps:
+  - group: "Promote"
+    steps:
+      - label: ":package: promote release"
+        key: "promote_all"
+        # One promotion at a time: concurrent runs would race on the
+        # julia-<majmin>-latest pointer repoints.
+        concurrency: 1
+        concurrency_group: 'promote/julialang2'
+        concurrency_method: eager
+        plugins:
+          - JuliaCI/external-buildkite#v1:
+              # Track main, not the julia checkout's pin -- see 0_webui.yml.
+              version: "main"
+              repo_url: "https://github.com/JuliaCI/julia-buildkite"
+          - JuliaCI/julia#v1:
+              # Runs on the bare agent, only so the sandbox plugin below has
+              # a host julia to launch Sandbox.jl with.
+              persist_depot_dirs: packages,artifacts,compiled
+              version: '1.10' # GREP_ME: Keep this updated to LTS. Do not set it to '1' or 'stable' or 'latest'.
+          - JuliaCI/sandbox#v2:
+              # The julia_publish rootfs carries the aws CLI (and curl),
+              # which the bare agents lack. x86_64-only image.
+              rootfs_url: https://github.com/JuliaCI/rootfs-images/releases/download/v8.6/julia_publish.x86_64.tar.gz
+              rootfs_treehash: "8b28c5b8937f25827c1ad4b6a3bc1bb90c9e9087"
+              uid: 1000
+              gid: 1000
+        timeout_in_minutes: 60
+        commands: "bash .buildkite/utilities/promote_release.sh"
+        agents:
+          queue: "default"
+          sandbox_capable: "true"
+          os: "linux"
+          arch: "x86_64"

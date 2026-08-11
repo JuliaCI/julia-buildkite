@@ -21,9 +21,9 @@ export AWS_EC2_METADATA_DISABLED=true
 # object (S3 conditional write, If-None-Match: *). If the object already
 # exists we accept it iff its content matches what we have locally (a
 # retried job re-uploading the same bytes), OR iff it was uploaded by
-# another build of the same commit (see below). `julia-latest-*` pointer
-# objects are intentionally overwritten (and only the publish role is
-# allowed to do so).
+# another build of the same commit (see below). `julia-latest-*` and
+# `julia-<majmin>-latest-*` pointer objects are intentionally overwritten
+# (and only the publish resp. promote roles are allowed to do so).
 upload_to_s3() {
     local file="$1" target="$2"
     local bucket="${target%%/*}"
@@ -49,7 +49,7 @@ upload_to_s3() {
     # against a bucket whose role permits an unconditional PutObject -- the
     # production roles' IAM denies it (write-once), so the flag is inert on the
     # real publish path even if accidentally set.
-    if [[ "${UPLOAD_TO_S3_OVERWRITE:-0}" == "1" || "$(basename "${key}")" == julia-latest-* ]]; then
+    if [[ "${UPLOAD_TO_S3_OVERWRITE:-0}" == "1" || "$(basename "${key}")" == julia-latest-* || "$(basename "${key}")" == julia-*-latest-* ]]; then
         aws s3api put-object \
             --bucket "${bucket}" --key "${key}" \
             --body "${file}" ${acl_args[@]+"${acl_args[@]}"} \

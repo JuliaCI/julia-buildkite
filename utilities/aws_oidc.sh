@@ -8,6 +8,7 @@
 #
 #     source .buildkite/utilities/aws_oidc.sh stage       # untrusted: write-once to own pipeline's staging bucket, <sha>/ path
 #     source .buildkite/utilities/aws_oidc.sh publish     # trusted: sign + promote to final (publish pipeline only)
+#     source .buildkite/utilities/aws_oidc.sh promote     # trusted: copy published release to the release bucket (promote pipeline only)
 #     source .buildkite/utilities/aws_oidc.sh docs-deploy # trusted: docs deploy SSH signing via KMS
 #     source .buildkite/utilities/aws_oidc.sh tokens      # CI telemetry tokens from SSM (julia-ci only)
 #
@@ -55,7 +56,13 @@ case "${_OIDC_ROLE_SUFFIX}" in
             return 1 2>/dev/null || exit 1
         fi
         ;;&
-    publish|docs-deploy)
+    promote)
+        if [[ "${BUILDKITE_PIPELINE_SLUG:-}" != *promote* ]]; then
+            echo "ERROR: promote role requested from non-promote pipeline '${BUILDKITE_PIPELINE_SLUG:-}'" >&2
+            return 1 2>/dev/null || exit 1
+        fi
+        ;;&
+    publish|docs-deploy|promote)
         if [[ "${BUILDKITE_PULL_REQUEST:-false}" != "false" ]]; then
             echo "ERROR: ${_OIDC_ROLE_SUFFIX} role must not be requested on a pull request build" >&2
             return 1 2>/dev/null || exit 1
@@ -97,7 +104,7 @@ case "${_OIDC_ROLE_SUFFIX}" in
         # Trust: org/pipeline/cluster IDs. Permission policy: own commit path.
         _OIDC_AWS_SESSION_TAGS="organization_id,pipeline_id,cluster_id,build_commit"
         ;;
-    publish|docs-deploy)
+    publish|docs-deploy|promote)
         # Trust: org/pipeline/cluster IDs and step key. KMS policies also gate
         # the trusted roles by step_key.
         _OIDC_AWS_SESSION_TAGS="organization_id,pipeline_id,cluster_id,step_key"

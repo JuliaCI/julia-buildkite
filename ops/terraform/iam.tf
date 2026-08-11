@@ -33,6 +33,12 @@
 #                     can never produce a build under that slug, the slug
 #                     is the trust boundary -- not the (PR-spoofable)
 #                     branch name.
+#   julia-oidc-promote  TRUSTED. Read the nightlies bucket, write the
+#                     release bucket (julialang2). Assumable ONLY from the
+#                     `julia-promote` pipeline slug, whose builds are
+#                     created manually by the release manager (no webhook
+#                     or PR builds; see pipelines/promote/0_webui.yml).
+#                     No KMS.
 #   julia-oidc-docs-deploy  TRUSTED. kms:Sign with the docs SSH key; publish
 #                     pipeline only.
 #
@@ -43,8 +49,9 @@
 #
 # Overwrite protection: every PutObject must use the S3 conditional write
 # header (s3:if-none-match = "*"), i.e. uploads fail if the object already
-# exists. The only exception is `julia-latest-*` pointer objects, which the
-# publish pipeline intentionally repoints.
+# exists. The only exceptions are the `julia-latest-*` (publish) and
+# `julia-<majmin>-latest-*` (promote) pointer objects, which are
+# intentionally repointed.
 
 data "aws_caller_identity" "current" {}
 
@@ -75,6 +82,16 @@ locals {
     "organization:${var.bk_org}:pipeline:julia-publish:ref:refs/heads/master:*",
     "organization:${var.bk_org}:pipeline:julia-publish:ref:refs/heads/release-*:*",
     "organization:${var.bk_org}:pipeline:julia-publish:ref:refs/tags/v*:*",
+  ]
+
+  # The TRUSTED promote pipeline (release-manager-triggered bucket dance,
+  # see utilities/promote_release.sh). Builds are created manually with the
+  # release tag name as the branch, so the ref is refs/heads/v<version>.
+  # Same posture as julia-publish: manual/no-PR builds only, slug+UUID is
+  # the boundary, ref patterns are belt-and-braces.
+  promote_sub_patterns = [
+    "organization:${var.bk_org}:pipeline:julia-promote:ref:refs/heads/v*:*",
+    "organization:${var.bk_org}:pipeline:julia-promote:ref:refs/tags/v*:*",
   ]
 
   # Per-role trust: which pipeline (by slug pattern in `sub` AND by
@@ -118,6 +135,11 @@ locals {
       sub_patterns      = local.publish_sub_patterns
       step_key_patterns = ["publish_*"]
     }
+    promote = {
+      pipelines         = ["julia-promote"]
+      sub_patterns      = local.promote_sub_patterns
+      step_key_patterns = ["promote_*"]
+    }
     docs-deploy = {
       pipelines         = ["julia-publish"]
       sub_patterns      = local.publish_sub_patterns
@@ -146,6 +168,10 @@ locals {
     "arn:aws:s3:::${var.s3_bucket}/${var.s3_bucket_prefix}",
     "arn:aws:s3:::${var.s3_nogpl_bucket}/${var.s3_nogpl_prefix}",
   ]
+
+  # The release bucket the promote pipeline copies published binaries into
+  # (served at julialang-s3.julialang.org).
+  release_path = "arn:aws:s3:::${var.s3_release_bucket}/bin"
 }
 
 data "aws_iam_policy_document" "trust" {
@@ -336,6 +362,69 @@ resource "aws_iam_role_policy" "publish" {
   name   = "sign-and-promote-staged-artifacts-to-release"
   role   = aws_iam_role.publish.id
   policy = data.aws_iam_policy_document.publish.json
+}
+
+# ---- julia-oidc-promote (TRUSTED) -------------------------------------------
+# Copy a published release from the nightlies bucket into the release
+# bucket's layout (the "bucket dance"; utilities/promote_release.sh).
+# Assumable only from the julia-promote pipeline slug, whose builds are
+# created manually by the release manager. No KMS: the artifacts were
+# already signed by publish, this role only re-maps them.
+
+resource "aws_iam_role" "promote" {
+  name                 = "julia-oidc-promote"
+  description          = "Buildkite promote: copy published release binaries to the release bucket (via OIDC)"
+  assume_role_policy   = data.aws_iam_policy_document.trust["promote"].json
+  max_session_duration = 3600
+}
+
+data "aws_iam_policy_document" "promote" {
+  statement {
+    sid       = "ReadPublishedArtifacts"
+    actions   = ["s3:GetObject"]
+    resources = ["arn:aws:s3:::${var.s3_bucket}/${var.s3_bucket_prefix}/*"]
+  }
+
+  statement {
+    sid       = "WriteOnceToReleaseBucket"
+    actions   = ["s3:PutObject"]
+    resources = ["${local.release_path}/*"]
+
+    condition {
+      test     = "StringEquals"
+      variable = "s3:if-none-match"
+      values   = ["*"]
+    }
+  }
+
+  # The release bucket is ACL-based (objects are uploaded public-read);
+  # see SetPublicReadAclOnFinalObjects on the publish role for why this
+  # cannot be folded into the conditioned statement above.
+  statement {
+    sid       = "SetPublicReadAclOnReleaseObjects"
+    actions   = ["s3:PutObjectAcl"]
+    resources = ["${local.release_path}/*"]
+  }
+
+  # julia-<majmin>-latest pointers live at bin/<os>/<arch>/<majmin>/ and
+  # are intentionally repointed on every promotion of that series.
+  statement {
+    sid       = "RepointMajminLatestPointers"
+    actions   = ["s3:PutObject", "s3:PutObjectAcl"]
+    resources = ["${local.release_path}/*/*/*/julia-*-latest-*"]
+  }
+
+  statement {
+    sid       = "ReadReleaseForRetryChecks"
+    actions   = ["s3:GetObject"]
+    resources = ["${local.release_path}/*"]
+  }
+}
+
+resource "aws_iam_role_policy" "promote" {
+  name   = "copy-published-release-to-release-bucket"
+  role   = aws_iam_role.promote.id
+  policy = data.aws_iam_policy_document.promote.json
 }
 
 # ---- julia-oidc-docs-deploy (TRUSTED) ---------------------------------------

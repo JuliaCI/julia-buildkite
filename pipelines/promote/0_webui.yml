@@ -1,0 +1,37 @@
+# This file records the steps configured in the julia-promote pipeline's
+# webUI; modifying this file has no effect -- paste it into the webUI when
+# it changes.
+#
+# julia-promote copies a published release from the nightlies bucket to
+# the release bucket (the "bucket dance", see utilities/promote_release.sh).
+# Builds are created MANUALLY by the release manager: New Build with
+# branch = v<version> (and commit left as HEAD, which resolves to the
+# tag), after the julia-publish run for that tag has completed.
+#
+# SECURITY: like julia-publish, the pipeline slug is what the
+# julia-oidc-promote IAM role trusts. It MUST be configured in Buildkite
+# with:
+#   * Trigger builds after pushing code: OFF
+#   * Build pull requests: OFF (including from third-party forked
+#     repositories)
+#   * Branch limiting: v*
+#   * Same cluster as julia-publish (the cluster_id trust condition)
+#
+# Unlike julia-publish, the steps are loaded from julia-buildkite `main`
+# rather than the julia checkout's pinned .buildkite-external-version: a
+# promotion may target an older tag whose pin predates this pipeline, and
+# promote runs no code from the julia tree at all -- the julia checkout
+# contributes nothing but the (Buildkite-attested) commit and branch name.
+steps:
+  - group: "Promote"
+    steps:
+      - label: "Launch promote"
+        agents:
+          queue: "default"
+          os: "linux"
+        plugins:
+          - JuliaCI/external-buildkite#v1:
+              version: "main"
+              repo_url: "https://github.com/JuliaCI/julia-buildkite"
+        commands: |
+          buildkite-agent pipeline upload .buildkite/pipelines/promote/launch.yml

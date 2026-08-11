@@ -41,8 +41,8 @@ variable "buildkite_pipeline_ids" {
   nullable    = false
 
   validation {
-    condition     = var.buildkite_pipeline_ids == null ? true : keys(var.buildkite_pipeline_ids) == tolist(["julia-build-request", "julia-buildkite-ci", "julia-ci", "julia-pr", "julia-publish"])
-    error_message = "buildkite_pipeline_ids must have exactly the keys julia-build-request, julia-buildkite-ci, julia-ci, julia-pr, julia-publish."
+    condition     = var.buildkite_pipeline_ids == null ? true : keys(var.buildkite_pipeline_ids) == tolist(["julia-build-request", "julia-buildkite-ci", "julia-ci", "julia-pr", "julia-promote", "julia-publish"])
+    error_message = "buildkite_pipeline_ids must have exactly the keys julia-build-request, julia-buildkite-ci, julia-ci, julia-pr, julia-promote, julia-publish."
   }
   validation {
     condition = var.buildkite_pipeline_ids == null ? true : alltrue([
@@ -80,6 +80,12 @@ variable "s3_nogpl_bucket" {
   description = "S3 bucket for the scheduled no-GPL builds"
   type        = string
   default     = "julialang-nogpl"
+}
+
+variable "s3_release_bucket" {
+  description = "Release bucket the promote pipeline copies published binaries into (served at julialang-s3.julialang.org)"
+  type        = string
+  default     = "julialang2"
 }
 
 variable "s3_nogpl_prefix" {
