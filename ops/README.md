@@ -71,6 +71,12 @@ publish trigger, exactly like `julia-pr`.
    (TRUSTED: role julia-oidc-publish, kms:Sign + read julia-ci staging bucket
     ONLY + write final)
    verify_trusted_commit.sh → sign (rcodesign / Trusted Signing / KMS-GPG) → promote → deploy docs
+
+ For release (v*) tag builds, julia-ci additionally builds the light/full
+ source dists (misc/source_dist.yml) and stages them alongside the
+ binaries; publish_srcdist.sh KMS-signs them and publishes to
+ bin/src/<majmin>/ in the nightlies bucket, and julia-promote copies them
+ to the release bucket and includes them in the checksums files.
 ```
 
 Why this is safe where branch-pinning was not: Buildkite reports a pull
@@ -355,9 +361,10 @@ The single publish step signs and packages for every OS on linux:
   `julia-publish` run passes, create a New Build on `julia-promote` with
   branch = `v<version>` (leave commit as HEAD; Buildkite resolves it to
   the tag). The step re-maps the published objects into the release
-  bucket's historical layout, repoints the `julia-<majmin>-latest`
-  pointers, uploads the `bin/checksums/julia-<version>` files, and purges
-  the Fastly cache. It verifies (via the `build-commit` object metadata
+  bucket's historical layout (including the `bin/src/` source dists, when
+  the release has them), repoints the `julia-<majmin>-latest` pointers,
+  uploads the `bin/checksums/julia-<version>` files, and purges the
+  Fastly cache. It verifies (via the `build-commit` object metadata
   stamped at publish time) that every promoted object was built from the
   build's own commit, so a repointed tag cannot promote stale binaries.
   Re-running is idempotent: version-named objects are write-once and
