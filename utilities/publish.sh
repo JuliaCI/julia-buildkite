@@ -74,8 +74,16 @@ for triplet in "${TRIPLETS[@]}"; do
     fi
 done
 
+echo "+++ Publish source dists"
+# shellcheck source=SCRIPTDIR/aws_oidc.sh
+source .buildkite/utilities/aws_oidc.sh "${PUBLISH_OIDC_MODE}"
+if ! bash .buildkite/utilities/publish_srcdist.sh; then
+    echo "ERROR: publishing source dists failed" >&2
+    FAILED+=( "srcdist" )
+fi
+
 if [[ "${#FAILED[@]}" -gt 0 ]]; then
-    echo "--- ${#FAILED[@]} triplet(s) failed to publish: ${FAILED[*]}" >&2
+    echo "--- ${#FAILED[@]} item(s) failed to publish: ${FAILED[*]}" >&2
     exit 1
 fi
 
