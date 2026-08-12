@@ -9,6 +9,7 @@
 # julia-oidc-docs-deploy role.
 set -euo pipefail
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+# shellcheck source=SCRIPTDIR/common.sh
 source "${SCRIPT_DIR}/common.sh"
 
 WORK="$(mktemp -d)"
