@@ -19,16 +19,22 @@ set -euo pipefail
 
 # The set of arches to publish. Mirrors what the build pipeline staged.
 # Each file's rows define TRIPLET (and TIMEOUT); see utilities/arches_env.sh.
-ARCHES_FILES=(
-    .buildkite/pipelines/main/platforms/upload_linux.arches
-    .buildkite/pipelines/main/platforms/upload_macos.arches
-    .buildkite/pipelines/main/platforms/upload_windows.arches
-    .buildkite/pipelines/main/platforms/upload_freebsd.arches
-)
-# Allow callers (e.g. the scheduled no-GPL publish) to override the list.
-if [[ -n "${PUBLISH_ARCHES_FILES:-}" ]]; then
+if [[ "${PUBLISH_NOGPL:-}" == "true" ]]; then
+    ARCHES_FILES=(
+        .buildkite/pipelines/scheduled/platforms/upload_linux.no_gpl.arches
+        .buildkite/pipelines/scheduled/platforms/upload_macos.no_gpl.arches
+        .buildkite/pipelines/scheduled/platforms/upload_windows.no_gpl.arches
+    )
+elif [[ -n "${PUBLISH_ARCHES_FILES:-}" ]]; then
     # shellcheck disable=SC2206
     ARCHES_FILES=( ${PUBLISH_ARCHES_FILES} )
+else
+    ARCHES_FILES=(
+        .buildkite/pipelines/main/platforms/upload_linux.arches
+        .buildkite/pipelines/main/platforms/upload_macos.arches
+        .buildkite/pipelines/main/platforms/upload_windows.arches
+        .buildkite/pipelines/main/platforms/upload_freebsd.arches
+    )
 fi
 
 # Defense in depth: refuse unless this commit is a genuine release commit on

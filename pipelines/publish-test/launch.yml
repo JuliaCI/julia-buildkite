@@ -51,11 +51,8 @@ steps:
           os: "linux"
           arch: "x86_64"
         env:
-          # Scope the test to the Linux + macOS triplets. Linux exercises the
-          # GPG-sign path (content-agnostic). macOS unpacks the staged unsigned
-          # Julia.app (assembled by the build_ step), rcodesign-codesigns its
-          # mach-o with the test KMS key + self-signed cert, runs the cross-mode
-          # pkgimage checksum patch, and builds the .dmg (notarization skipped).
+          # By default, test the regular Linux + macOS triplets. Setting
+          # PUBLISH_NOGPL=true on the build selects the scheduled no-GPL list.
           PUBLISH_ARCHES_FILES: ".buildkite/pipelines/main/platforms/upload_linux.arches .buildkite/pipelines/main/platforms/upload_macos.arches"
           # Assume the throwaway test role (test keys + test bucket only).
           PUBLISH_OIDC_MODE: "publish-test"
@@ -66,7 +63,6 @@ steps:
           # full sign+promote without touching any production release path.
           STAGING_BUCKET: "julialang-ephemeral-ci"
           S3_BUCKET: "julialang-test-publish"
-          S3_BUCKET_PREFIX: "bin"
           # The test bucket disables object ACLs (BucketOwnerEnforced, public
           # read via bucket policy), so the promote must not send --acl.
           UPLOAD_TO_S3_ACL: "none"

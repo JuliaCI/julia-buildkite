@@ -12,6 +12,14 @@ Builds are split across three Buildkite pipelines by trust level (see
 | `julia-ci`      | `master`, `release-*`, tags, and scheduled nightlies | untrusted to sign; triggers publish |
 | `julia-publish` | (triggered by `julia-ci`) signs + promotes        | trusted (KMS signing keys)     |
 
+The daily `julia-ci` schedule runs coverage, a from-source assertion build
+with rr tests, and no-GPL builds for Linux, macOS, and Windows. It does not
+repeat the per-commit groups. The no-GPL artifacts are promoted by a
+`julia-publish` build with `PUBLISH_NOGPL=true`.
+
+Coverage also runs on pull requests with the `needs full CI` label, without
+uploading to Codecov or Coveralls.
+
 Each build step stages its unsigned tarball directly (write-once, no relay
 jobs) to a commit-sha-gated path in its pipeline's own ephemeral staging
 bucket: `julia-pr` builds go to `julialang-ephemeral-pr` (where juliaup

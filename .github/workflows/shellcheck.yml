@@ -26,3 +26,5 @@ jobs:
               echo "Shellcheck failed for ${failures} files."
           fi
           exit "${failures}"
+      - name: Test pipeline renderer
+        run: python3 utilities/tests/test_render_launch_pipeline.py

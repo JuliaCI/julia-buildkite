@@ -1,13 +1,11 @@
 # ROOTFS_IMAGE_NAME    TRIPLET                       ARCH           ARCH_ROOTFS    TIMEOUT    USE_RR     ROOTFS_TAG     ROOTFS_HASH
-llvm_passes            x86_64-linux-gnusrcassert     x86_64         x86_64         270        rr         v6.00          0badf5d8794e21a03ac2ff2d46c1ab538ac02571
-llvm_passes            x86_64-linux-gnusrcassert     x86_64         x86_64         150        rr-net     v6.00          0badf5d8794e21a03ac2ff2d46c1ab538ac02571
+tester_linux           x86_64-linux-gnusrcassert     x86_64         x86_64         360        rr         v8.5           0180f0aba045c63c44e4732b7981716aa77eaf71
+tester_linux           x86_64-linux-gnusrcassert     x86_64         x86_64         165        rr-net     v8.5           0180f0aba045c63c44e4732b7981716aa77eaf71
 
 # These special lines allow us to embed default values for the columns above.
 # Any column without a default mapping here will simply substitute a `.` to the empty string
 
-#default  package_linux
-
-# Most tests should finish within ~45 minutes, barring exceptionally slow hardware
-# We double that to a default of 90 minutes, with an extra 45 minutes for cleanup,
-# including things like `rr` trace compression,
+# Timeouts match the x86_64-linux-gnuassert rr / rr-net rows in
+# pipelines/main/platforms/test_linux.arches (assertion builds run the
+# suite noticeably slower, and rr trace compression adds cleanup time).
 #default TIMEOUT 135

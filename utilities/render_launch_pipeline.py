@@ -33,8 +33,8 @@ PowerPC: `launch_powerpc.jl` only uploads powerpc arches for Julia < 1.12. On
 current master (1.14) it is a no-op, so the powerpc arches are intentionally
 omitted (see OMITTED_POWERPC below). This matches the runtime behaviour.
 
-The result is grouped into one `group:` per label: Build, Check, Test,
-Allow Fail, JuliaSyntax, JuliaC.
+Schedule builds emit the scheduled workload groups and a no-GPL publish
+trigger instead of the per-commit groups.
 """
 
 import os
@@ -50,6 +50,7 @@ ARCHES_ENV_SH = os.path.join(UTIL_DIR, "arches_env.sh")
 
 PLATFORMS = os.path.join(ROOT, "pipelines", "main", "platforms")
 MISC = os.path.join(ROOT, "pipelines", "main", "misc")
+SCHEDULED_PLATFORMS = os.path.join(ROOT, "pipelines", "scheduled", "platforms")
 
 
 # --------------------------------------------------------------------------
@@ -281,11 +282,11 @@ def load_group_text(path):
 
 
 def render_arches_group_text(arches_file, yaml_file, group, allow_fail,
-                             extra_env=None):
+                             extra_env=None, arches_dir=PLATFORMS):
     """Render the inner step block of an arches-templated platform YAML once
     per arch. Interpolation is applied to the source TEXT first, then the inner
     steps are sliced out. Returns the concatenated re-indented step text."""
-    arches_path = os.path.join(PLATFORMS, arches_file)
+    arches_path = os.path.join(arches_dir, arches_file)
     yaml_path = os.path.join(PLATFORMS, yaml_file)
     with open(yaml_path) as f:
         template_text = f.read()
@@ -356,6 +357,20 @@ CHECK_STATIC = [
 TEST_STATIC = [
     "gcext.yml",
     "test_revise.yml",
+]
+
+SCHEDULE_GROUPS = [
+    ("Source Build", "false", [
+        ("build_linux.schedule.arches", "build_linux.yml"),
+    ]),
+    ("Source Tests (Allow Fail)", "true", [
+        ("test_linux.schedule.arches", "test_linux.yml"),
+    ]),
+    ("no_GPL", "false", [
+        ("build_linux.no_gpl.arches", "build_linux.yml"),
+        ("build_macos.no_gpl.arches", "build_macos.yml"),
+        ("build_windows.no_gpl.arches", "build_windows.yml"),
+    ]),
 ]
 
 
@@ -451,20 +466,43 @@ def allow_fail_group_text():
     return emit_group("Allow Fail", "\n".join(c for c in chunks if c))
 
 
-# Trailing barrier + trigger of the trusted julia-publish pipeline (inlined
-# verbatim so the wait reliably barriers all dynamically-uploaded jobs).
-TRAILER = '''\
-  - wait: ~
-  - trigger: "julia-publish"
-    label: ":rocket: trigger publish"
-    if: pipeline.slug == "julia-ci"
-    build:
-      commit: "${BUILDKITE_COMMIT}"
-      branch: "${BUILDKITE_BRANCH}"
-      message: "publish: ${BUILDKITE_MESSAGE}"'''
+def schedule_group_text(label, arches_list, allow_fail):
+    chunks = []
+    for arches, yml in arches_list:
+        chunks.append(render_arches_group_text(
+            arches, yml, label, allow_fail, arches_dir=SCHEDULED_PLATFORMS))
+    return emit_group(label, "\n".join(c for c in chunks if c))
+
+
+def trailer_text(nogpl=False):
+    suffix = " (no-GPL)" if nogpl else ""
+    message = "publish no-GPL" if nogpl else "publish"
+    lines = [
+        "  - wait: ~",
+        '  - trigger: "julia-publish"',
+        f'    label: ":rocket: trigger publish{suffix}"',
+        '    if: pipeline.slug == "julia-ci"',
+        "    build:",
+        '      commit: "${BUILDKITE_COMMIT}"',
+        '      branch: "${BUILDKITE_BRANCH}"',
+        f'      message: "{message}: ${{BUILDKITE_MESSAGE}}"',
+    ]
+    if nogpl:
+        lines.extend(("      env:", '        PUBLISH_NOGPL: "true"'))
+    return "\n".join(lines)
 
 
 def main():
+    if os.environ.get("BUILDKITE_SOURCE") == "schedule":
+        blocks = [schedule_group_text(label, arches, allow_fail)
+                  for label, allow_fail, arches in SCHEDULE_GROUPS]
+        sys.stdout.write("steps:\n")
+        sys.stdout.write("\n".join(blocks))
+        sys.stdout.write("\n")
+        sys.stdout.write(trailer_text(nogpl=True))
+        sys.stdout.write("\n")
+        return
+
     blocks = [
         build_group_text(),
         check_group_text(),
@@ -489,7 +527,7 @@ def main():
     sys.stdout.write("steps:\n")
     sys.stdout.write("\n".join(blocks))
     sys.stdout.write("\n")
-    sys.stdout.write(TRAILER)
+    sys.stdout.write(trailer_text())
     sys.stdout.write("\n")
 
 

@@ -29,6 +29,9 @@
 #   * PowerPC is omitted: launch_powerpc.jl only uploaded powerpc arches for
 #     Julia < 1.12, and is a no-op on current master (1.14).
 #
+# Schedule builds emit the scheduled workload groups; coverage remains a
+# separate upload so it does not delay publishing.
+#
 # Yes, this is creating another layer of indirection; the flow now looks like:
 #
 #   [webui] -> launch_untrusted_builders.yml -> render_launch_pipeline.py

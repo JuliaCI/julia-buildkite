@@ -12,7 +12,8 @@
 #                    branch limit: master release-*
 #                  * Build tags: ON (v*)
 #                  * Build pull requests: OFF
-#                  * the nightly build schedule lives here
+#                  * nightly schedule: master at `0 8 * * *`; see
+#                    pipelines/main/README.md
 #
 # Keeping the two configurations identical is deliberate: the only
 # difference in behavior is downstream, where the rendered julia-publish

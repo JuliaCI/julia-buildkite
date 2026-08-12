@@ -259,7 +259,10 @@ are Terraform variables with the production defaults):
    on the Buildkite organization UUID) at the cost of org-level granularity.
 10. Fill `JULIA_CI_AWS_ACCOUNT_ID` in `utilities/aws_oidc.sh` (from the
     `julia_ci_aws_account_id` Terraform output).
-11. Once green: revoke the legacy static AWS IAM user, delete the cryptic
+11. Create the nightly `julia-ci` schedule on `master` at `0 8 * * *`, then
+    disable and archive the legacy `julia-master-scheduled` pipeline. See
+    `pipelines/main/README.md` for the scheduled workloads.
+12. Once green: revoke the legacy static AWS IAM user, delete the cryptic
     agent keys from the agents, decommission `cryptic_capable` queues,
     turn off webhook builds on the legacy `julia-buildkite` /
     `julia-buildkite-scheduled` self-test pipelines (superseded by
