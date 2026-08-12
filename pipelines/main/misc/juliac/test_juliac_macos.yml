@@ -19,6 +19,11 @@ steps:
           # Re-sign after download
           .buildkite/utilities/macos/codesign.sh ./usr
 
+          # Re-signing changed the pkgimage bytes, so repair the checksums
+          # recorded in the stdlib .ji cache files (as test_julia.sh does);
+          # otherwise every stdlib cache is considered stale and recompiled.
+          JULIA_DEBUG=all ./usr/bin/julia .buildkite/utilities/update_stdlib_pkgimage_checksums.jl
+
           echo "--- Install and test JuliaC"
           unset JULIA_DEPOT_PATH
           if [ -f deps/jlutilities/juliac/Manifest.toml ]; then
