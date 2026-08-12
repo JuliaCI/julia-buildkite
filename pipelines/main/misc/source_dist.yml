@@ -44,7 +44,10 @@ steps:
           # the tag (a branch build of the tag commit). Release source
           # tarballs have always used the version prefix.
           V="$$(cat VERSION)"
-          make light-source-dist full-source-dist JULIA_COMMIT="$${V}"
+          # FC=gcc satisfies Make.inc's gfortran presence check; the getall
+          # sub-targets only download source tarballs and never run fortran,
+          # and the rootfs has no gfortran.
+          make light-source-dist full-source-dist JULIA_COMMIT="$${V}" FC=gcc
           mv "julia-$${V}_$${V}.tar.gz" "julia-$${V}.tar.gz"
           mv "julia-$${V}_$${V}-full.tar.gz" "julia-$${V}-full.tar.gz"
           sha256sum "julia-$${V}.tar.gz" "julia-$${V}-full.tar.gz"
