@@ -345,6 +345,7 @@ OMITTED_POWERPC = [
 CHECK_STATIC = [
     "analyzegc.yml",
     "doctest.yml",
+    "source_dist.yml",
     "pdf_docs/build_pdf_docs.yml",
     "embedding.yml",
     "trimming.yml",

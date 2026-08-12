@@ -61,6 +61,19 @@ MAPPINGS=(
     "julia-${VERSION}-freebsd-x86_64.tar.gz  freebsd/x86_64/${MAJMIN} freebsd/x64/${MAJMIN}"
 )
 
+# Source dists (KMS-signed by publish_srcdist.sh) live at bin/src/ in both
+# buckets. Releases published before the source_dist step existed have
+# none; promote what there is rather than failing.
+if aws s3api head-object --bucket "${SRC_BUCKET}" \
+        --key "bin/src/${MAJMIN}/julia-${VERSION}.tar.gz" >/dev/null 2>&1; then
+    MAPPINGS+=(
+        "julia-${VERSION}.tar.gz       src/${MAJMIN}  src/${MAJMIN}"
+        "julia-${VERSION}-full.tar.gz  src/${MAJMIN}  src/${MAJMIN}"
+    )
+else
+    echo "WARN: no source dists at s3://${SRC_BUCKET}/bin/src/${MAJMIN}/julia-${VERSION}.tar.gz; promoting binaries only" >&2
+fi
+
 # Every .tar.gz has a KMS-GPG detached signature alongside it.
 with_asc() {
     echo "$1"
@@ -110,6 +123,11 @@ for m in "${MAPPINGS[@]}"; do
         PURGE_KEYS+=( "bin/${destdir}/${f}" )
         # Repoint the majmin-latest copy (upload_to_s3 overwrites
         # julia-*-latest-* names; write-once applies to everything else).
+        # Source dists have no latest-pointer convention (and the promote
+        # role's repoint grant covers only the binary layout).
+        if [[ "${destdir}" == src/* ]]; then
+            continue
+        fi
         latest_name="${latest}${f#"${base}"}"
         upload_to_s3 "${f}" "${DEST_BUCKET}/bin/${destdir}/${latest_name}"
         PURGE_KEYS+=( "bin/${destdir}/${latest_name}" )
