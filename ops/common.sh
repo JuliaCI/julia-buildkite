@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # Shared configuration for the julia-buildkite AWS ops scripts.
 # Source this from the numbered scripts; do not run directly.
 #
