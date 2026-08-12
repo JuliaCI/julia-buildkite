@@ -64,6 +64,12 @@ publish trigger, exactly like `julia-pr`.
    (TRUSTED: role julia-oidc-publish, kms:Sign + read julia-ci staging bucket
     ONLY + write final)
    verify_trusted_commit.sh → sign (rcodesign / Trusted Signing / KMS-GPG) → promote → deploy docs
+
+ For release (v*) tag builds, julia-ci additionally builds the light/full
+ source dists (misc/source_dist.yml) and stages them alongside the
+ binaries; publish_srcdist.sh KMS-signs them and publishes to
+ bin/src/<majmin>/ in the nightlies bucket, and julia-promote copies them
+ to the release bucket and includes them in the checksums files.
 ```
 
 Why this is safe where branch-pinning was not: Buildkite reports a pull
