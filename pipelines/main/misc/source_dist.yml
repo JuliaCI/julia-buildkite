@@ -44,6 +44,14 @@ steps:
           # the tag (a branch build of the tag commit). Release source
           # tarballs have always used the version prefix.
           V="$$(cat VERSION)"
+          # netlib renamed lapack-<ver>.tgz to .tar.gz (byte-identical) and
+          # the old name 404s; pre-seed the srccache under the name the tree
+          # expects. Best-effort: on failure make tries its own URL as before.
+          LAPACK_VER="$$(sed -n 's/^LAPACK_VER := //p' deps/openblas.version)"
+          mkdir -p deps/srccache
+          curl -fSsL -o "deps/srccache/lapack-$${LAPACK_VER}.tgz" \
+              "https://www.netlib.org/lapack/lapack-$${LAPACK_VER}.tar.gz" \
+              || rm -f "deps/srccache/lapack-$${LAPACK_VER}.tgz"
           # FC=gcc satisfies Make.inc's gfortran presence check; the getall
           # sub-targets only download source tarballs and never run fortran,
           # and the rootfs has no gfortran.
