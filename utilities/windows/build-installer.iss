@@ -66,6 +66,11 @@ PrivilegesRequiredOverridesAllowed=commandline
 WizardStyle=modern
 Compression=lzma2/ultra
 SolidCompression=yes
+; Parallel lzma2 block compression (slightly worse ratio, much faster); the
+; separate 64-bit compressor process avoids the 32-bit compiler's memory
+; ceiling on multiple ultra-dictionary block threads.
+LZMAUseSeparateProcess=yes
+LZMANumBlockThreads=4
 DefaultDirName={autopf}\{#DirName}
 UsePreviousPrivileges=no
 PrivilegesRequired=lowest

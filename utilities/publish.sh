@@ -48,6 +48,15 @@ bash .buildkite/utilities/verify_trusted_commit.sh
 # step can run longer across all triplets.
 export PUBLISH_PREAUTHED=1
 
+# macOS notarization is deferred: build_dmg.sh only submits each dmg to
+# Apple and records the submission here, so Apple's processing overlaps the
+# remaining triplets. ALL of a macOS triplet's products (.tar.gz, .tar.gz.asc,
+# .dmg -- they share the signed tree Apple is judging) are withheld until the
+# final phase below, which waits, staples and only then promotes.
+NOTARY_DEFER_DIR="$(mktemp -d)"
+export NOTARY_DEFER_DIR
+trap 'rm -rf "${NOTARY_DEFER_DIR}"' EXIT
+
 # Collect all triplets from the arches files.
 TRIPLETS=()
 for arches in "${ARCHES_FILES[@]}"; do
@@ -86,6 +95,62 @@ source .buildkite/utilities/aws_oidc.sh "${PUBLISH_OIDC_MODE}"
 if ! bash .buildkite/utilities/publish_srcdist.sh; then
     echo "ERROR: publishing source dists failed" >&2
     FAILED+=( "srcdist" )
+fi
+
+# Deferred macOS triplets: collect Apple's verdicts, staple, and promote.
+# Each .deferinfo (written by upload_julia.sh) is: submission ID, then one
+# "<local path>\t<s3 target>" pair per line covering EVERY product of the
+# triplet (.tar.gz, .tar.gz.asc, .dmg) -- nothing macOS was promoted before
+# this point, so a rejected notarization publishes nothing (the final
+# locations are write-once and could not be repaired by a retry).
+shopt -s nullglob
+DEFERRED_MACOS=( "${NOTARY_DEFER_DIR}"/*.deferinfo )
+shopt -u nullglob
+if [[ "${#DEFERRED_MACOS[@]}" -gt 0 ]]; then
+    echo "+++ Notarize + publish ${#DEFERRED_MACOS[@]} deferred macOS triplet(s)"
+    # Fresh credentials: the previous token may be near its lifetime limit.
+    # shellcheck source=SCRIPTDIR/aws_oidc.sh
+    source .buildkite/utilities/aws_oidc.sh "${PUBLISH_OIDC_MODE}"
+    # shellcheck source=SCRIPTDIR/upload_to_s3.sh
+    source .buildkite/utilities/upload_to_s3.sh
+    RCODESIGN="$(bash .buildkite/utilities/macos/get_rcodesign.sh)"
+    NOTARY_API_KEY_FILE=".buildkite/utilities/macos/notary_api_key.json"
+    for info in "${DEFERRED_MACOS[@]}"; do
+        mapfile -t rec < "${info}"
+        submission_id="${rec[0]}"
+        files=()
+        targets=()
+        dmg_path=""
+        for line in "${rec[@]:1}"; do
+            files+=( "${line%%$'\t'*}" )
+            targets+=( "${line#*$'\t'}" )
+            [[ "${line%%$'\t'*}" == *.dmg ]] && dmg_path="${line%%$'\t'*}"
+        done
+        name="$(basename "${info}" .deferinfo)"
+        echo "--- Notarize + staple + publish ${name}"
+        # notary-wait exits 0 even for a rejected submission; the staple is
+        # the success gate (a rejected submission has no ticket to staple).
+        if ! "${RCODESIGN}" notary-wait --max-wait-seconds 1800 \
+                --api-key-file "${NOTARY_API_KEY_FILE}" "${submission_id}" \
+            || ! "${RCODESIGN}" staple "${dmg_path}"; then
+            echo "ERROR: notarizing/stapling ${name} failed; withholding all its products" >&2
+            FAILED+=( "${name}" )
+            continue
+        fi
+        upload_ok=1
+        PIDS=()
+        for i in "${!files[@]}"; do
+            upload_to_s3 "${files[$i]}" "${targets[$i]}" &
+            PIDS+=( "$!" )
+        done
+        for pid in "${PIDS[@]}"; do
+            wait "${pid}" || upload_ok=0
+        done
+        if [[ "${upload_ok}" -ne 1 ]]; then
+            echo "ERROR: publishing ${name} failed" >&2
+            FAILED+=( "${name}" )
+        fi
+    done
 fi
 
 if [[ "${#FAILED[@]}" -gt 0 ]]; then
