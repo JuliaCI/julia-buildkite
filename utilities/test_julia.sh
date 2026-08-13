@@ -227,7 +227,8 @@ if compgen -G "${JULIA_INSTALL_DIR}/share/julia/test/results*.json"; then
             # shellcheck source=SCRIPTDIR/aws_oidc.sh
             source .buildkite/utilities/aws_oidc.sh tokens
             export AWS_EC2_METADATA_DISABLED=true
-            BUILDKITE_ANALYTICS_TOKEN="$(aws ssm get-parameter --with-decryption \
+            BUILDKITE_ANALYTICS_TOKEN="$(MSYS2_ARG_CONV_EXCL='*' MSYS_NO_PATHCONV=1 \
+                aws ssm get-parameter --with-decryption \
                 --name /julia-ci/tokens/buildkite_analytics_token \
                 --query Parameter.Value --output text)"
 
