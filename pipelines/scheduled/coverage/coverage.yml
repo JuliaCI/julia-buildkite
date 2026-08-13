@@ -166,8 +166,8 @@ steps:
                   echo 'PR build: no coverage tokens; coverage uploads will be skipped';
                 else
                   source .buildkite/utilities/aws_oidc.sh tokens &&
-                  export CODECOV_TOKEN=$$(aws ssm get-parameter --with-decryption --name /julia-ci/tokens/codecov_token --query Parameter.Value --output text) &&
-                  export COVERALLS_TOKEN=$$(aws ssm get-parameter --with-decryption --name /julia-ci/tokens/coveralls_token --query Parameter.Value --output text);
+                  export CODECOV_TOKEN=$$(MSYS2_ARG_CONV_EXCL='*' MSYS_NO_PATHCONV=1 aws ssm get-parameter --with-decryption --name /julia-ci/tokens/codecov_token --query Parameter.Value --output text) &&
+                  export COVERALLS_TOKEN=$$(MSYS2_ARG_CONV_EXCL='*' MSYS_NO_PATHCONV=1 aws ssm get-parameter --with-decryption --name /julia-ci/tokens/coveralls_token --query Parameter.Value --output text);
                 fi &&
                 echo '--- Build Julia from source' &&
                 make -j$${JULIA_NUM_THREADS} VERBOSE=1 &&

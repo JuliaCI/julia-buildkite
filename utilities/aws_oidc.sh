@@ -55,13 +55,15 @@ case "${_OIDC_ROLE_SUFFIX}" in
             echo "ERROR: ${_OIDC_ROLE_SUFFIX} role requested from non-publish pipeline '${BUILDKITE_PIPELINE_SLUG:-}'" >&2
             return 1 2>/dev/null || exit 1
         fi
-        ;;&
+        ;;
     promote)
         if [[ "${BUILDKITE_PIPELINE_SLUG:-}" != *promote* ]]; then
             echo "ERROR: promote role requested from non-promote pipeline '${BUILDKITE_PIPELINE_SLUG:-}'" >&2
             return 1 2>/dev/null || exit 1
         fi
-        ;;&
+        ;;
+esac
+case "${_OIDC_ROLE_SUFFIX}" in
     publish|docs-deploy|promote)
         if [[ "${BUILDKITE_PULL_REQUEST:-false}" != "false" ]]; then
             echo "ERROR: ${_OIDC_ROLE_SUFFIX} role must not be requested on a pull request build" >&2
