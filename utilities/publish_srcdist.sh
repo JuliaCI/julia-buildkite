@@ -63,7 +63,10 @@ for SUFFIX in "" "-full"; do
 
     # The in-tarball prefix is part of the published interface: releases
     # extract to julia-<version>/ (source_dist.yml pins JULIA_COMMIT).
-    FIRST_ENTRY="$(tar -tzf "${FINAL}" | head -1)"
+    # head closing the pipe SIGPIPEs tar (silent exit 141 under pipefail);
+    # mask tar's status -- a bad tarball yields an empty/garbage FIRST_ENTRY
+    # that the prefix check below rejects.
+    FIRST_ENTRY="$( (tar -tzf "${FINAL}" || true) | head -1)"
     if [[ "${FIRST_ENTRY}" != "julia-${JULIA_VERSION}/"* ]]; then
         echo "ERROR: ${FINAL} does not extract to julia-${JULIA_VERSION}/ (first entry: ${FIRST_ENTRY})" >&2
         exit 1
