@@ -89,3 +89,21 @@ steps:
           queue: "default"
           os: "linux"
           arch: "x86_64"
+
+  - wait: ~
+
+  # Release tags hand off to julia-promote, where a block step holds the
+  # build until the release manager clicks "Promote" (see
+  # pipelines/promote/launch.yml). Master (nightly) and release-* publishes
+  # have nothing to promote, and a no-GPL publish stages a different
+  # artifact set than promote's MAPPINGS expects, so both are excluded.
+  # Trigger-created builds bypass the target's "Trigger builds after
+  # pushing code: OFF" (that setting only governs webhooks) but still pass
+  # its v* branch limiting.
+  - trigger: "julia-promote"
+    label: ":package: trigger promote (gated)"
+    if: build.branch =~ /^v[0-9]/ && build.env("PUBLISH_NOGPL") != "true"
+    build:
+      commit: "${BUILDKITE_COMMIT}"
+      branch: "${BUILDKITE_BRANCH}"
+      message: "promote ${BUILDKITE_BRANCH}"
