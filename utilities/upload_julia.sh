@@ -196,14 +196,24 @@ elif [[ "${OS}" == "windows" || "${OS}" == "windowsnogpl" ]]; then
     CODESIGN_HOOK_DONE_WIN="Z:${CODESIGN_HOOK_DONE//\//\\}"
     export CODESIGN_HOOK_DONE_WIN
 
+    # Inno Setup validates that every configured SignTool invocation actually
+    # leaves a digital signature.  For the non-production test path, omit the
+    # SignTool entirely instead of pointing it at codesign.sh's no-op mode.
+    iscc_sign_args=()
+    if [[ "${PUBLISH_SKIP_WINDOWS_SIGN:-0}" != "1" ]]; then
+        iscc_sign_args=(
+            /Dsign=true
+            "/Smysigntool=cmd.exe /c $("${WINE}" winepath -w "${THIS_DIR}/windows/wine_signtool.cmd") \$f"
+        )
+    fi
+
     "${WINE}" "${ISCC_EXE}" \
         /DAppVersion="${JULIA_VERSION}" \
         /DSourceDir="$("${WINE}" winepath -w "$(pwd)/${JULIA_INSTALL_DIR}")" \
         /DRepoDir="$("${WINE}" winepath -w "$(pwd)")" \
         /F"${UPLOAD_FILENAME}" \
         /O"$("${WINE}" winepath -w "$(pwd)")" \
-        /Dsign=true \
-        /Smysigntool="cmd.exe /c $("${WINE}" winepath -w "${THIS_DIR}/windows/wine_signtool.cmd") \$f" \
+        "${iscc_sign_args[@]}" \
         "$("${WINE}" winepath -w "${iss_file}")"
 
     # Tripwire: if the Wine->host signing bridge failed silently, the
