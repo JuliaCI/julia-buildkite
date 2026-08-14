@@ -24,7 +24,7 @@ steps:
               rootfs_treehash: "8b46765146862479f0a8946f2ef783a8bf93b20f"
               uid: 1000
               gid: 1000
-        timeout_in_minutes: 600 # 10h
+        timeout_in_minutes: 720 # 12h
         commands: |
           echo "--- Obtain coverage tokens"
           # Coverage tokens are fetched from SSM Parameter Store with this
@@ -91,7 +91,7 @@ steps:
               # Drop default "registries" directory, so it is not persisted from execution to execution
               persist_depot_dirs: packages,artifacts,compiled
               version: '1.11' # GREP_ME: Keep this updated. Do not set it to '1' or 'stable' or 'latest'.
-        timeout_in_minutes: 300 # 5h
+        timeout_in_minutes: 360 # 6h
         commands: |
           echo "--- Obtain coverage tokens"
           # Coverage tokens are fetched from SSM Parameter Store with this
@@ -213,7 +213,7 @@ steps:
                 - "BUILDKITE_PULL_REQUEST"
                 - "BUILDKITE_BUILD_NUMBER"
                 - "BUILDKITE_PIPELINE_SLUG"
-        timeout_in_minutes: 540 # 9h
+        timeout_in_minutes: 720 # 12h
         agents:
           queue: "test"
           os: "windows"
