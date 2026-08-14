@@ -268,7 +268,7 @@ function upload_coverage(fcs)
 
     # Determine job characteristics for parallel uploads
     platform = Sys.islinux() ? "linux" : Sys.isapple() ? "macos" : "windows"
-    job_flags = [platform, "coverage"]
+    job_flags = [platform]
 
     # Use build number to group parallel uploads
     build_id = get(ENV, "BUILDKITE_BUILD_NUMBER", nothing)
