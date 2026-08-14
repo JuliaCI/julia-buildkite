@@ -64,6 +64,12 @@ publish trigger, exactly like `julia-pr`.
    (TRUSTED: role julia-oidc-publish, kms:Sign + read julia-ci staging bucket
     ONLY + write final)
    verify_trusted_commit.sh → sign (rcodesign / Trusted Signing / KMS-GPG) → promote → deploy docs
+
+ For release (v*) tag builds, julia-ci additionally builds the light/full
+ source dists (misc/source_dist.yml) and stages them alongside the
+ binaries; publish_srcdist.sh KMS-signs them and publishes to
+ bin/src/<majmin>/ in the nightlies bucket, and julia-promote copies them
+ to the release bucket and includes them in the checksums files.
 ```
 
 Why this is safe where branch-pinning was not: Buildkite reports a pull
@@ -128,6 +134,15 @@ and which carry AWS session tags (`step_key`, `build_commit`, `pipeline_slug`, .
   that publish would consume. Build / PR jobs cannot touch release paths
   or sign anything. (Consumers, e.g. juliaup, map PR number → head sha
   via the GitHub API and fetch from the sha path in the `-pr` bucket.)
+  Staged names are always commit-keyed (`julia-<sha10>-<os>-<arch>`);
+  version names exist only at the final promote. A `v*` **tag** build is
+  an *independent* build of its commit that stages under an extra `tag/`
+  path flavor (`bin/<sha>/tag/…`): tag state is baked into build content
+  (`Base.VERSION` on prereleases, the install prefix), so pushing a
+  release branch and its tag — one build each, same commit — must not
+  let the branch build's artifacts stand in for the release. The
+  publish run picks the flavor (and its `TAR_VERSION` naming) from its
+  trigger's branch, which carries the tag name for tag builds.
 * **Tokens**: only `julia-ci` has a tokens role (`julia-oidc-tokens-ci`,
   SSM `ssm:GetParameter` on the telemetry tokens). There is deliberately
   no `-pr` counterpart: a pull request executes attacker-controlled code
@@ -139,6 +154,17 @@ and which carry AWS session tags (`step_key`, `build_commit`, `pipeline_slug`, .
   uploads of already-existing objects fail. The only exception is the
   `julia-latest-*` pointer objects, which release builds intentionally
   repoint. Object versioning on the bucket is recommended belt-and-braces.
+  Write-once is per *commit*, not per build: every object carries a
+  `build-commit` metadata stamp (the Buildkite-attested commit), and
+  `upload_to_s3.sh` treats an existing object from the same commit as
+  success (first upload wins). Builds are not byte-reproducible, so this
+  is what lets a rebuild of an already-staged commit, concurrent sibling
+  builds of the same commit sharing a key (the doctest htmldocs archive
+  during a release-branch + tag double build), and a re-run publish all
+  succeed idempotently instead of going red. A conflict across
+  *different* commits (e.g. a repointed release tag at the final
+  locations) is still a hard error; replacing published artifacts is a
+  deliberate manual operation.
 * Signing never exposes key material: every signature (macOS code signature,
   notarization JWT, GPG tarball signature, docs-deploy SSH authentication)
   is a `kms:Sign` call, conditioned on the calling job's step
@@ -320,9 +346,19 @@ The single publish step signs and packages for every OS on linux:
   Only the notary key uses KMS `EXTERNAL` (BYOK) import, because Apple
   generates App Store Connect API keys and we cannot register our own
   public key with Apple.
-* Retried upload jobs hitting an existing identical object are handled in
-  `utilities/upload_julia.sh` (412 + ETag comparison), not by allowing
-  overwrites.
+* Retried upload jobs hitting an existing object are handled in
+  `utilities/upload_to_s3.sh` (412, then ETag comparison for identical
+  content and the `build-commit` metadata stamp for a sibling build of
+  the same commit), not by allowing overwrites.
+* Re-running a release: use **Rebuild** on the `julia-ci` tag build, or
+  create a new `julia-ci` build with the branch set to the tag name
+  (`v<version>`) — both enter the release tag flow. To re-run just the
+  promote, POST a `julia-publish` build with the release commit and
+  `branch: v<version>` plus `ignore_pipeline_branch_filters: true`
+  (branch webhook builds are disabled on the publish pipeline); a plain
+  `branch: master` build of the same commit would promote it under
+  commit-hash (nightly) names instead. Already-promoted objects are
+  skipped via the same-commit rule above.
 * juliaup needs a change to consume PR binaries: resolve PR number → head
   sha via the GitHub API, then fetch
   `s3://julialang-ephemeral-pr/bin/<sha>/julia-*` (this replaces the old
