@@ -1,0 +1,90 @@
+steps:
+  - group: "Check"
+    steps:
+      - label: "source dist"
+        key: source_dist
+        # Release tag flow only (mirrors RELEASE_TAG_FLOW in build_envs.sh):
+        # source dists are published per release, not per commit, and this
+        # step costs a docs build plus a full deps download.
+        if: pipeline.slug == "julia-ci" && (build.tag =~ /^v[0-9]/ || build.branch =~ /^v[0-9]/)
+        depends_on:
+          - "build_x86_64-linux-gnu"
+        plugins:
+          - JuliaCI/external-buildkite#v1:
+              version: "./.buildkite-external-version"
+              repo_url: "https://github.com/JuliaCI/julia-buildkite"
+          - JuliaCI/julia#v1:
+              # Host julia, required by the sandbox plugin; the docs are built
+              # with the freshly-built julia downloaded below.
+              persist_depot_dirs: packages,artifacts,compiled
+              version: '1.11' # GREP_ME: Keep this updated. Do not set it to '1' or 'stable' or 'latest'.
+          - JuliaCI/sandbox#v2:
+              rootfs_url: https://github.com/JuliaCI/rootfs-images/releases/download/v8.5/package_linux.x86_64.tar.gz
+              rootfs_treehash: "8b46765146862479f0a8946f2ef783a8bf93b20f"
+              uid: 1000
+              gid: 1000
+              workspaces:
+                # Include `/cache/repos` so that our `git` version introspection works.
+                - "/cache/repos:/cache/repos"
+        commands: |
+          # Download pre-built julia, extract into `usr/` (the in-tree
+          # build_bindir), so `make -C doc html` finds a julia to run
+          # Documenter with -- no compilation happens in this step.
+          buildkite-agent artifact download --step "build_x86_64-linux-gnu" 'julia-*-linux-x86_64.tar.gz' .
+          mkdir -p ./usr
+          tar -C ./usr --strip-components=1 -zxf julia-*-linux-x86_64.tar.gz
+          rm -f julia-*-linux-x86_64.tar.gz
+
+          echo "--- Build HTML docs (bundled into the source dists)"
+          make --output-sync -C doc html
+
+          echo "--- Build source distribution tarballs"
+          # JULIA_COMMIT is overridden to the version so the in-tarball prefix
+          # is julia-<version>/ even when the agent checkout cannot resolve
+          # the tag (a branch build of the tag commit). Release source
+          # tarballs have always used the version prefix.
+          V="$$(cat VERSION)"
+          # netlib renamed lapack-<ver>.tgz to .tar.gz (byte-identical) and
+          # the old name 404s; pre-seed the srccache under the name the tree
+          # expects. Best-effort: on failure make tries its own URL as before.
+          LAPACK_VER="$$(sed -n 's/^LAPACK_VER := //p' deps/openblas.version)"
+          mkdir -p deps/srccache
+          curl -fSsL -o "deps/srccache/lapack-$${LAPACK_VER}.tgz" \
+              "https://www.netlib.org/lapack/lapack-$${LAPACK_VER}.tar.gz" \
+              || rm -f "deps/srccache/lapack-$${LAPACK_VER}.tgz"
+          # FC=gcc satisfies Make.inc's gfortran presence check; the getall
+          # sub-targets only download source tarballs and never run fortran,
+          # and the rootfs has no gfortran.
+          make light-source-dist full-source-dist JULIA_COMMIT="$${V}" FC=gcc
+          mv "julia-$${V}_$${V}.tar.gz" "julia-$${V}.tar.gz"
+          mv "julia-$${V}_$${V}-full.tar.gz" "julia-$${V}-full.tar.gz"
+          sha256sum "julia-$${V}.tar.gz" "julia-$${V}-full.tar.gz"
+
+          echo "--- Stage source dists to S3 for the publish pipeline"
+          # Mirror the doctest htmldocs handoff: a write-once upload to this
+          # build's commit-sha-gated staging path via the untrusted `stage`
+          # role, under stable version-independent keys so the publish
+          # pipeline can fetch them by exact key (single public GetObject,
+          # no bucket listing). publish_srcdist.sh reads them back, signs,
+          # and uploads to the canonical locations.
+          if [[ "$${BUILDKITE_PIPELINE_SLUG:-}" == "julia-pr" ]]; then
+              STAGING_BUCKET="julialang-ephemeral-pr"
+          elif [[ "$${BUILDKITE_PIPELINE_SLUG:-}" == julia-buildkite* ]]; then
+              STAGING_BUCKET="julialang-ephemeral-buildkite"
+          else
+              STAGING_BUCKET="julialang-ephemeral-ci"
+          fi
+          source .buildkite/utilities/aws_oidc.sh stage
+          source .buildkite/utilities/upload_to_s3.sh
+          # Always the tag/ staging flavor: the `if:` above restricts this
+          # step to the release tag flow (see STAGING_FLAVOR in build_envs.sh).
+          UPLOAD_TO_S3_ACL=none upload_to_s3 "julia-$${V}.tar.gz" \
+              "$${STAGING_BUCKET}/$${S3_BUCKET_PREFIX:-bin}/$${BUILDKITE_COMMIT?}/tag/julia-srcdist.tar.gz"
+          UPLOAD_TO_S3_ACL=none upload_to_s3 "julia-$${V}-full.tar.gz" \
+              "$${STAGING_BUCKET}/$${S3_BUCKET_PREFIX:-bin}/$${BUILDKITE_COMMIT?}/tag/julia-srcdist-full.tar.gz"
+        timeout_in_minutes: 120
+        agents:
+          queue: "test"
+          sandbox_capable: "true"
+          os: "linux"
+          arch: "x86_64"
