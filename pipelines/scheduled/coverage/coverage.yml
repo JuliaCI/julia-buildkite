@@ -24,6 +24,8 @@ steps:
               rootfs_treehash: "8b46765146862479f0a8946f2ef783a8bf93b20f"
               uid: 1000
               gid: 1000
+              workspaces:
+                - "/cache/repos:/cache/repos"
         timeout_in_minutes: 720 # 12h
         commands: |
           echo "--- Obtain coverage tokens"
