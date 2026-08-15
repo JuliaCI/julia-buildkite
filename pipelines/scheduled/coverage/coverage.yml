@@ -38,8 +38,10 @@ steps:
             echo "No coverage tokens in this pipeline; coverage uploads will be skipped"
           else
             source .buildkite/utilities/aws_oidc.sh tokens
-            export CODECOV_TOKEN="$$(aws ssm get-parameter --with-decryption --name /julia-ci/tokens/codecov_token --query Parameter.Value --output text)"
-            export COVERALLS_TOKEN="$$(aws ssm get-parameter --with-decryption --name /julia-ci/tokens/coveralls_token --query Parameter.Value --output text)"
+            CODECOV_TOKEN="$$(aws ssm get-parameter --with-decryption --name /julia-ci/tokens/codecov_token --query Parameter.Value --output text)" || { echo "Failed to fetch Codecov token" >&2; exit 1; }
+            COVERALLS_TOKEN="$$(aws ssm get-parameter --with-decryption --name /julia-ci/tokens/coveralls_token --query Parameter.Value --output text)" || { echo "Failed to fetch Coveralls token" >&2; exit 1; }
+            export CODECOV_TOKEN COVERALLS_TOKEN
+            [[ -n "$${CODECOV_TOKEN}" && -n "$${COVERALLS_TOKEN}" ]] || { echo "Coverage token fetch returned an empty value" >&2; exit 1; }
           fi
 
           echo "--- Build Julia from source"
@@ -68,7 +70,7 @@ steps:
           buildkite-agent artifact upload lcov_files.tar.gz
 
           echo "--- Process and upload coverage information"
-          if [[ -n "$${CODECOV_TOKEN:-}" ]]; then
+          if [[ -n "$${CODECOV_TOKEN:-}" && -n "$${COVERALLS_TOKEN:-}" ]]; then
             ./julia --color=yes .buildkite/pipelines/scheduled/coverage/upload_coverage.jl
           else
             echo "No coverage tokens; skipping upload"
@@ -105,8 +107,10 @@ steps:
             echo "No coverage tokens in this pipeline; coverage uploads will be skipped"
           else
             source .buildkite/utilities/aws_oidc.sh tokens
-            export CODECOV_TOKEN="$$(aws ssm get-parameter --with-decryption --name /julia-ci/tokens/codecov_token --query Parameter.Value --output text)"
-            export COVERALLS_TOKEN="$$(aws ssm get-parameter --with-decryption --name /julia-ci/tokens/coveralls_token --query Parameter.Value --output text)"
+            CODECOV_TOKEN="$$(aws ssm get-parameter --with-decryption --name /julia-ci/tokens/codecov_token --query Parameter.Value --output text)" || { echo "Failed to fetch Codecov token" >&2; exit 1; }
+            COVERALLS_TOKEN="$$(aws ssm get-parameter --with-decryption --name /julia-ci/tokens/coveralls_token --query Parameter.Value --output text)" || { echo "Failed to fetch Coveralls token" >&2; exit 1; }
+            export CODECOV_TOKEN COVERALLS_TOKEN
+            [[ -n "$${CODECOV_TOKEN}" && -n "$${COVERALLS_TOKEN}" ]] || { echo "Coverage token fetch returned an empty value" >&2; exit 1; }
           fi
 
           echo "--- Build Julia from source"
@@ -135,7 +139,7 @@ steps:
           buildkite-agent artifact upload lcov_files.tar.gz
 
           echo "--- Process and upload coverage information"
-          if [[ -n "$${CODECOV_TOKEN:-}" ]]; then
+          if [[ -n "$${CODECOV_TOKEN:-}" && -n "$${COVERALLS_TOKEN:-}" ]]; then
             ./julia --color=yes .buildkite/pipelines/scheduled/coverage/upload_coverage.jl
           else
             echo "No coverage tokens; skipping upload"
@@ -164,12 +168,14 @@ steps:
               always-pull: true
               command: ["bash", "-c", "
                 echo '--- Obtain coverage tokens' &&
-                if [[ $${BUILDKITE_PIPELINE_SLUG} == julia-pr ]]; then
-                  echo 'PR build: no coverage tokens; coverage uploads will be skipped';
+                if [[ $${BUILDKITE_PIPELINE_SLUG} != julia-ci ]]; then
+                  echo 'No coverage tokens in this pipeline; coverage uploads will be skipped';
                 else
                   source .buildkite/utilities/aws_oidc.sh tokens &&
-                  export CODECOV_TOKEN=$$(MSYS2_ARG_CONV_EXCL='*' MSYS_NO_PATHCONV=1 aws ssm get-parameter --with-decryption --name /julia-ci/tokens/codecov_token --query Parameter.Value --output text) &&
-                  export COVERALLS_TOKEN=$$(MSYS2_ARG_CONV_EXCL='*' MSYS_NO_PATHCONV=1 aws ssm get-parameter --with-decryption --name /julia-ci/tokens/coveralls_token --query Parameter.Value --output text);
+                  CODECOV_TOKEN=$$(MSYS2_ARG_CONV_EXCL='*' MSYS_NO_PATHCONV=1 aws ssm get-parameter --with-decryption --name /julia-ci/tokens/codecov_token --query Parameter.Value --output text) &&
+                  COVERALLS_TOKEN=$$(MSYS2_ARG_CONV_EXCL='*' MSYS_NO_PATHCONV=1 aws ssm get-parameter --with-decryption --name /julia-ci/tokens/coveralls_token --query Parameter.Value --output text) &&
+                  export CODECOV_TOKEN COVERALLS_TOKEN &&
+                  [[ -n $${CODECOV_TOKEN} && -n $${COVERALLS_TOKEN} ]] || { echo 'Coverage token fetch returned an empty value' >&2; exit 1; };
                 fi &&
                 echo '--- Build Julia from source' &&
                 make -j$${JULIA_NUM_THREADS} VERBOSE=1 &&
@@ -191,10 +197,10 @@ steps:
                 tar -zcf lcov_files.tar.gz lcov_files/ &&
                 buildkite-agent artifact upload lcov_files.tar.gz &&
                 echo '--- Process and upload coverage information' &&
-                if [[ -n $${CODECOV_TOKEN:-} ]]; then
+                if [[ -n $${CODECOV_TOKEN:-} && -n $${COVERALLS_TOKEN:-} ]]; then
                   ./usr/bin/julia.exe --color=yes .buildkite/pipelines/scheduled/coverage/upload_coverage.jl;
                 else
-                  echo 'No coverage tokens (PR build); skipping upload';
+                  echo 'No coverage tokens; skipping upload';
                 fi
                 "]
               propagate-environment: true
@@ -245,16 +251,19 @@ steps:
         timeout_in_minutes: 10
         commands: |
           echo "--- Signal completion of parallel coverage uploads"
-          # PR builds hold no tokens and did not upload anything, so there
-          # is nothing to finalize there.
-          if [[ "$${BUILDKITE_PIPELINE_SLUG}" == "julia-pr" ]]; then
-            echo "PR build: nothing was uploaded; nothing to finalize"
-          else
+          if [[ "$${BUILDKITE_PIPELINE_SLUG}" == "julia-ci" ]]; then
             # The coveralls token is fetched from SSM Parameter Store with
             # this job's OIDC identity; no static secrets exist in CI config.
             source .buildkite/utilities/aws_oidc.sh tokens
-            export COVERALLS_TOKEN="$$(aws ssm get-parameter --with-decryption --name /julia-ci/tokens/coveralls_token --query Parameter.Value --output text)"
+            COVERALLS_TOKEN="$$(aws ssm get-parameter --with-decryption --name /julia-ci/tokens/coveralls_token --query Parameter.Value --output text)" || { echo "Failed to fetch Coveralls token" >&2; exit 1; }
+            export COVERALLS_TOKEN
+            [[ -n "$${COVERALLS_TOKEN}" ]] || { echo "Coveralls token fetch returned an empty value" >&2; exit 1; }
+          fi
+
+          if [[ -n "$${COVERALLS_TOKEN:-}" ]]; then
             julia --color=yes .buildkite/pipelines/scheduled/coverage/finish_parallel_coverage.jl
+          else
+            echo "No Coveralls token; nothing to finalize"
           fi
         agents:
           queue: "test"

@@ -144,7 +144,11 @@ buildkite-agent oidc request-token \
     --aws-session-tag "${_OIDC_AWS_SESSION_TAGS}" \
     > "${_OIDC_TOKEN_FILE}"
 
-export AWS_WEB_IDENTITY_TOKEN_FILE="${_OIDC_TOKEN_FILE}"
+AWS_WEB_IDENTITY_TOKEN_FILE="${_OIDC_TOKEN_FILE}"
+if command -v cygpath >/dev/null 2>&1; then
+    AWS_WEB_IDENTITY_TOKEN_FILE="$(cygpath -w "${_OIDC_TOKEN_FILE}")"
+fi
+export AWS_WEB_IDENTITY_TOKEN_FILE
 export AWS_ROLE_ARN="arn:aws:iam::${JULIA_CI_AWS_ACCOUNT_ID}:role/julia-oidc-${_OIDC_ROLE_SUFFIX}"
 AWS_ROLE_SESSION_NAME="bk-$(tr -dc 'a-zA-Z0-9=,.@-' <<<"${BUILDKITE_STEP_KEY:-job}" | cut -c1-48)-${BUILDKITE_BUILD_NUMBER:-0}"
 export AWS_ROLE_SESSION_NAME
