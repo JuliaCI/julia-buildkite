@@ -86,6 +86,6 @@ steps:
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
         commands: "buildkite-agent pipeline upload .buildkite/pipelines/main/misc/deploy_docs.yml"
         agents:
-          queue: "default"
+          queue: "launch"
           os: "linux"
           arch: "x86_64"
