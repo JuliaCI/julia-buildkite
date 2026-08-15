@@ -117,15 +117,34 @@ create_dmg
 if [[ "${PUBLISH_SKIP_NOTARIZATION:-0}" != "1" ]]; then
     RCODESIGN="$("${THIS_DIR}/get_rcodesign.sh")"
 
-    "${RCODESIGN}" notary-submit \
-        --api-key-file "${NOTARY_API_KEY_FILE}" \
-        --wait \
-        "${DMG_NAME}"
+    if [[ -n "${NOTARY_DEFER_DIR:-}" ]]; then
+        # Deferred mode (publish.sh): only submit -- Apple processes while
+        # the remaining triplets publish, and publish.sh waits/staples/
+        # uploads in its final phase. Without --wait, notary-submit returns
+        # after the upload, logging "created submission ID: <uuid>" to
+        # stderr; record that ID.
+        SUBMIT_LOG="$(mktemp)"
+        "${RCODESIGN}" notary-submit \
+            --api-key-file "${NOTARY_API_KEY_FILE}" \
+            "${DMG_NAME}" 2>&1 | tee "${SUBMIT_LOG}"
+        SUBMISSION_ID="$(sed -n 's/.*created submission ID: \([0-9a-fA-F-]*\).*/\1/p' "${SUBMIT_LOG}" | head -n1)"
+        rm -f "${SUBMIT_LOG}"
+        if [[ -z "${SUBMISSION_ID}" ]]; then
+            echo "ERROR: could not parse the notary submission ID from rcodesign output" >&2
+            exit 1
+        fi
+        printf '%s\n' "${SUBMISSION_ID}" > "${NOTARY_DEFER_DIR}/${UPLOAD_FILENAME}.submission"
+    else
+        "${RCODESIGN}" notary-submit \
+            --api-key-file "${NOTARY_API_KEY_FILE}" \
+            --wait \
+            "${DMG_NAME}"
 
-    # Staple the ticket onto the .dmg itself -- no rebuild needed. The stapled
-    # .dmg validates offline on download; Gatekeeper then assesses the .app when
-    # it is first launched from the mounted volume.
-    "${RCODESIGN}" staple "${DMG_NAME}"
+        # Staple the ticket onto the .dmg itself -- no rebuild needed. The stapled
+        # .dmg validates offline on download; Gatekeeper then assesses the .app when
+        # it is first launched from the mounted volume.
+        "${RCODESIGN}" staple "${DMG_NAME}"
+    fi
 else
     echo "Skipping notarization (PUBLISH_SKIP_NOTARIZATION=1): .dmg is KMS-signed but not notarized/stapled." >&2
 fi

@@ -48,6 +48,18 @@ wait_pids() {
     done
 }
 
+# Create a .tar.gz, parallel-compressed with pigz when available (pigz is
+# not a hard dependency -- fall back to plain gzip).
+make_targz() {
+    local out="$1"
+    shift
+    if command -v pigz >/dev/null 2>&1; then
+        tar -I pigz -cf "${out}" "$@"
+    else
+        tar -zcf "${out}" "$@"
+    fi
+}
+
 if [[ "${MODE}" != "publish" ]]; then
     echo "ERROR: unknown mode '${MODE}' (expected 'publish')" >&2
     exit 1
@@ -143,7 +155,7 @@ if [[ "${OS}" == "macos" || "${OS}" == "macosnogpl" ]]; then
     rm -rf "${JULIA_INSTALL_DIR}"
     cp -aR "${APP_NAME}/Contents/Resources/julia" "${JULIA_INSTALL_DIR}"
     rm -f "${UPLOAD_FILENAME}.tar.gz"
-    tar zcf "${UPLOAD_FILENAME}.tar.gz" "${JULIA_INSTALL_DIR}"
+    make_targz "${UPLOAD_FILENAME}.tar.gz" "${JULIA_INSTALL_DIR}"
 
     # Build the `.dmg` from the signed .app (notarization gated by
     # PUBLISH_SKIP_NOTARIZATION inside build_dmg.sh).
@@ -151,7 +163,18 @@ if [[ "${OS}" == "macos" || "${OS}" == "macosnogpl" ]]; then
     MACOS_CODESIGN_KMS_KEY="${MACOS_CODESIGN_KMS_KEY}" APP_PATH="${APP_NAME}" \
         .buildkite/utilities/macos/build_dmg.sh
 
-    UPLOAD_EXTENSIONS+=( "dmg" )
+    if [[ -n "${NOTARY_DEFER_DIR:-}" && "${PUBLISH_SKIP_NOTARIZATION:-0}" != "1" ]]; then
+        # Deferred notarization (publish.sh): build_dmg.sh only submitted the
+        # dmg to Apple, so nothing is stapled yet. Withhold ALL macOS products
+        # from the promote step below, not just the dmg: the .tar.gz contains
+        # the exact signed tree Apple is judging, and the final locations are
+        # write-once (a rejected signature must not leave an unrepairable
+        # public object). The defer record for publish.sh is written at the
+        # promote step, once the .tar.gz.asc exists too.
+        NOTARY_DEFERRED=1
+    else
+        UPLOAD_EXTENSIONS+=( "dmg" )
+    fi
 elif [[ "${OS}" == "windows" || "${OS}" == "windowsnogpl" ]]; then
     echo "--- [windows] Extract pre-built Julia"
     # JULIA_INSTALL_DIR is shared across the triplets published sequentially
@@ -240,14 +263,15 @@ elif [[ "${OS}" == "windows" || "${OS}" == "windowsnogpl" ]]; then
     # Immediately re-compress that tarball for upload
     echo "--- [windows] Re-compress codesigned tarball"
     rm -f "${UPLOAD_FILENAME}.tar.gz"
-    tar zcf "${UPLOAD_FILENAME}.tar.gz" "${JULIA_INSTALL_DIR}"
+    make_targz "${UPLOAD_FILENAME}.tar.gz" "${JULIA_INSTALL_DIR}"
 
     # Use 7z (p7zip) to create a `.zip` file to upload as well
     echo "--- [windows] make zip"
     # `7z a` merges into an existing archive; start fresh so a leftover zip
     # from an earlier run in the same workdir can't contribute stale entries.
     rm -f "${UPLOAD_FILENAME}.zip"
-    7z a "${UPLOAD_FILENAME}.zip" "${JULIA_INSTALL_DIR}"
+    # -mmt=on: compress entries in parallel
+    7z a -mmt=on "${UPLOAD_FILENAME}.zip" "${JULIA_INSTALL_DIR}"
     UPLOAD_EXTENSIONS+=( "zip" )
 fi
 
@@ -270,6 +294,30 @@ python3 .buildkite/utilities/kms_gpg_sign.py \
     --kms-key-id "${TARBALL_SIGNING_KMS_KEY}" \
     "${UPLOAD_FILENAME}.tar.gz"
 UPLOAD_EXTENSIONS+=( "tar.gz.asc" )
+
+# Deferred notarization: promote NOTHING for this triplet yet. Record the
+# submission ID plus a "<local path>\t<s3 target>" pair for every product;
+# publish.sh waits for Apple's verdict, staples the dmg, and only then
+# uploads everything in its final phase.
+if [[ -n "${NOTARY_DEFERRED:-}" ]]; then
+    UPLOAD_EXTENSIONS+=( "dmg" )
+    {
+        cat "${NOTARY_DEFER_DIR}/${UPLOAD_FILENAME}.submission"
+        for EXT in "${UPLOAD_EXTENSIONS[@]}"; do
+            for UPLOAD_TARGET in "${UPLOAD_TARGETS[@]}"; do
+                printf '%s\t%s\n' "$(realpath "${UPLOAD_FILENAME}.${EXT}")" "${UPLOAD_TARGET}.${EXT}"
+            done
+        done
+    } > "${NOTARY_DEFER_DIR}/${UPLOAD_FILENAME}.deferinfo"
+
+    echo "+++ Deferred until notarization succeeds"
+    for UPLOAD_TARGET in "${UPLOAD_TARGETS[@]}"; do
+        for EXT in "${UPLOAD_EXTENSIONS[@]}"; do
+            echo " (deferred) s3://${UPLOAD_TARGET}.${EXT}"
+        done
+    done
+    exit 0
+fi
 
 # Promote to all final S3 targets (each target gets a direct upload of the
 # local file; no bucket-to-bucket copies, since write-once enforcement only

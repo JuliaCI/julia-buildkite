@@ -29,20 +29,28 @@ trap 'rm -rf "${WORK}"' EXIT
 export GIT_DIR="${WORK}/repo.git"
 git init -q --bare "${GIT_DIR}"
 
+# Treeless fetches (--filter=tree:0): the reachability checks below only walk
+# commit (and tag) objects, so trees and blobs are never needed. The filter
+# requires a promisor remote, hence the named remote; refs still come fresh
+# from CANONICAL_URL.
+git remote add up "${CANONICAL_URL}"
+git config core.repositoryformatversion 1
+git config extensions.partialclone up
+
 echo "--- Verify ${COMMIT:0:12} is on a protected ref of ${CANONICAL_URL}"
 
 # Fetch only the protected refs from the canonical upstream. A commit that
 # only exists on a fork / PR branch will not be reachable from any of these.
-git fetch -q --no-tags "${CANONICAL_URL}" \
+git fetch -q --no-tags --filter=tree:0 up \
     "refs/heads/master:refs/remotes/up/master" \
     "refs/heads/release-*:refs/remotes/up/release/*" || true
 # Tags separately (release builds), into refs/tags/
-git fetch -q "${CANONICAL_URL}" "refs/tags/v*:refs/tags/v*" || true
+git fetch -q --filter=tree:0 up "refs/tags/v*:refs/tags/v*" || true
 
 # Make sure we actually have the commit object locally (fetch it directly if
 # the ref fetch above did not bring it in, e.g. very fresh master tip).
 if ! git cat-file -e "${COMMIT}^{commit}" 2>/dev/null; then
-    git fetch -q "${CANONICAL_URL}" "${COMMIT}" 2>/dev/null || true
+    git fetch -q --filter=tree:0 up "${COMMIT}" 2>/dev/null || true
 fi
 
 is_reachable() {
