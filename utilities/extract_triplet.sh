@@ -35,6 +35,9 @@ case "${TRIPLET}" in
     *-gnunogpl) # builds that use `USE_GPL_LIBS=0`
         OS="linuxnogpl"
         ;;
+    *-gnuopt) # optimized Linux builds
+        OS="linuxopt"
+        ;;
     *-musl)
         OS="musl"
         ;;

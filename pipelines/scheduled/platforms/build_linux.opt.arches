@@ -1,0 +1,8 @@
+# ROOTFS_IMAGE_NAME    TRIPLET                ARCH      ARCH_ROOTFS    JULIA_CI_BUILD_MODE    MAKE_FLAGS    TIMEOUT    ROOTFS_TAG     ROOTFS_HASH
+llvm_passes            x86_64-linux-gnuopt    x86_64    x86_64         pgo-lto-bolt        .             .          v8.5           630126d5595f428ef824651b9be020ffc485eb6f
+
+# These special lines allow us to embed default values for the columns above.
+# Any column without a default mapping here will simply substitute a `.` to the empty string
+
+# This builds LLVM twice and Julia three times.
+#default TIMEOUT 360

@@ -1,0 +1,8 @@
+# ROOTFS_IMAGE_NAME    TRIPLET                ARCH      ARCH_ROOTFS    TIMEOUT    USE_RR    ROOTFS_TAG     ROOTFS_HASH
+tester_linux           x86_64-linux-gnuopt    x86_64    x86_64         .          .         v8.5           0180f0aba045c63c44e4732b7981716aa77eaf71
+
+# These special lines allow us to embed default values for the columns above.
+# Any column without a default mapping here will simply substitute a `.` to the empty string
+
+# Use the regular Linux test timeout.
+#default TIMEOUT 155

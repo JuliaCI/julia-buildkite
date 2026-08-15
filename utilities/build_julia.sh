@@ -85,9 +85,37 @@ filter_buildroot() {
     fi
 }
 
-echo "--- Build Julia"
-echo "Note: The log stream is filtered. [buildroot] replaces pwd $(pwd)"
-${MAKE} "${MFLAGS[@]}" 2>&1 | filter_buildroot
+if [[ "${JULIA_CI_BUILD_MODE-}" == "pgo-lto-bolt" ]]; then
+    echo "--- Build Julia (optimized: PGO+LTO+BOLT)"
+    echo "Note: The log stream is filtered. [buildroot] replaces pwd $(pwd)"
+    BOLT_MAKE=( "${MAKE}" -C contrib/pgo-lto-bolt "${MFLAGS[@]}" "STAGE2_BUILD=$(pwd)" )
+
+    # stage1 only collects compiler profiles. Avoid building its sysimage for
+    # every CPU target; stage2 still uses the release target list from MFLAGS.
+    echo "--- [pgo-lto-bolt] make stage1"
+    "${BOLT_MAKE[@]}" "JULIA_CPU_TARGET=generic" stage1 2>&1 | filter_buildroot
+
+    # These must be separate make invocations. FILES_TO_OPTIMIZE is derived
+    # from stage1's library symlinks when each invocation starts.
+    for STAGE in stage2 copy_originals bolt_instrument finish_stage2 merge_data bolt; do
+        echo "--- [pgo-lto-bolt] make ${STAGE}"
+        "${BOLT_MAKE[@]}" "${STAGE}" 2>&1 | filter_buildroot
+    done
+
+    echo "--- [pgo-lto-bolt] Upload profile data to buildkite"
+    buildkite-agent artifact upload "contrib/pgo-lto-bolt/profiles/merged.prof"
+    buildkite-agent artifact upload "contrib/pgo-lto-bolt/profiles-bolt/*.merged.fdata"
+
+    echo "--- [pgo-lto-bolt] Delete pre-BOLT library originals"
+    "${BOLT_MAKE[@]}" delete_originals
+elif [[ -n "${JULIA_CI_BUILD_MODE-}" ]]; then
+    echo "ERROR: unknown JULIA_CI_BUILD_MODE '${JULIA_CI_BUILD_MODE}'" >&2
+    exit 1
+else
+    echo "--- Build Julia"
+    echo "Note: The log stream is filtered. [buildroot] replaces pwd $(pwd)"
+    ${MAKE} "${MFLAGS[@]}" 2>&1 | filter_buildroot
+fi
 
 
 echo "--- Check that the working directory is clean"

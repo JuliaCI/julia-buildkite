@@ -30,20 +30,28 @@ class RenderLaunchPipelineTests(unittest.TestCase):
     def test_schedule_mode(self):
         output = render("schedule")
 
-        for group in ("Source Build", "Source Tests (Allow Fail)", "no_GPL"):
+        for group in ("Source Build", "Source Tests (Allow Fail)", "no_GPL",
+                      "Optimized Build", "Optimized Tests (Allow Fail)"):
             self.assertEqual(output.count(f'group: "{group}"'), 1)
         self.assertNotIn('group: "Build"', output)
         self.assertNotIn('group: "Test"', output)
 
-        self.assertEqual(output.count('key: "build_'), 5)
-        self.assertEqual(output.count('key: "test_'), 2)
-        self.assertEqual(output.count("soft_fail: false"), 5)
-        self.assertEqual(output.count("soft_fail: true"), 2)
+        self.assertEqual(output.count('key: "build_'), 6)
+        self.assertEqual(output.count('key: "test_'), 3)
+        self.assertEqual(output.count("soft_fail: false"), 6)
+        self.assertEqual(output.count("soft_fail: true"), 3)
         self.assertEqual(
             output.count('depends_on:\n          - "build_x86_64-linux-gnusrcassert"'),
             2,
         )
-        self.assertIn('PUBLISH_NOGPL: "true"', output)
+        self.assertEqual(
+            output.count('depends_on:\n          - "build_x86_64-linux-gnuopt"'),
+            1,
+        )
+        self.assertEqual(output.count('JULIA_CI_BUILD_MODE: "pgo-lto-bolt"'), 1)
+        self.assertIn('PUBLISH_SCHEDULED: "true"', output)
+        self.assertNotIn("PUBLISH_NOGPL", output)
+        self.assertIn('label: ":rocket: trigger publish (scheduled)"', output)
         self.assertIn('trigger: "julia-publish"', output)
 
     def test_normal_mode_excludes_schedule_groups(self):
@@ -52,7 +60,7 @@ class RenderLaunchPipelineTests(unittest.TestCase):
         for group in ("Build", "Check", "Test", "Allow Fail"):
             self.assertIn(f'group: "{group}"', output)
         self.assertNotIn('group: "Source Build"', output)
-        self.assertNotIn("PUBLISH_NOGPL", output)
+        self.assertNotIn("PUBLISH_SCHEDULED", output)
 
 
 if __name__ == "__main__":

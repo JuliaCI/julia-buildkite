@@ -19,11 +19,12 @@ set -euo pipefail
 
 # The set of arches to publish. Mirrors what the build pipeline staged.
 # Each file's rows define TRIPLET (and TIMEOUT); see utilities/arches_env.sh.
-if [[ "${PUBLISH_NOGPL:-}" == "true" ]]; then
+if [[ "${PUBLISH_SCHEDULED:-}" == "true" ]]; then
     ARCHES_FILES=(
         .buildkite/pipelines/scheduled/platforms/upload_linux.no_gpl.arches
         .buildkite/pipelines/scheduled/platforms/upload_macos.no_gpl.arches
         .buildkite/pipelines/scheduled/platforms/upload_windows.no_gpl.arches
+        .buildkite/pipelines/scheduled/platforms/upload_linux.opt.arches
     )
 elif [[ -n "${PUBLISH_ARCHES_FILES:-}" ]]; then
     # shellcheck disable=SC2206
