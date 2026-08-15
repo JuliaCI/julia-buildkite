@@ -34,9 +34,11 @@ current master (1.14) it is a no-op, so the powerpc arches are intentionally
 omitted (see OMITTED_POWERPC below). This matches the runtime behaviour.
 
 Schedule builds emit the scheduled workload groups and a no-GPL publish
-trigger instead of the per-commit groups.
+trigger instead of the per-commit groups. Labeled PRs render the same workload
+groups as a supplemental pipeline, without a publish trigger.
 """
 
+import argparse
 import os
 import re
 import subprocess
@@ -493,15 +495,28 @@ def trailer_text(nogpl=False):
     return "\n".join(lines)
 
 
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--scheduled-workloads",
+        action="store_true",
+        help="render scheduled workloads without the scheduled publish trigger",
+    )
+    return parser.parse_args()
+
+
 def main():
-    if os.environ.get("BUILDKITE_SOURCE") == "schedule":
+    args = parse_args()
+    is_schedule = os.environ.get("BUILDKITE_SOURCE") == "schedule"
+    if is_schedule or args.scheduled_workloads:
         blocks = [schedule_group_text(label, arches, allow_fail)
                   for label, allow_fail, arches in SCHEDULE_GROUPS]
         sys.stdout.write("steps:\n")
         sys.stdout.write("\n".join(blocks))
         sys.stdout.write("\n")
-        sys.stdout.write(trailer_text(nogpl=True))
-        sys.stdout.write("\n")
+        if is_schedule and not args.scheduled_workloads:
+            sys.stdout.write(trailer_text(nogpl=True))
+            sys.stdout.write("\n")
         return
 
     blocks = [

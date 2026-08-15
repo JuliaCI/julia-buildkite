@@ -59,6 +59,20 @@ steps:
       os: "linux"
       arch: "x86_64" # prevent from running on PiBots
 
+  - label: ":rocket: Launch scheduled workloads"
+    if: build.pull_request.labels includes "needs full CI"
+    plugins:
+      - JuliaCI/external-buildkite#v1:
+          version: "./.buildkite-external-version"
+          repo_url: "https://github.com/JuliaCI/julia-buildkite"
+    commands: |
+      python3 .buildkite/utilities/render_launch_pipeline.py --scheduled-workloads > pipeline.scheduled.generated.yml
+      buildkite-agent pipeline upload pipeline.scheduled.generated.yml
+    agents:
+      queue: "launch"
+      os: "linux"
+      arch: "x86_64"
+
   # The barrier + trigger of the trusted julia-publish pipeline are emitted by
   # render_launch_pipeline.py at the END of the rendered document, in the SAME
   # `pipeline upload` as the Build/Check/Test/Allow-Fail groups. That is on
