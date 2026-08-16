@@ -21,6 +21,6 @@ steps:
           buildkite-agent pipeline upload .buildkite/pipelines/scheduled/coverage/coverage.yml
 
         agents:
-          queue: "build"
+          queue: "launch"
           os: "linux"
           arch: "x86_64" # prevent from running on PiBots
