@@ -10,14 +10,14 @@ ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 RENDERER = os.path.join(ROOT, "utilities", "render_launch_pipeline.py")
 
 
-def render(source=None):
+def render(*args, source=None):
     env = os.environ.copy()
     if source is None:
         env.pop("BUILDKITE_SOURCE", None)
     else:
         env["BUILDKITE_SOURCE"] = source
     return subprocess.run(
-        [sys.executable, RENDERER],
+        [sys.executable, RENDERER, *args],
         cwd=ROOT,
         env=env,
         check=True,
@@ -28,7 +28,7 @@ def render(source=None):
 
 class RenderLaunchPipelineTests(unittest.TestCase):
     def test_schedule_mode(self):
-        output = render("schedule")
+        output = render(source="schedule")
 
         for group in ("Source Build", "Source Tests (Allow Fail)", "no_GPL",
                       "Optimized Build", "Optimized Tests (Allow Fail)"):
@@ -61,6 +61,21 @@ class RenderLaunchPipelineTests(unittest.TestCase):
             self.assertIn(f'group: "{group}"', output)
         self.assertNotIn('group: "Source Build"', output)
         self.assertNotIn("PUBLISH_SCHEDULED", output)
+
+    def test_labeled_pr_mode_emits_scheduled_workloads_without_publish(self):
+        output = render("--scheduled-workloads")
+
+        for group in ("Source Build", "Source Tests (Allow Fail)", "no_GPL"):
+            self.assertEqual(output.count(f'group: "{group}"'), 1)
+        self.assertNotIn('group: "Build"', output)
+        self.assertNotIn('trigger: "julia-publish"', output)
+        self.assertNotIn("PUBLISH_NOGPL", output)
+
+    def test_scheduled_workloads_option_never_publishes(self):
+        output = render("--scheduled-workloads", source="schedule")
+
+        self.assertIn('group: "Source Build"', output)
+        self.assertNotIn('trigger: "julia-publish"', output)
 
 
 if __name__ == "__main__":

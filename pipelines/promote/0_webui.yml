@@ -27,7 +27,7 @@ steps:
     steps:
       - label: "Launch promote"
         agents:
-          queue: "default"
+          queue: "launch"
           os: "linux"
         plugins:
           - JuliaCI/external-buildkite#v1:
