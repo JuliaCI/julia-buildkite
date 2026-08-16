@@ -132,15 +132,18 @@ _OIDC_TOKEN_FILE="$(mktemp)"
 # on agents new enough to know the flag (older build-cluster agents reject it
 # and aren't sandbox-broken). Detect by version: `--help` can't be probed,
 # since on affected agents it too needs the Job API and aborts.
-_OIDC_SKIP_REDACTION=()
+# (A scalar + `:+` expansion rather than an array: expanding an empty array
+# is fatal under `set -u` on bash < 4.4, and macOS entrypoints source this
+# file into `set -euo pipefail` shells running the system bash 3.2.)
+_OIDC_SKIP_REDACTION=""
 _BK_VER="$(buildkite-agent --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+' | head -1)"
 if [ -n "${_BK_VER}" ] && { [ "${_BK_VER%%.*}" -gt 3 ] || { [ "${_BK_VER%%.*}" -eq 3 ] && [ "${_BK_VER#*.}" -ge 104 ]; }; }; then
-    _OIDC_SKIP_REDACTION=( --skip-redaction )
+    _OIDC_SKIP_REDACTION="--skip-redaction"
 fi
 buildkite-agent oidc request-token \
     --audience "sts.amazonaws.com" \
     --lifetime 7200 \
-    "${_OIDC_SKIP_REDACTION[@]}" \
+    ${_OIDC_SKIP_REDACTION:+"${_OIDC_SKIP_REDACTION}"} \
     --aws-session-tag "${_OIDC_AWS_SESSION_TAGS}" \
     > "${_OIDC_TOKEN_FILE}"
 
