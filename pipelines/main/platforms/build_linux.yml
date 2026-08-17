@@ -38,4 +38,5 @@ steps:
           TRIPLET: "${TRIPLET?}"
           MAKE_FLAGS: "${MAKE_FLAGS?}"
           ROOTFS_IMAGE_NAME: "${ROOTFS_IMAGE_NAME?}"
+          JULIA_CI_BUILD_MODE: "${JULIA_CI_BUILD_MODE-}"
           BUILDKITE_CANCEL_SIGNAL: "SIGQUIT"

@@ -52,7 +52,7 @@ steps:
           arch: "x86_64"
         env:
           # By default, test the regular Linux + macOS triplets. Setting
-          # PUBLISH_NOGPL=true on the build selects the scheduled no-GPL list.
+          # PUBLISH_SCHEDULED=true on the build selects the scheduled list.
           PUBLISH_ARCHES_FILES: ".buildkite/pipelines/main/platforms/upload_linux.arches .buildkite/pipelines/main/platforms/upload_macos.arches"
           # Assume the throwaway test role (test keys + test bucket only).
           PUBLISH_OIDC_MODE: "publish-test"

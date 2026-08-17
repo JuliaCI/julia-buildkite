@@ -79,7 +79,7 @@ steps:
       # role-assuming "upload docs" job (see misc/deploy_docs.yml), and a
       # duplicate key across the build is rejected.
       - label: "deploy docs"
-        if: build.env("PUBLISH_NOGPL") != "true"
+        if: build.env("PUBLISH_SCHEDULED") != "true"
         plugins:
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"

@@ -33,9 +33,9 @@ PowerPC: `launch_powerpc.jl` only uploads powerpc arches for Julia < 1.12. On
 current master (1.14) it is a no-op, so the powerpc arches are intentionally
 omitted (see OMITTED_POWERPC below). This matches the runtime behaviour.
 
-Schedule builds emit the scheduled workload groups and a no-GPL publish
-trigger instead of the per-commit groups. Labeled PRs render the same workload
-groups as a supplemental pipeline, without a publish trigger.
+Schedule builds emit the scheduled workload groups and publish trigger instead
+of the per-commit groups. Labeled PRs render the same workload groups as a
+supplemental pipeline, without a publish trigger.
 """
 
 import argparse
@@ -374,6 +374,12 @@ SCHEDULE_GROUPS = [
         ("build_macos.no_gpl.arches", "build_macos.yml"),
         ("build_windows.no_gpl.arches", "build_windows.yml"),
     ]),
+    ("Optimized Build", "false", [
+        ("build_linux.opt.arches", "build_linux.yml"),
+    ]),
+    ("Optimized Tests (Allow Fail)", "true", [
+        ("test_linux.opt.arches", "test_linux.yml"),
+    ]),
 ]
 
 
@@ -477,9 +483,9 @@ def schedule_group_text(label, arches_list, allow_fail):
     return emit_group(label, "\n".join(c for c in chunks if c))
 
 
-def trailer_text(nogpl=False):
-    suffix = " (no-GPL)" if nogpl else ""
-    message = "publish no-GPL" if nogpl else "publish"
+def trailer_text(scheduled=False):
+    suffix = " (scheduled)" if scheduled else ""
+    message = "publish scheduled" if scheduled else "publish"
     lines = [
         "  - wait: ~",
         '  - trigger: "julia-publish"',
@@ -490,8 +496,8 @@ def trailer_text(nogpl=False):
         '      branch: "${BUILDKITE_BRANCH}"',
         f'      message: "{message}: ${{BUILDKITE_MESSAGE}}"',
     ]
-    if nogpl:
-        lines.extend(("      env:", '        PUBLISH_NOGPL: "true"'))
+    if scheduled:
+        lines.extend(("      env:", '        PUBLISH_SCHEDULED: "true"'))
     return "\n".join(lines)
 
 
@@ -515,7 +521,7 @@ def main():
         sys.stdout.write("\n".join(blocks))
         sys.stdout.write("\n")
         if is_schedule and not args.scheduled_workloads:
-            sys.stdout.write(trailer_text(nogpl=True))
+            sys.stdout.write(trailer_text(scheduled=True))
             sys.stdout.write("\n")
         return
 
