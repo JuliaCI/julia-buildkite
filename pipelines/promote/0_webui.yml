@@ -4,9 +4,15 @@
 #
 # julia-promote copies a published release from the nightlies bucket to
 # the release bucket (the "bucket dance", see utilities/promote_release.sh).
-# Builds are created MANUALLY by the release manager: New Build with
-# branch = v<version> (and commit left as HEAD, which resolves to the
-# tag), after the julia-publish run for that tag has completed.
+# Builds are created two ways:
+#   * by the trigger step at the end of julia-publish for v* tags; these
+#     arrive paused on a block step (see launch.yml) and promote only when
+#     the release manager clicks "Promote" -- the normal path, and
+#   * MANUALLY: New Build with branch = v<version> (and commit left as
+#     HEAD, which resolves to the tag) -- for backfills and older tags;
+#     these skip the block step, creating the build IS the decision.
+# Either way, unblocking/creating requires build permission on this
+# pipeline, so the set of people who can promote is unchanged.
 #
 # SECURITY: like julia-publish, the pipeline slug is what the
 # julia-oidc-promote IAM role trusts. It MUST be configured in Buildkite

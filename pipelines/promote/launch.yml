@@ -6,6 +6,18 @@
 steps:
   - group: "Promote"
     steps:
+      # Builds created by the trigger at the end of julia-publish arrive
+      # blocked here; the release act stays with the release manager, as a
+      # one-click unblock on this build instead of a hand-created New
+      # Build. A block step is an implicit barrier for the steps after it,
+      # so no depends_on is needed -- and none is wanted: on manually
+      # created builds (backfills, older tags) the `if` excludes this step
+      # and promote_all must not reference its key.
+      - block: ":package: Promote ${BUILDKITE_BRANCH}?"
+        key: "promote_gate"
+        prompt: "Copy the published ${BUILDKITE_BRANCH} binaries from the nightlies bucket to julialang-s3, write the checksum files, repoint the majmin-latest pointer, and purge the CDN."
+        if: build.source == "trigger_job"
+
       - label: ":package: promote release"
         key: "promote_all"
         # One promotion at a time: concurrent runs would race on the
