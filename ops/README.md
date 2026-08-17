@@ -162,7 +162,7 @@ and which carry AWS session tags (`step_key`, `build_commit`, `pipeline_slug`, .
   `julia-latest-*` pointer objects, which release builds intentionally
   repoint. Object versioning on the bucket is recommended belt-and-braces.
   Write-once is per *commit*, not per build: every object carries a
-  `build-commit` metadata stamp (the Buildkite-attested commit), and
+  `build-commit` S3 metadata stamp (the Buildkite-attested commit), and
   `upload_to_s3.sh` treats an existing object from the same commit as
   success (first upload wins). Builds are not byte-reproducible, so this
   is what lets a rebuild of an already-staged commit, concurrent sibling
@@ -358,7 +358,7 @@ The single publish step signs and packages for every OS on linux:
   public key with Apple.
 * Retried upload jobs hitting an existing object are handled in
   `utilities/upload_to_s3.sh` (412, then ETag comparison for identical
-  content and the `build-commit` metadata stamp for a sibling build of
+  content and the `build-commit` S3 metadata stamp for a sibling build of
   the same commit), not by allowing overwrites.
 * Promoting a release to the release bucket: after the tag's
   `julia-publish` run passes, create a New Build on `julia-promote` with
