@@ -1,10 +1,9 @@
 steps:
   - group: "Coverage"
-    # Scheduled (julia-ci) builds, plus "needs full CI"-labeled PRs. Only
+    # Temporary coverage-only validation branch. Only
     # julia-ci holds the codecov / coveralls bearer tokens; PR builds run
     # the same coverage collection but skip the uploads (the lcov tarball
     # is still available as a buildkite artifact).
-    if: (build.source == "schedule") || (build.pull_request.labels includes "needs full CI")
     notify:
       - github_commit_status:
           context: "Coverage"
@@ -71,12 +70,10 @@ steps:
           tar -zcf lcov_files.tar.gz lcov_files/
           buildkite-agent artifact upload lcov_files.tar.gz
 
-          echo "--- Process and upload coverage information"
-          if [[ -n "$${CODECOV_TOKEN:-}" && -n "$${COVERALLS_TOKEN:-}" ]]; then
-            ./julia --color=yes .buildkite/pipelines/scheduled/coverage/upload_coverage.jl
-          else
-            echo "No coverage tokens; skipping upload"
-          fi
+          echo "--- Validate and upload coverage information"
+          # The script parses and merges LCOV data and requires at least 60%
+          # total coverage. It skips the service uploads when tokens are absent.
+          ./julia --color=yes .buildkite/pipelines/scheduled/coverage/upload_coverage.jl
         agents:
           queue: "test"
           # Only run on `sandbox.jl` machines (not `docker`-isolated ones) since we need nestable sandboxing
@@ -142,12 +139,9 @@ steps:
           tar -zcf lcov_files.tar.gz lcov_files/
           buildkite-agent artifact upload lcov_files.tar.gz
 
-          echo "--- Process and upload coverage information"
-          if [[ -n "$${CODECOV_TOKEN:-}" && -n "$${COVERALLS_TOKEN:-}" ]]; then
-            ./julia --color=yes .buildkite/pipelines/scheduled/coverage/upload_coverage.jl
-          else
-            echo "No coverage tokens; skipping upload"
-          fi
+          echo "--- Validate and upload coverage information"
+          # See the Linux job.
+          ./julia --color=yes .buildkite/pipelines/scheduled/coverage/upload_coverage.jl
         agents:
           queue: "test"
           os: "macos"
@@ -200,12 +194,8 @@ steps:
                 echo '--- Upload lcov files' &&
                 tar -zcf lcov_files.tar.gz lcov_files/ &&
                 buildkite-agent artifact upload lcov_files.tar.gz &&
-                echo '--- Process and upload coverage information' &&
-                if [[ -n $${CODECOV_TOKEN:-} && -n $${COVERALLS_TOKEN:-} ]]; then
-                  ./usr/bin/julia.exe --color=yes .buildkite/pipelines/scheduled/coverage/upload_coverage.jl;
-                else
-                  echo 'No coverage tokens; skipping upload';
-                fi
+                echo '--- Validate and upload coverage information' &&
+                ./usr/bin/julia.exe --color=yes .buildkite/pipelines/scheduled/coverage/upload_coverage.jl
                 "]
               propagate-environment: true
               volumes:

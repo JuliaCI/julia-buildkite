@@ -43,6 +43,7 @@
 
 steps:
   - label: ":rocket: Launch jobs"
+    skip: "Coverage-only validation branch"
     plugins:
       - JuliaCI/external-buildkite#v1:
           version: "./.buildkite-external-version"
@@ -60,6 +61,7 @@ steps:
       arch: "x86_64" # prevent from running on PiBots
 
   - label: ":rocket: Launch scheduled workloads"
+    skip: "Coverage-only validation branch"
     if: build.pull_request.labels includes "needs full CI"
     plugins:
       - JuliaCI/external-buildkite#v1:
