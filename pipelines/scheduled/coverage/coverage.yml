@@ -248,6 +248,20 @@ steps:
               # Drop default "registries" directory, so it is not persisted from execution to execution
               persist_depot_dirs: packages,artifacts,compiled
               version: '1.11' # GREP_ME: Keep this updated. Do not set it to '1' or 'stable' or 'latest'.
+          # The token fetch below needs the `aws` CLI, which the bare test
+          # agents do not have; run inside the package_linux rootfs (which
+          # ships it), like the linux coverage job above.
+          - JuliaCI/sandbox#v2:
+              rootfs_url: https://github.com/JuliaCI/rootfs-images/releases/download/v8.5/package_linux.x86_64.tar.gz
+              rootfs_treehash: "8b46765146862479f0a8946f2ef783a8bf93b20f"
+              uid: 1000
+              gid: 1000
+          # List the julia plugin again so `julia` is also set up inside the
+          # sandbox (same pattern as misc/whitespace.yml).
+          - JuliaCI/julia#v1:
+              # Drop default "registries" directory, so it is not persisted from execution to execution
+              persist_depot_dirs: packages,artifacts,compiled
+              version: '1.11' # GREP_ME: Keep this updated. Do not set it to '1' or 'stable' or 'latest'.
         timeout_in_minutes: 10
         commands: |
           echo "--- Signal completion of parallel coverage uploads"
@@ -267,6 +281,8 @@ steps:
           fi
         agents:
           queue: "test"
+          # Only run on `sandbox.jl` machines (not `docker`-isolated ones) since we need nestable sandboxing
+          sandbox_capable: "true"
           os: "linux"
           arch: "x86_64"
         env:
