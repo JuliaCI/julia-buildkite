@@ -28,9 +28,12 @@ steps:
               workspaces:
                 # Include `/cache/repos` so that our `git` version introspection works.
                 - "/cache/repos:/cache/repos"
+                # Test from `/julia` so stacktraces print short, machine-independent paths.
+                # (`$$` defers interpolation from pipeline-upload time to job time.)
+                - "$${BUILDKITE_BUILD_CHECKOUT_PATH}:/julia"
         timeout_in_minutes: ${TIMEOUT?}
         soft_fail: ${ALLOW_FAIL?}
-        commands: "bash .buildkite/utilities/test_julia.sh"
+        commands: "cd /julia && bash .buildkite/utilities/test_julia.sh"
         agents:
           queue: "test"
           sandbox_capable: "true"
