@@ -19,7 +19,9 @@ steps:
     steps:
       - label: "Launch publish-test jobs"
         agents:
-          queue: "launch"
+          # NOT the launch queue: this pipeline runs in the Secure cluster,
+          # which has no "launch" queue.
+          queue: "default"
           os: "linux"
         plugins:
           - JuliaCI/external-buildkite#v1:

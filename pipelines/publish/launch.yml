@@ -86,6 +86,9 @@ steps:
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
         commands: "buildkite-agent pipeline upload .buildkite/pipelines/main/misc/deploy_docs.yml"
         agents:
-          queue: "launch"
+          # NOT the launch queue: this pipeline runs in the Secure cluster,
+          # which has no "launch" queue -- targeting it makes Buildkite reject
+          # the entire pipeline upload.
+          queue: "default"
           os: "linux"
           arch: "x86_64"
