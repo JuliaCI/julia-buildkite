@@ -1,10 +1,9 @@
 steps:
   - group: "Coverage"
-    # Scheduled (julia-ci) builds, plus "needs full CI"-labeled PRs. Only
+    # Temporary coverage-only validation branch. Only
     # julia-ci holds the codecov / coveralls bearer tokens; PR builds run
     # the same coverage collection but skip the uploads (the lcov tarball
     # is still available as a buildkite artifact).
-    if: (build.source == "schedule") || (build.pull_request.labels includes "needs full CI")
     notify:
       - github_commit_status:
           context: "Coverage"
@@ -45,7 +44,9 @@ steps:
           fi
 
           echo "--- Build Julia from source"
-          make --output-sync -j$${JULIA_NUM_THREADS}
+          # Compile coverage into the sysimage and stdlib package images so
+          # test processes can reuse their native code under coverage.
+          make --output-sync -j$${JULIA_NUM_THREADS} JULIA_COVERAGE_IMAGES=1
 
           echo "--- Print Julia version info"
           ./julia --color=yes -e 'using InteractiveUtils; InteractiveUtils.versioninfo()'
@@ -69,12 +70,10 @@ steps:
           tar -zcf lcov_files.tar.gz lcov_files/
           buildkite-agent artifact upload lcov_files.tar.gz
 
-          echo "--- Process and upload coverage information"
-          if [[ -n "$${CODECOV_TOKEN:-}" && -n "$${COVERALLS_TOKEN:-}" ]]; then
-            ./julia --color=yes .buildkite/pipelines/scheduled/coverage/upload_coverage.jl
-          else
-            echo "No coverage tokens; skipping upload"
-          fi
+          echo "--- Validate and upload coverage information"
+          # The script parses and merges LCOV data and requires at least 60%
+          # total coverage. It skips the service uploads when tokens are absent.
+          ./julia --color=yes .buildkite/pipelines/scheduled/coverage/upload_coverage.jl
         agents:
           queue: "test"
           # Only run on `sandbox.jl` machines (not `docker`-isolated ones) since we need nestable sandboxing
@@ -114,7 +113,9 @@ steps:
           fi
 
           echo "--- Build Julia from source"
-          make -j$${JULIA_NUM_THREADS}
+          # Compile coverage into the sysimage and stdlib package images, as
+          # in the Linux job above.
+          make -j$${JULIA_NUM_THREADS} JULIA_COVERAGE_IMAGES=1
 
           echo "--- Print Julia version info"
           ./julia --color=yes -e 'using InteractiveUtils; InteractiveUtils.versioninfo()'
@@ -138,12 +139,9 @@ steps:
           tar -zcf lcov_files.tar.gz lcov_files/
           buildkite-agent artifact upload lcov_files.tar.gz
 
-          echo "--- Process and upload coverage information"
-          if [[ -n "$${CODECOV_TOKEN:-}" && -n "$${COVERALLS_TOKEN:-}" ]]; then
-            ./julia --color=yes .buildkite/pipelines/scheduled/coverage/upload_coverage.jl
-          else
-            echo "No coverage tokens; skipping upload"
-          fi
+          echo "--- Validate and upload coverage information"
+          # See the Linux job.
+          ./julia --color=yes .buildkite/pipelines/scheduled/coverage/upload_coverage.jl
         agents:
           queue: "test"
           os: "macos"
@@ -178,7 +176,7 @@ steps:
                   [[ -n $${CODECOV_TOKEN} && -n $${COVERALLS_TOKEN} ]] || { echo 'Coverage token fetch returned an empty value' >&2; exit 1; };
                 fi &&
                 echo '--- Build Julia from source' &&
-                make -j$${JULIA_NUM_THREADS} VERBOSE=1 &&
+                make -j$${JULIA_NUM_THREADS} VERBOSE=1 JULIA_COVERAGE_IMAGES=1 &&
                 echo '--- Print Julia version info' &&
                 ./usr/bin/julia.exe --color=yes -e 'using InteractiveUtils; InteractiveUtils.versioninfo()' &&
                 ./usr/bin/julia.exe --color=yes -e '@info \"\" Sys.CPU_THREADS' &&
@@ -196,12 +194,8 @@ steps:
                 echo '--- Upload lcov files' &&
                 tar -zcf lcov_files.tar.gz lcov_files/ &&
                 buildkite-agent artifact upload lcov_files.tar.gz &&
-                echo '--- Process and upload coverage information' &&
-                if [[ -n $${CODECOV_TOKEN:-} && -n $${COVERALLS_TOKEN:-} ]]; then
-                  ./usr/bin/julia.exe --color=yes .buildkite/pipelines/scheduled/coverage/upload_coverage.jl;
-                else
-                  echo 'No coverage tokens; skipping upload';
-                fi
+                echo '--- Validate and upload coverage information' &&
+                ./usr/bin/julia.exe --color=yes .buildkite/pipelines/scheduled/coverage/upload_coverage.jl
                 "]
               propagate-environment: true
               volumes:
