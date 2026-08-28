@@ -355,7 +355,6 @@ CHECK_STATIC = [
     "source_dist.yml",
     "pdf_docs/build_pdf_docs.yml",
     "embedding.yml",
-    "trimming.yml",
     "llvmpasses.yml",
     "sanitizers/asan.yml",
     "sanitizers/tsan.yml",
