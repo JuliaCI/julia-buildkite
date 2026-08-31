@@ -34,11 +34,14 @@ PowerPC: `launch_powerpc.jl` only uploads powerpc arches for Julia < 1.12. On
 current master (1.14) it is a no-op, so the powerpc arches are intentionally
 omitted (see OMITTED_POWERPC below). This matches the runtime behaviour.
 
-Schedule builds emit the scheduled workload groups and publish trigger instead
+Schedule builds emit the scheduled workload groups and publish triggers instead
 of the per-commit groups. Labeled PRs render the same workload groups as a
-supplemental pipeline, without a publish trigger. Per-commit results are grouped
+supplemental pipeline, without publish triggers. Per-commit results are grouped
 into one `group:` per label: Build, Check, Test, Allow Fail, JuliaSyntax,
-JuliaLowering, JuliaC.
+JuliaLowering, JuliaC, Publish.
+
+The Publish group's triggers each `depends_on` only their own platform's
+build + test jobs (see publish_group_text).
 """
 
 import argparse
@@ -288,6 +291,42 @@ def load_group_text(path):
     return label, extract_inner_steps_text(text, path)
 
 
+# --------------------------------------------------------------------------
+# per-platform job keys (what each platform's publish trigger waits for)
+# --------------------------------------------------------------------------
+# Recorded as the arches-templated platform jobs are rendered: the build step
+# key of every TRIPLET, and its test step keys (a platform may have several
+# test jobs -- rr / rr-net, i686 net / no-net -- or none at all, e.g. the
+# no-GPL builds). The keys are read back from the rendered text rather than
+# reconstructed from the templates' naming scheme, so the triggers follow
+# whatever `key:` the platform YAMLs actually emit.
+
+BUILD_KEYS = {}   # TRIPLET -> "build_..." key
+TEST_KEYS = {}    # TRIPLET -> ["test_...", ...]
+
+# A step's own attributes sit two spaces inside its `- ` at STEP_INDENT;
+# matching that exact column skips any `key:` nested in plugin config.
+_STEP_KEY_RE = re.compile(
+    r'^ {%d}key:\s*"?([^"\s]+)"?\s*$' % (STEP_INDENT + 2), re.MULTILINE)
+
+
+def step_keys(steps_text):
+    """The `key:` values of the step blocks in a re-indented steps text."""
+    return _STEP_KEY_RE.findall(steps_text)
+
+
+def record_platform_job(yaml_file, triplet, step_text, where):
+    keys = step_keys(step_text)
+    assert len(keys) == 1, f"{where}: expected one step key, found {keys}"
+    if yaml_file.startswith("build_"):
+        assert triplet not in BUILD_KEYS, f"{where}: {triplet} built twice"
+        BUILD_KEYS[triplet] = keys[0]
+    elif yaml_file.startswith("test_"):
+        TEST_KEYS.setdefault(triplet, []).append(keys[0])
+    else:
+        raise AssertionError(f"{where}: not a build_/test_ platform YAML")
+
+
 def render_arches_group_text(arches_file, yaml_file, group, allow_fail,
                              extra_env=None, arches_dir=PLATFORMS):
     """Render the inner step block of an arches-templated platform YAML once
@@ -307,7 +346,9 @@ def render_arches_group_text(arches_file, yaml_file, group, allow_fail,
             env.update(extra_env)
         where = f"{yaml_file} [{arch_env.get('TRIPLET', '?')}]"
         rendered = interpolate(template_text, env, where)
-        chunks.append(extract_inner_steps_text(rendered, where))
+        step_text = extract_inner_steps_text(rendered, where)
+        record_platform_job(yaml_file, arch_env["TRIPLET"], step_text, where)
+        chunks.append(step_text)
     return "\n".join(c for c in chunks if c)
 
 
@@ -346,6 +387,31 @@ ALLOW_FAIL_TEST_ARCHES = [
 OMITTED_POWERPC = [
     "build_linux.powerpc.arches -> build_linux.yml (Build)",
     "test_linux.powerpc.soft_fail.arches -> test_linux.yml (Allow Fail)",
+]
+
+# The platforms julia-publish signs and promotes: one publish trigger is
+# emitted per TRIPLET row. Mirrors the per-commit / scheduled ARCHES_FILES of
+# the manual publish-everything path in utilities/publish.sh; keep in sync.
+UPLOAD_ARCHES = [
+    "upload_linux.arches",
+    "upload_macos.arches",
+    "upload_windows.arches",
+    "upload_freebsd.arches",
+]
+
+SCHEDULE_UPLOAD_ARCHES = [
+    "upload_linux.no_gpl.arches",
+    "upload_macos.no_gpl.arches",
+    "upload_windows.no_gpl.arches",
+    "upload_linux.opt.arches",
+]
+
+# The Check steps that stage the per-commit (platform-independent) products
+# the `docs` publish target consumes: the HTML docs (doctest.yml) and, on
+# release tags, the source dists (source_dist.yml).
+DOCS_STAGING_FILES = [
+    "doctest.yml",
+    "source_dist.yml",
 ]
 
 # Static (verbatim) misc YAMLs that the old Check step uploaded, in order.
@@ -405,6 +471,7 @@ GROUP_NOTIFY = {
     "Check": "Check",
     "Test": "Test",
     "Allow Fail": None,
+    "Publish": None,
 }
 
 
@@ -487,22 +554,68 @@ def schedule_group_text(label, arches_list, allow_fail):
     return emit_group(label, "\n".join(c for c in chunks if c))
 
 
-def trailer_text(scheduled=False):
+def upload_triplets(arches_files, arches_dir):
+    """The TRIPLETs of the given upload_*.arches files, in order."""
+    return [env["TRIPLET"]
+            for arches in arches_files
+            for env in arches_envs(os.path.join(arches_dir, arches))]
+
+
+def publish_trigger_text(target, depends_on, scheduled):
+    """One `trigger: julia-publish` step. `target` is what the triggered
+    build publishes (its PUBLISH_TARGET: a triplet, or "docs" for the
+    per-commit products); it runs once every key in `depends_on` has
+    completed."""
     suffix = " (scheduled)" if scheduled else ""
-    message = "publish scheduled" if scheduled else "publish"
     lines = [
-        "  - wait: ~",
-        '  - trigger: "julia-publish"',
-        f'    label: ":rocket: trigger publish{suffix}"',
-        '    if: pipeline.slug == "julia-ci"',
-        "    build:",
-        '      commit: "${BUILDKITE_COMMIT}"',
-        '      branch: "${BUILDKITE_BRANCH}"',
-        f'      message: "{message}: ${{BUILDKITE_MESSAGE}}"',
+        '      - trigger: "julia-publish"',
+        f'        label: ":rocket: publish {target}{suffix}"',
+        '        if: pipeline.slug == "julia-ci"',
+        "        depends_on:",
     ]
+    lines.extend(f'          - "{key}"' for key in depends_on)
+    lines.extend((
+        "        build:",
+        '          commit: "${BUILDKITE_COMMIT}"',
+        '          branch: "${BUILDKITE_BRANCH}"',
+        f'          message: "publish {target}: ${{BUILDKITE_MESSAGE}}"',
+        "          env:",
+        f'            PUBLISH_TARGET: "{target}"',
+    ))
     if scheduled:
-        lines.extend(("      env:", '        PUBLISH_SCHEDULED: "true"'))
+        lines.append('            PUBLISH_SCHEDULED: "true"')
     return "\n".join(lines)
+
+
+def publish_group_text(scheduled=False):
+    """The Publish group: one julia-publish trigger per published platform,
+    `depends_on` exactly that platform's build + test jobs, so it is signed
+    and promoted as soon as those are green regardless of the rest of the
+    build. Soft-failing (Allow Fail) tests count as complete, as under the
+    old build-wide `wait`. Per-commit builds add a `docs` trigger gated on
+    the steps that stage the docs / source dists (source_dist is `if`-gated
+    to tags; Buildkite ignores a dependency on an `if`-excluded step). All
+    triggers are `if`-gated to the julia-ci slug."""
+    if scheduled:
+        triplets = upload_triplets(SCHEDULE_UPLOAD_ARCHES, SCHEDULED_PLATFORMS)
+    else:
+        triplets = upload_triplets(UPLOAD_ARCHES, PLATFORMS)
+
+    triggers = []
+    for triplet in triplets:
+        assert triplet in BUILD_KEYS, (
+            f"{triplet} is published (upload_*.arches) but has no build job")
+        depends_on = [BUILD_KEYS[triplet]] + TEST_KEYS.get(triplet, [])
+        triggers.append(publish_trigger_text(triplet, depends_on, scheduled))
+
+    if not scheduled:
+        depends_on = []
+        for rel in DOCS_STAGING_FILES:
+            _, inner = load_group_text(os.path.join(MISC, rel))
+            depends_on.extend(step_keys(inner))
+        triggers.append(publish_trigger_text("docs", depends_on, scheduled))
+
+    return emit_group("Publish", "\n".join(triggers))
 
 
 def parse_args():
@@ -521,12 +634,11 @@ def main():
     if is_schedule or args.scheduled_workloads:
         blocks = [schedule_group_text(label, arches, allow_fail)
                   for label, allow_fail, arches in SCHEDULE_GROUPS]
+        if is_schedule and not args.scheduled_workloads:
+            blocks.append(publish_group_text(scheduled=True))
         sys.stdout.write("steps:\n")
         sys.stdout.write("\n".join(blocks))
         sys.stdout.write("\n")
-        if is_schedule and not args.scheduled_workloads:
-            sys.stdout.write(trailer_text(scheduled=True))
-            sys.stdout.write("\n")
         return
 
     blocks = [
@@ -560,10 +672,10 @@ def main():
     # JuliaC: itself a launcher with its own group + notify -- include verbatim.
     blocks.append(verbatim_group_text(os.path.join(MISC, "juliac", "test_juliac.yml")))
 
+    blocks.append(publish_group_text())
+
     sys.stdout.write("steps:\n")
     sys.stdout.write("\n".join(blocks))
-    sys.stdout.write("\n")
-    sys.stdout.write(trailer_text())
     sys.stdout.write("\n")
 
 

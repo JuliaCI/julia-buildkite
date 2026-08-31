@@ -1,10 +1,9 @@
 # Launch the coverage pipeline.
 #
-# Coverage is launched here (a SEPARATE pipeline upload from the build/test
-# launchers) so that it is NOT behind the publish barrier: a long scheduled
-# coverage run must never delay the julia-publish trigger. The wait+trigger
-# live at the end of launch_untrusted_builders.yml instead, inlined with the
-# build/test groups they gate.
+# Coverage is launched here, as a SEPARATE pipeline upload from the build/test
+# launchers. Publishing is gated per platform on that platform's own build and
+# test jobs (the Publish group rendered by render_launch_pipeline.py), so a
+# long scheduled coverage run never delays a julia-publish trigger.
 steps:
   - group: "Upload"
     steps:

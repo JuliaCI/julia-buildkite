@@ -10,7 +10,8 @@ steps:
         # file (that launcher touches no AWS). There is no `depends_on` doctest
         # here: the html docs tarball is read from the commit-sha gated S3
         # staging area (the build pipeline's doctest step stages it), the same
-        # cross-pipeline handoff used for the binaries.
+        # cross-pipeline handoff used for the binaries; julia-ci only fires
+        # the docs publish trigger once its doctest step has passed.
         key: "deploy_docs"
         # Prevent multiple pipelines from pushing to the `git@github.com:JuliaLang/docs.julialang.org` repo simultaneously
         concurrency: 1
@@ -27,7 +28,7 @@ steps:
               version: '1.10' # GREP_ME: Keep this updated to LTS. Do not set it to '1' or 'stable' or 'latest'.
           - JuliaCI/sandbox#v2:
               # Use the julia_publish image (same trusted toolchain as the
-              # publish_all step): it has git/ssh/awscli AND the aws-kms-pkcs11
+              # publish step): it has git/ssh/awscli AND the aws-kms-pkcs11
               # PKCS#11 provider used to SSH-sign the docs push with the KMS
               # deploy key. (Keep this treehash in sync with publish/launch.yml's
               # -- it is the same image.)

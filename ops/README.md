@@ -47,8 +47,9 @@ only trust the publish pipeline's slug. There are three pipelines:
   release from the nightlies bucket into the release bucket
   (julialang2, served at julialang-s3.julialang.org). No webhook or PR
   builds; the release manager creates its builds manually (New Build
-  with branch = `v<version>`) after the julia-publish run for that tag
-  has finished. See `pipelines/promote/0_webui.yml` and
+  with branch = `v<version>`) after the julia-publish builds for that tag
+  (one per platform, plus docs) have all finished. See
+  `pipelines/promote/0_webui.yml` and
   `utilities/promote_release.sh`.
 
 A fourth, untrusted pipeline, **`julia-buildkite-ci`**, is the
@@ -65,9 +66,10 @@ publish trigger, exactly like `julia-pr`.
    (UNTRUSTED: the build step stages directly -- write-once, own pipeline's
     ephemeral bucket, own commit's path; per-pipeline roles
     julia-oidc-stage-pr / julia-oidc-stage-ci, no KMS)
-   PRs stop here (juliaup reads               │  tests pass, julia-ci only:
-   the -pr bucket).                           ▼  trigger
-                              julia-publish  ──►  publish_all (single step)
+   PRs stop here (juliaup reads               │  julia-ci only: one trigger per
+   the -pr bucket).                           ▼  platform, as soon as ITS tests pass
+                              julia-publish  ──►  publish_<triplet>  (one build per platform)
+                                                  publish_docs + deploy_docs  (once per commit)
    (TRUSTED: role julia-oidc-publish, kms:Sign + read julia-ci staging bucket
     ONLY + write final)
    verify_trusted_commit.sh → sign (rcodesign / Trusted Signing / KMS-GPG) → promote → deploy docs
@@ -259,7 +261,7 @@ are Terraform variables with the production defaults):
    registration) — federated credentials for Windows Trusted Signing
    (matched to the `julia-publish` pipeline, where Windows signing now
    runs); fill the (non-secret) `AZURE_TENANT_ID` / `AZURE_CLIENT_ID`
-   placeholders on the `publish_all` step in `pipelines/publish/launch.yml`.
+   placeholders on the publish step in `pipelines/publish/launch.yml`.
    If flexible federated credentials are unavailable on the tenant, fall
    back to `--subject-claim organization_id` tokens (exact-match credential
    on the Buildkite organization UUID) at the cost of org-level granularity.
@@ -360,8 +362,9 @@ The single publish step signs and packages for every OS on linux:
   `utilities/upload_to_s3.sh` (412, then ETag comparison for identical
   content and the `build-commit` metadata stamp for a sibling build of
   the same commit), not by allowing overwrites.
-* Promoting a release to the release bucket: after the tag's
-  `julia-publish` run passes, create a New Build on `julia-promote` with
+* Promoting a release to the release bucket: once every one of the tag's
+  `julia-publish` builds (one per platform, plus docs) has passed, create
+  a New Build on `julia-promote` with
   branch = `v<version>` (leave commit as HEAD; Buildkite resolves it to
   the tag). The step re-maps the published objects into the release
   bucket's historical layout (including the `bin/src/` source dists, when
