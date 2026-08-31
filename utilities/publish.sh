@@ -26,7 +26,6 @@
 # by a host julia. See "Publish image prerequisites" in ops/README.md.
 set -euo pipefail
 
-# The triplets to publish, per PUBLISH_TARGET (see the header).
 TRIPLETS=()
 if [[ "${PUBLISH_TARGET:-}" == "docs" ]]; then
     : # per-commit products only, no binaries

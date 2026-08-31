@@ -40,10 +40,8 @@ supplemental pipeline, without publish triggers. Per-commit results are grouped
 into one `group:` per label: Build, Check, Test, Allow Fail, JuliaSyntax,
 JuliaLowering, JuliaC, Publish.
 
-The final Publish group holds the julia-publish triggers: one per published
-platform, each `depends_on` only that platform's own build + test jobs, so a
-platform's nightly is signed and promoted as soon as ITS tests are green rather
-than when the whole build has finished (see publish_group_text).
+The Publish group's triggers each `depends_on` only their own platform's
+build + test jobs (see publish_group_text).
 """
 
 import argparse
@@ -590,21 +588,14 @@ def publish_trigger_text(target, depends_on, scheduled):
 
 
 def publish_group_text(scheduled=False):
-    """The Publish group: the julia-publish triggers.
-
-    One trigger per published platform, `depends_on` exactly that platform's
-    build + test jobs (as recorded by record_platform_job), so the platform
-    is signed and promoted as soon as ITS jobs are green: a failure, or a
-    slow rr run, on another platform neither blocks nor delays it. A
-    soft-failing (Allow Fail) test counts as complete, as it did under the
-    old build-wide `wait`. Per-commit builds add one trigger for the
-    platform-independent products -- the HTML docs, and on release tags the
-    source dists -- gated on the Check steps that stage them (source_dist is
-    `if`-gated to tags; Buildkite ignores a dependency on a step its `if`
-    excluded).
-
-    Every trigger is `if`-gated on the julia-ci slug, so julia-pr and the
-    self-test pipeline render the group but never publish."""
+    """The Publish group: one julia-publish trigger per published platform,
+    `depends_on` exactly that platform's build + test jobs, so it is signed
+    and promoted as soon as those are green regardless of the rest of the
+    build. Soft-failing (Allow Fail) tests count as complete, as under the
+    old build-wide `wait`. Per-commit builds add a `docs` trigger gated on
+    the steps that stage the docs / source dists (source_dist is `if`-gated
+    to tags; Buildkite ignores a dependency on an `if`-excluded step). All
+    triggers are `if`-gated to the julia-ci slug."""
     if scheduled:
         triplets = upload_triplets(SCHEDULE_UPLOAD_ARCHES, SCHEDULED_PLATFORMS)
     else:

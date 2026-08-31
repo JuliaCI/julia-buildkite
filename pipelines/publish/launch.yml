@@ -94,8 +94,6 @@ steps:
       # role-assuming "upload docs" job (see misc/deploy_docs.yml), and a
       # duplicate key across the build is rejected.
       - label: "deploy docs"
-        # A per-commit product: not on scheduled publishes, and not on the
-        # per-platform binary builds.
         if: build.env("PUBLISH_SCHEDULED") != "true" && (build.env("PUBLISH_TARGET") == null || build.env("PUBLISH_TARGET") == "docs")
         plugins:
           - JuliaCI/external-buildkite#v1:
