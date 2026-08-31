@@ -5,10 +5,11 @@
 # versions.json, juliaup, setup-julia and the website point.
 #
 # Runs as the single trusted step of the julia-promote pipeline. Builds
-# are created MANUALLY (New Build with branch = v<version>) after the
-# julia-publish run for that tag has completed; the version identity is
-# taken from the branch, never from checkout state, mirroring the publish
-# flow's naming (see TAR_VERSION in build_envs.sh).
+# are created by the tag-guarded trigger at the end of julia-publish
+# (held on a block step until the release manager approves), or MANUALLY
+# (New Build with branch = v<version>) for backfills; the version
+# identity is taken from the branch, never from checkout state, mirroring
+# the publish flow's naming (see TAR_VERSION in build_envs.sh).
 #
 # The release bucket keeps the historical buildbot-era layout (folder
 # x86_64->x64, i686->x86; short mac64/win64 file names), which is what
