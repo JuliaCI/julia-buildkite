@@ -1,12 +1,21 @@
 #!/usr/bin/env bash
-# Single trusted publish step.
+# The trusted publish step.
 #
-# Runs once in the julia-publish pipeline and promotes every staged build
-# to its final release location: it verifies the release commit, assumes the
-# trusted `publish` role once, then iterates over every triplet, signing
-# (macOS via rcodesign, Windows via Azure Trusted Signing, GPG tarball via
-# KMS) and promoting each from the commit-sha-gated staging path to the
-# canonical locations.
+# Runs in the julia-publish pipeline and promotes staged builds to their
+# final release location: it verifies the release commit, assumes the
+# trusted `publish` role once, then iterates over the selected triplets,
+# signing (macOS via rcodesign, Windows via Azure Trusted Signing, GPG
+# tarball via KMS) and promoting each from the commit-sha-gated staging path
+# to the canonical locations.
+#
+# What gets published is selected by PUBLISH_TARGET, set on the build by the
+# julia-ci trigger (see utilities/render_launch_pipeline.py):
+#   <triplet>  that platform's binaries only. julia-ci fires one such build
+#              per platform as soon as its own build + test jobs are green.
+#   docs       the per-commit products only: the release source dists (the
+#              HTML docs are deployed by the sibling deploy_docs step).
+#   unset      everything: every triplet of the arches files below, then
+#              the source dists. The manual re-run path (ops/README.md).
 #
 # A single LINUX step (rather than one job per platform) is feasible
 # because all signing is remote-key (KMS / Trusted Signing) and every
@@ -17,25 +26,45 @@
 # by a host julia. See "Publish image prerequisites" in ops/README.md.
 set -euo pipefail
 
-# The set of arches to publish. Mirrors what the build pipeline staged.
-# Each file's rows define TRIPLET (and TIMEOUT); see utilities/arches_env.sh.
-if [[ "${PUBLISH_SCHEDULED:-}" == "true" ]]; then
-    ARCHES_FILES=(
-        .buildkite/pipelines/scheduled/platforms/upload_linux.no_gpl.arches
-        .buildkite/pipelines/scheduled/platforms/upload_macos.no_gpl.arches
-        .buildkite/pipelines/scheduled/platforms/upload_windows.no_gpl.arches
-        .buildkite/pipelines/scheduled/platforms/upload_linux.opt.arches
-    )
-elif [[ -n "${PUBLISH_ARCHES_FILES:-}" ]]; then
-    # shellcheck disable=SC2206
-    ARCHES_FILES=( ${PUBLISH_ARCHES_FILES} )
+# The triplets to publish, per PUBLISH_TARGET (see the header).
+TRIPLETS=()
+if [[ "${PUBLISH_TARGET:-}" == "docs" ]]; then
+    : # per-commit products only, no binaries
+elif [[ -n "${PUBLISH_TARGET:-}" ]]; then
+    TRIPLETS=( "${PUBLISH_TARGET}" )
 else
-    ARCHES_FILES=(
-        .buildkite/pipelines/main/platforms/upload_linux.arches
-        .buildkite/pipelines/main/platforms/upload_macos.arches
-        .buildkite/pipelines/main/platforms/upload_windows.arches
-        .buildkite/pipelines/main/platforms/upload_freebsd.arches
-    )
+    # Everything: the arches files mirror what the build pipeline staged (keep
+    # them in sync with UPLOAD_ARCHES / SCHEDULE_UPLOAD_ARCHES in
+    # render_launch_pipeline.py). Each file's rows define TRIPLET (and
+    # TIMEOUT); see utilities/arches_env.sh.
+    if [[ "${PUBLISH_SCHEDULED:-}" == "true" ]]; then
+        ARCHES_FILES=(
+            .buildkite/pipelines/scheduled/platforms/upload_linux.no_gpl.arches
+            .buildkite/pipelines/scheduled/platforms/upload_macos.no_gpl.arches
+            .buildkite/pipelines/scheduled/platforms/upload_windows.no_gpl.arches
+            .buildkite/pipelines/scheduled/platforms/upload_linux.opt.arches
+        )
+    elif [[ -n "${PUBLISH_ARCHES_FILES:-}" ]]; then
+        # shellcheck disable=SC2206
+        ARCHES_FILES=( ${PUBLISH_ARCHES_FILES} )
+    else
+        ARCHES_FILES=(
+            .buildkite/pipelines/main/platforms/upload_linux.arches
+            .buildkite/pipelines/main/platforms/upload_macos.arches
+            .buildkite/pipelines/main/platforms/upload_windows.arches
+            .buildkite/pipelines/main/platforms/upload_freebsd.arches
+        )
+    fi
+    for arches in "${ARCHES_FILES[@]}"; do
+        [[ -f "${arches}" ]] || { echo "WARN: missing arches file ${arches}, skipping" >&2; continue; }
+        while read -r env_line; do
+            [[ -n "${env_line}" ]] || continue
+            # env_line looks like: TRIPLET="x86_64-linux-gnu" TIMEOUT="30"
+            # shellcheck disable=SC2086
+            eval "${env_line}"
+            [[ -n "${TRIPLET:-}" ]] && TRIPLETS+=( "${TRIPLET}" )
+        done < <(bash .buildkite/utilities/arches_env.sh "${arches}")
+    done
 fi
 
 # Defense in depth: refuse unless this commit is a genuine release commit on
@@ -58,20 +87,7 @@ NOTARY_DEFER_DIR="$(mktemp -d)"
 export NOTARY_DEFER_DIR
 trap 'rm -rf "${NOTARY_DEFER_DIR}"' EXIT
 
-# Collect all triplets from the arches files.
-TRIPLETS=()
-for arches in "${ARCHES_FILES[@]}"; do
-    [[ -f "${arches}" ]] || { echo "WARN: missing arches file ${arches}, skipping" >&2; continue; }
-    while read -r env_line; do
-        [[ -n "${env_line}" ]] || continue
-        # env_line looks like: TRIPLET="x86_64-linux-gnu" TIMEOUT="30"
-        # shellcheck disable=SC2086
-        eval "${env_line}"
-        [[ -n "${TRIPLET:-}" ]] && TRIPLETS+=( "${TRIPLET}" )
-    done < <(bash .buildkite/utilities/arches_env.sh "${arches}")
-done
-
-echo "--- Publishing ${#TRIPLETS[@]} triplets: ${TRIPLETS[*]}"
+echo "--- Publishing ${#TRIPLETS[@]} triplet(s): ${TRIPLETS[*]:-}"
 
 # Which OIDC role to assume for signing+promotion. Defaults to the trusted
 # production `publish` role; the non-production publish test stack sets
@@ -90,12 +106,16 @@ for triplet in "${TRIPLETS[@]}"; do
     fi
 done
 
-echo "+++ Publish source dists"
-# shellcheck source=SCRIPTDIR/aws_oidc.sh
-source .buildkite/utilities/aws_oidc.sh "${PUBLISH_OIDC_MODE}"
-if ! bash .buildkite/utilities/publish_srcdist.sh; then
-    echo "ERROR: publishing source dists failed" >&2
-    FAILED+=( "srcdist" )
+# The source dists are a per-commit product: published by the docs target
+# (and the publish-everything path), never by a per-platform build.
+if [[ -z "${PUBLISH_TARGET:-}" || "${PUBLISH_TARGET}" == "docs" ]]; then
+    echo "+++ Publish source dists"
+    # shellcheck source=SCRIPTDIR/aws_oidc.sh
+    source .buildkite/utilities/aws_oidc.sh "${PUBLISH_OIDC_MODE}"
+    if ! bash .buildkite/utilities/publish_srcdist.sh; then
+        echo "ERROR: publishing source dists failed" >&2
+        FAILED+=( "srcdist" )
+    fi
 fi
 
 # Deferred macOS triplets: collect Apple's verdicts, staple, and promote.
@@ -159,4 +179,4 @@ if [[ "${#FAILED[@]}" -gt 0 ]]; then
     exit 1
 fi
 
-echo "+++ All triplets published"
+echo "+++ Everything published"

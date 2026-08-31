@@ -6,7 +6,8 @@
 # the release bucket (the "bucket dance", see utilities/promote_release.sh).
 # Builds are created MANUALLY by the release manager: New Build with
 # branch = v<version> (and commit left as HEAD, which resolves to the
-# tag), after the julia-publish run for that tag has completed.
+# tag), after the julia-publish builds for that tag (one per platform,
+# plus docs) have all completed.
 #
 # SECURITY: like julia-publish, the pipeline slug is what the
 # julia-oidc-promote IAM role trusts. It MUST be configured in Buildkite

@@ -1,16 +1,31 @@
-# Launched by the julia-publish pipeline. A single trusted step signs and
-# promotes every staged build to its final release location, then deploys
-# docs. This is the only place release secrets (KMS signing keys) are used.
+# Launched by the julia-publish pipeline. A trusted step signs and promotes
+# staged builds to their final release location; a second deploys the docs.
+# This is the only place release secrets (KMS signing keys) are used.
+#
+# julia-ci triggers one build here per published platform, as soon as that
+# platform's own build + test jobs are green, with PUBLISH_TARGET=<triplet>
+# (see utilities/render_launch_pipeline.py), plus one PUBLISH_TARGET=docs
+# build for the per-commit products (HTML docs; source dists on release
+# tags). A build with no PUBLISH_TARGET publishes everything: the manual
+# re-run path (ops/README.md).
 steps:
   - group: "Publish"
     steps:
-      - label: ":lock: publish all"
-        key: "publish_all"
+      - label: ":lock: publish ${PUBLISH_TARGET:-all}"
+        # `publish_*` is the step-key pattern the julia-oidc-publish role
+        # trusts (ops/terraform/iam.tf). Carrying the target in the key and
+        # the concurrency group lets one commit's per-platform builds publish
+        # concurrently while publishes of the same target stay serialized.
+        key: "publish_${PUBLISH_TARGET:-all}"
+        # The docs target's only work in this step is the release source
+        # dists; on a non-tag commit there is nothing to publish, so skip the
+        # (sandboxed, slow-to-start) job outright.
+        if: build.env("PUBLISH_TARGET") != "docs" || build.tag =~ /^v[0-9]/ || build.branch =~ /^v[0-9]/
         # No in-pipeline build dependency: reads the unsigned tarballs from
         # the commit-sha-gated staging area in S3 (written by the build
-        # pipeline). One job, all triplets.
+        # pipeline).
         concurrency: 1
-        concurrency_group: 'publish/julialangnightlies'
+        concurrency_group: "publish/julialangnightlies/${PUBLISH_TARGET:-all}"
         concurrency_method: eager
         plugins:
           - JuliaCI/external-buildkite#v1:
@@ -79,7 +94,9 @@ steps:
       # role-assuming "upload docs" job (see misc/deploy_docs.yml), and a
       # duplicate key across the build is rejected.
       - label: "deploy docs"
-        if: build.env("PUBLISH_SCHEDULED") != "true"
+        # A per-commit product: not on scheduled publishes, and not on the
+        # per-platform binary builds.
+        if: build.env("PUBLISH_SCHEDULED") != "true" && (build.env("PUBLISH_TARGET") == null || build.env("PUBLISH_TARGET") == "docs")
         plugins:
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"
