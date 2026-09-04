@@ -29,9 +29,9 @@ the same way the test jobs do.
 
 Every task is measured `TTFX_BLOCKS` times per arm, the arm order reversed on alternate
 blocks (`base head head base`), so drift over the hour lands on both arms alike. Each
-sample clears compiled code and the JIT object cache, precompiles, then runs the task
-script `TTFX_REPEATS` times: the first run is the cold measurement, the later ones hit
-whatever caches the first populated. The depot holds packages and artifacts only; the
+sample clears compiled code and the JIT object cache, precompiles once, then runs the
+task script `TTFX_REPEATS` times (three) in fresh processes: the first run is the cold
+measurement, the later ones hit whatever caches the first populated. The depot holds packages and artifacts only; the
 agent user's own depot is not on the path.
 
 A task's metric is a robust regression when the head samples are all slower than every
@@ -40,10 +40,14 @@ difference clears an absolute floor; improvements are the mirror image. Per metr
 the geometric mean of the ratios over the suite is judged per block against a tighter
 threshold, which catches a small cost spread across every package. Thresholds are the
 `METRICS` table in `ttfx_compare.jl`. A task that fails on head and passes on base is a
-regression. The job fails on any robust regression and, either way, posts the report as
-a Buildkite annotation and uploads the data as artifacts. Nothing is posted to GitHub
-beyond the commit status: the job runs the pull request's own code, so it holds no
-GitHub token.
+regression; one that fails on both is listed in `compare.json` and left out of the
+verdict. A task stops at its first failed sample rather than finishing its blocks, and
+its log group is expanded with the failure in red.
+
+The job fails on any robust regression. The report is posted as a Buildkite annotation
+only when it has differences to show; a clean comparison leaves the green status, the
+report and the data as artifacts. Nothing is posted to GitHub beyond the commit status:
+the job runs the pull request's own code, so it holds no GitHub token.
 
 In this repository's own self-test pipeline the commit under test is a julia master
 commit, and its parent stands in for the merge-base, so the same path runs there.
@@ -68,7 +72,7 @@ sample per record, take the minimum over blocks for a task.
 ## Knobs
 
 Environment variables on the job: `TTFX_EXCLUDE` (default `exclude.txt`, or `none`),
-`TTFX_BLOCKS` (2), `TTFX_REPEATS` (2), `TTFX_BASE_WAIT_MINUTES` (90),
+`TTFX_BLOCKS` (2), `TTFX_REPEATS` (3), `TTFX_BASE_WAIT_MINUTES` (90),
 `TTFX_BASE_LOOKBACK` (10), `TTFX_SNIPPETS_REPO` and `TTFX_SNIPPETS_REF`. The job's budget
 is the sum of the tasks' precompile times, times two arms, times the blocks, plus package
 downloads: exclude tasks before raising the timeout.

@@ -4,7 +4,9 @@
 #   julia --startup-file=no ttfx_compare.jl --results FILE --head LABEL [--base LABEL]
 #         [--meta FILE] [--report FILE] [--json FILE] [--title T] [--url U] [--base-note N]
 #
-# Exit status: 0 no robust regression, 1 robust regression, 2 unusable data.
+# Exit status: 0 nothing to report, 1 robust regression, 2 unusable data, 3 robust
+# improvements only. The report lists only the differences (and, in summary mode, every
+# task); with nothing to report it is a single line.
 #
 # A difference in a task's metric is robust when the samples of the two builds do not
 # overlap and every ABBA block, each of which pairs a head sample with a base sample taken
@@ -81,21 +83,28 @@ function compare_task(name, byarm, base, head, nblocks)
     b = get(byarm, base, Any[]); h = get(byarm, head, Any[])
     out = Dict{String,Any}("name" => name, "metrics" => Dict{String,Any}(), "note" => nothing,
                            "regressions" => String[], "improvements" => String[])
-    if length(b) != nblocks || length(h) != nblocks
-        out["note"] = "incomplete: $(length(b)) base and $(length(h)) head samples"
+    # The driver stops a task at its first failure, so a failed task has fewer samples than
+    # blocks and possibly none for the arm that never got its turn.
+    berrs = [r for r in b if r["status"] != "ok"]; herrs = [r for r in h if r["status"] != "ok"]
+    bok = any(r -> r["status"] == "ok", b); hok = any(r -> r["status"] == "ok", h)
+    if !isempty(berrs) && !isempty(herrs)
+        out["note"] = "fails on both: " * something(herrs[1]["error"], "")
+        return out
+    elseif !isempty(herrs)
+        out["note"] = "fails on head: " * something(herrs[1]["error"], "")
+        bok && push!(out["regressions"], "fails")
+        return out
+    elseif !isempty(berrs)
+        if hok
+            out["note"] = "fixed on head (fails on base: " * something(berrs[1]["error"], "") * ")"
+            push!(out["improvements"], "fixed")
+        else
+            out["note"] = "fails on base, head not measured: " * something(berrs[1]["error"], "")
+        end
         return out
     end
-    berr = all(r -> r["status"] == "error", b); herr = all(r -> r["status"] == "error", h)
-    if berr && herr
-        out["note"] = "fails on both: " * something(h[1]["error"], "")
-        return out
-    elseif herr
-        out["note"] = "fails on head: " * something(h[1]["error"], "")
-        push!(out["regressions"], "fails")
-        return out
-    elseif berr
-        out["note"] = "fixed on head (fails on base: " * something(b[1]["error"], "") * ")"
-        push!(out["improvements"], "fixed")
+    if length(b) != nblocks || length(h) != nblocks
+        out["note"] = "incomplete: $(length(b)) base and $(length(h)) head samples"
         return out
     end
     hashes = unique(something.(vcat([r["packages_hash"] for r in b], [r["packages_hash"] for r in h]), ""))
@@ -145,11 +154,16 @@ function write_comparison(io, opts, meta, tasks, suite, nblocks)
     base, head = opts["base"], opts["head"]
     nreg = sum(t -> length(t["regressions"]), tasks; init = 0) + count(s -> s["verdict"] == "regression", values(suite))
     nimp = sum(t -> length(t["improvements"]), tasks; init = 0) + count(s -> s["verdict"] == "improvement", values(suite))
-    println(io, "## ", opts["title"])
     note = isempty(opts["base-note"]) ? "" : ", " * opts["base-note"]
     link = isempty(opts["url"]) ? "" : " · [job](" * opts["url"] * ")"
-    println(io, arm_desc(meta, head), " vs ", arm_desc(meta, base), note, " · ", length(tasks), " tasks · ",
-            nblocks, " blocks (ABBA)", link, "\n")
+    header = arm_desc(meta, head) * " vs " * arm_desc(meta, base) * note * " · " * string(length(tasks)) *
+             " tasks · " * string(nblocks) * " blocks (ABBA)" * link
+    if nreg + nimp == 0
+        println(io, opts["title"], ": no robust regressions or improvements. ", header)
+        return nreg, nimp
+    end
+    println(io, "## ", opts["title"])
+    println(io, header, "\n")
     println(io, "**", nreg == 0 ? "No robust regressions" : "$nreg robust regression" * (nreg == 1 ? "" : "s"),
             ", ", nimp, " improvement", nimp == 1 ? "" : "s", ".** ",
             "Robust: the two builds' samples do not overlap and every block agrees beyond the threshold (",
@@ -178,19 +192,6 @@ function write_comparison(io, opts, meta, tasks, suite, nblocks)
             end
         end
     end
-    println(io, "\n<details><summary>All tasks (median head/base per metric)</summary>\n")
-    println(io, "| task | ", join([m.name for m in METRICS], " | "), " | note |")
-    println(io, "|---|", "---|"^length(METRICS), "---|")
-    for t in tasks
-        cells = map(METRICS) do m
-            haskey(t["metrics"], m.key) || return "–"
-            v = t["metrics"][m.key]
-            s = fmtr(median(v["ratios"]))
-            v["verdict"] == "regression" ? "**" * s * "**" : v["verdict"] == "improvement" ? "_" * s * "_" : s
-        end
-        println(io, "| ", t["name"], " | ", join(cells, " | "), " | ", something(t["note"], ""), " |")
-    end
-    println(io, "\n</details>")
     return nreg, nimp
 end
 
@@ -248,7 +249,7 @@ function main()
         println(stderr, "no task has samples for both arms")
         return 2
     end
-    return nreg > 0 ? 1 : 0
+    return nreg > 0 ? 1 : nimp > 0 ? 3 : 0
 end
 
 exit(main())

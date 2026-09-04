@@ -19,7 +19,7 @@ TTFX_DIR="$(pwd)/ttfx"
 TTFX_SNIPPETS_REPO="${TTFX_SNIPPETS_REPO:-https://github.com/tecosaur/Julia-TTFX-Snippets.git}"
 TTFX_SNIPPETS_REF="${TTFX_SNIPPETS_REF:-main}"
 TTFX_BLOCKS="${TTFX_BLOCKS:-2}"
-TTFX_REPEATS="${TTFX_REPEATS:-2}"
+TTFX_REPEATS="${TTFX_REPEATS:-3}"
 # Tasks not to run; "none" runs every task in the snippets checkout
 TTFX_EXCLUDE="${TTFX_EXCLUDE:-${TTFX_UTILS}/exclude.txt}"
 # The base build comes from where julia-ci stages its tarballs, or from the promoted
@@ -204,10 +204,16 @@ set +e
 "${HEAD_JULIA}" --startup-file=no "${TTFX_UTILS}/ttfx_compare.jl" "${compare_args[@]}"
 verdict=$?
 set -e
+# A comparison is annotated only when it has differences to show (exit 3: improvements,
+# exit 1: regressions); a clean comparison leaves only the green status and the report
+# artifact. The standalone summary is always shown.
 case "${verdict}" in
-    0) style="success" ;;
-    1) style="error" ;;
-    *) style="warning" ;;
+    0) [[ "${MODE}" == "standalone" ]] && buildkite-agent annotate --context "ttfx-${TRIPLET}" --style "info" < "${TTFX_DIR}/report.md" || true
+       exit 0 ;;
+    3) buildkite-agent annotate --context "ttfx-${TRIPLET}" --style "success" < "${TTFX_DIR}/report.md" || true
+       exit 0 ;;
+    1) buildkite-agent annotate --context "ttfx-${TRIPLET}" --style "error" < "${TTFX_DIR}/report.md" || true
+       exit 1 ;;
+    *) buildkite-agent annotate --context "ttfx-${TRIPLET}" --style "warning" < "${TTFX_DIR}/report.md" || true
+       exit "${verdict}" ;;
 esac
-buildkite-agent annotate --context "ttfx-${TRIPLET}" --style "${style}" < "${TTFX_DIR}/report.md" || true
-exit "${verdict}"

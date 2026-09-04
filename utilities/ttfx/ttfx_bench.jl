@@ -14,7 +14,7 @@
 #   --blocks N           ABBA blocks: every task is measured N times per arm, the arm order
 #                        reversed on alternate blocks (default 2)
 #   --repeats N          task script runs per sample; the first is the cold one, later ones
-#                        may hit caches it populated (default 2)
+#                        may hit caches it populated (default 3)
 #   --timeout S          wall-clock limit per subprocess, seconds (default 1800)
 #   --results FILE       records (default results.json)
 #   --meta FILE          provenance (default results-meta.json)
@@ -22,6 +22,8 @@
 #
 # Records: {arm, package, task, block, order, status, error, precompile_time, load_times,
 # run_times, total_times, packages_hash}. `order` is the arm's position within the block.
+# A task that fails on any arm finishes the current block, so every arm gets its one try,
+# and skips the remaining blocks: a broken package does not cost the whole ABBA.
 # The task script prints "load, run, total seconds"; the `*_times` arrays keep every
 # repeat in run order. `packages_hash` identifies the resolved package versions so a
 # comparison can tell a build difference from a resolution difference.
@@ -45,7 +47,7 @@ end
 function parse_args(args)
     opts = Dict{String,Any}(
         "tasks" => nothing, "exclude" => nothing, "depot" => nothing, "workdir" => nothing, "logdir" => nothing,
-        "blocks" => "2", "repeats" => "2", "timeout" => "1800",
+        "blocks" => "2", "repeats" => "3", "timeout" => "1800",
         "results" => "results.json", "meta" => "results-meta.json", "snippets-commit" => "")
     arms = Arm[]
     i = 1
@@ -309,7 +311,9 @@ function main()
             msg = instantiate(arm, depot, proj, timeout, "$(task.package)-$(task.task)-$(arm.label)")
             msg === nothing || (failed[arm.label] = "instantiate: " * msg)
         end
+        stop = false
         for block in 1:blocks
+            stop && break
             order = isodd(block) ? arms : reverse(arms)
             for (pos, arm) in enumerate(order)
                 result = if haskey(failed, arm.label)
@@ -330,15 +334,18 @@ function main()
                          packages_hash = packages_hash(projs[arm.label]))
                 push!(records, rec)
                 write_results()
-                if rec.status == "error"
-                    println("  block $block  $(rpad(arm.label, 8)) ERROR: $(rec.error)")
+                if rec.status == "ok"
+                    @printf("  block %d  %-8s precompile=%7.2fs  load=%6.2fs  run=%6.2fs\n", block, arm.label,
+                            rec.precompile_time, rec.load_times[1], rec.run_times[1])
                 else
-                    @printf("  block %d  %-8s precompile=%7.2fs  load=%6.2fs  run=%6.2fs%s\n", block, arm.label,
-                            rec.precompile_time, rec.load_times[1], rec.run_times[1],
-                            rec.status == "ok" ? "" : "  (partial: $(rec.error))")
+                    # Red, and `^^^ +++` makes Buildkite expand this task's log group
+                    println("  block $block  $(rpad(arm.label, 8)) \e[31mFAILED\e[0m ($(rec.status)): $(rec.error)")
+                    println("^^^ +++")
+                    stop = true
                 end
                 flush(stdout)
             end
+            stop && block < blocks && println("  skipping the remaining blocks of $label")
         end
     end
     println("--- Done: $(length(records)) records in $(opts["results"])")
