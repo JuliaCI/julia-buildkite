@@ -207,13 +207,26 @@ set -e
 # A comparison is annotated only when it has differences to show (exit 3: improvements,
 # exit 1: regressions); a clean comparison leaves only the green status and the report
 # artifact. The standalone summary is always shown.
+annotate() {
+    buildkite-agent annotate --context "ttfx-${TRIPLET}" --style "$1" < "${TTFX_DIR}/report.md" || true
+}
 case "${verdict}" in
-    0) [[ "${MODE}" == "standalone" ]] && buildkite-agent annotate --context "ttfx-${TRIPLET}" --style "info" < "${TTFX_DIR}/report.md" || true
-       exit 0 ;;
-    3) buildkite-agent annotate --context "ttfx-${TRIPLET}" --style "success" < "${TTFX_DIR}/report.md" || true
-       exit 0 ;;
-    1) buildkite-agent annotate --context "ttfx-${TRIPLET}" --style "error" < "${TTFX_DIR}/report.md" || true
-       exit 1 ;;
-    *) buildkite-agent annotate --context "ttfx-${TRIPLET}" --style "warning" < "${TTFX_DIR}/report.md" || true
-       exit "${verdict}" ;;
+    0)
+        if [[ "${MODE}" == "standalone" ]]; then
+            annotate "info"
+        fi
+        exit 0
+        ;;
+    3)
+        annotate "success"
+        exit 0
+        ;;
+    1)
+        annotate "error"
+        exit 1
+        ;;
+    *)
+        annotate "warning"
+        exit "${verdict}"
+        ;;
 esac
