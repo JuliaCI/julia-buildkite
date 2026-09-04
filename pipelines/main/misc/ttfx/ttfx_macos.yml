@@ -1,0 +1,19 @@
+steps:
+  - group: "${GROUP?}"
+    steps:
+      - label: ":macos: TTFX ${TRIPLET?}"
+        key: "ttfx_${TRIPLET?}"
+        depends_on:
+          - "build_${TRIPLET?}"
+        plugins:
+          - JuliaCI/external-buildkite#v1:
+              version: "./.buildkite-external-version"
+              repo_url: "https://github.com/JuliaCI/julia-buildkite"
+        commands: "bash .buildkite/utilities/ttfx/ttfx_ci.sh"
+        timeout_in_minutes: ${TIMEOUT?}
+        agents:
+          queue: "test"
+          os: "macos"
+          arch: "${ARCH}"
+        env:
+          TRIPLET: "${TRIPLET?}"

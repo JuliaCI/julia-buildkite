@@ -1,0 +1,10 @@
+# OS       TRIPLET                  ARCH          TIMEOUT
+macos      aarch64-apple-darwin     aarch64       .
+
+# These special lines allow us to embed default values for the columns above.
+# Any column without a default mapping here will simply substitute a `.` to the empty string
+
+# The whole suite, four precompiles of every task on a pull request, takes a
+# couple of hours, and a pull request job may first wait for the master build
+# of its merge-base (up to TTFX_BASE_WAIT_MINUTES).
+#default TIMEOUT 300

@@ -1,0 +1,4 @@
+# Julia-TTFX-Snippets tasks the CI job skips, as Package/Task, one per line. Every other
+# task in the snippets checkout runs. Names that no longer exist there are ignored.
+JET/Type-Stability-Analysis         # JET does not support the development version of Julia
+Enzyme/Gradient-Of-Square-Norm      # precompilation fails on master (GPUCompiler)

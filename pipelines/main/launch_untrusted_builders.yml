@@ -13,7 +13,7 @@
 #
 # Now a SINGLE launch step runs `utilities/render_launch_pipeline.py`, which
 # renders ONE pre-grouped pipeline document (one `group:` per label:
-# Build / Check / Test / Allow Fail / JuliaSyntax / JuliaLowering / JuliaC /
+# Build / Check / Test / Allow Fail / JuliaSyntax / JuliaLowering / JuliaC / TTFX /
 # Publish), and uploads it with ONE `pipeline upload`.
 #
 # The renderer reproduces the old behaviour EXACTLY:

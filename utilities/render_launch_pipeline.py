@@ -38,7 +38,7 @@ Schedule builds emit the scheduled workload groups and publish triggers instead
 of the per-commit groups. Labeled PRs render the same workload groups as a
 supplemental pipeline, without publish triggers. Per-commit results are grouped
 into one `group:` per label: Build, Check, Test, Allow Fail, JuliaSyntax,
-JuliaLowering, JuliaC, Publish.
+JuliaLowering, JuliaC, TTFX, Publish.
 
 The Publish group's triggers each `depends_on` only their own platform's
 build + test jobs (see publish_group_text).
@@ -671,6 +671,11 @@ def main():
 
     # JuliaC: itself a launcher with its own group + notify -- include verbatim.
     blocks.append(verbatim_group_text(os.path.join(MISC, "juliac", "test_juliac.yml")))
+
+    # TTFX: benchmarks the build on the Julia-TTFX-Snippets tasks, against the
+    # master build of the merge-base on pull requests (utilities/ttfx/README.md).
+    # A launcher with its own group + notify -- include verbatim.
+    blocks.append(verbatim_group_text(os.path.join(MISC, "ttfx", "ttfx.yml")))
 
     blocks.append(publish_group_text())
 
