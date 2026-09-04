@@ -22,9 +22,10 @@ step, and `base`, the master build of the merge-base with the target branch. jul
 stages every build it makes below its commit sha, so the job fetches the base from
 there (falling back to the promoted nightlies once the staged object has expired), and
 waits for it if the merge-base's build is still running, up to
-`TTFX_BASE_WAIT_MINUTES`. If that build failed or Buildkite never started one, the job
-steps back one commit at a time along the branch, up to `TTFX_BASE_LOOKBACK`, and says
-so in the report. Both arms are re-signed and their stdlib pkgimage checksums repaired
+`TTFX_BASE_WAIT_MINUTES` (20 minutes, about one macOS aarch64 build; the job holds a
+macOS agent while it waits). If that build failed, Buildkite never started one, or it is
+still not ready when the wait runs out, the job steps back one commit at a time along
+the branch, up to `TTFX_BASE_LOOKBACK`, and says so in the report. Both arms are re-signed and their stdlib pkgimage checksums repaired
 the same way the test jobs do.
 
 Every task is measured `TTFX_BLOCKS` times per arm, the arm order reversed on alternate
@@ -72,7 +73,7 @@ sample per record, take the minimum over blocks for a task.
 ## Knobs
 
 Environment variables on the job: `TTFX_EXCLUDE` (default `exclude.txt`, or `none`),
-`TTFX_BLOCKS` (2), `TTFX_REPEATS` (3), `TTFX_BASE_WAIT_MINUTES` (90),
+`TTFX_BLOCKS` (2), `TTFX_REPEATS` (3), `TTFX_BASE_WAIT_MINUTES` (20),
 `TTFX_BASE_LOOKBACK` (10), `TTFX_SNIPPETS_REPO` and `TTFX_SNIPPETS_REF`. The job's budget
 is the sum of the tasks' precompile times, times two arms, times the blocks, plus package
 downloads: exclude tasks before raising the timeout.
