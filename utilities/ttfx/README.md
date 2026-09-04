@@ -23,9 +23,9 @@ stages every build it makes below its commit sha, so the job fetches the base fr
 there (falling back to the promoted nightlies once the staged object has expired), and
 waits for it if the merge-base's build is still running, up to
 `TTFX_BASE_WAIT_MINUTES` (20 minutes, about one macOS aarch64 build; the job holds a
-macOS agent while it waits). If that build failed, Buildkite never started one, or it is
-still not ready when the wait runs out, the job steps back one commit at a time along
-the branch, up to `TTFX_BASE_LOOKBACK`, and says so in the report. Both arms are re-signed and their stdlib pkgimage checksums repaired
+macOS agent while it waits). There is no substitute base: if the wait runs out, or that
+build failed or was never started, the job fails and says why, and can be retried once
+the build exists. Both arms are re-signed and their stdlib pkgimage checksums repaired
 the same way the test jobs do.
 
 Every task is measured `TTFX_BLOCKS` times per arm, the arm order reversed on alternate
@@ -74,6 +74,6 @@ sample per record, take the minimum over blocks for a task.
 
 Environment variables on the job: `TTFX_EXCLUDE` (default `exclude.txt`, or `none`),
 `TTFX_BLOCKS` (2), `TTFX_REPEATS` (3), `TTFX_BASE_WAIT_MINUTES` (20),
-`TTFX_BASE_LOOKBACK` (10), `TTFX_SNIPPETS_REPO` and `TTFX_SNIPPETS_REF`. The job's budget
+`TTFX_SNIPPETS_REPO` and `TTFX_SNIPPETS_REF`. The job's budget
 is the sum of the tasks' precompile times, times two arms, times the blocks, plus package
 downloads: exclude tasks before raising the timeout.

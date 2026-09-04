@@ -26,11 +26,8 @@ TTFX_EXCLUDE="${TTFX_EXCLUDE:-${TTFX_UTILS}/exclude.txt}"
 # nightlies once the staged object has expired
 TTFX_BASE_STAGING_BUCKET="${TTFX_BASE_STAGING_BUCKET:-julialang-ephemeral-ci}"
 TTFX_NIGHTLIES_URL="${TTFX_NIGHTLIES_URL:-https://julialangnightlies-s3.julialang.org}"
-# How long to wait for the merge-base's build (a macOS aarch64 build takes about 18
-# minutes), and how many commits to step back past ones whose build failed, was never
-# started, or is still not ready when the wait runs out
+# How long to wait for the merge-base's build; a macOS aarch64 build takes about 18 minutes
 TTFX_BASE_WAIT_MINUTES="${TTFX_BASE_WAIT_MINUTES:-20}"
-TTFX_BASE_LOOKBACK="${TTFX_BASE_LOOKBACK:-10}"
 
 rm -rf "${TTFX_DIR}"
 mkdir -p "${TTFX_DIR}"
@@ -123,58 +120,39 @@ if [[ -n "${MERGE_BASE}" ]]; then
     echo "--- Fetch the ${BASE_BRANCH} build of the merge-base"
     # julia-ci stages the tarball as soon as the merge-base's build job finishes, so a
     # merge-base pushed recently may still be building: wait for it, up to
-    # TTFX_BASE_WAIT_MINUTES, since this job holds a macOS agent the whole time. When
-    # that commit's build failed, was never started, or is still not ready when the
-    # wait runs out, the previous commit on the branch is tried instead. The build state
-    # comes from the commit statuses on GitHub, asked every fifth minute to stay well
-    # inside the anonymous API rate limit.
-    commit="${MERGE_BASE}"
-    steps_back=0
+    # TTFX_BASE_WAIT_MINUTES, since this job holds a macOS agent the whole time. There is
+    # no substitute base: when the wait runs out, or that commit's build failed or was
+    # never started, the job fails and says why. The build state comes from the commit
+    # statuses on GitHub, asked every fifth minute to stay well inside the anonymous API
+    # rate limit.
     poll=0
     state="pending"
-    reason=""
     deadline=$(( $(date +%s) + TTFX_BASE_WAIT_MINUTES * 60 ))
-    BASE_COMMIT=""
-    while [[ -z "${BASE_COMMIT}" ]]; do
-        if fetch_base_build "${commit}" "${TTFX_DIR}/base.tar.gz"; then
-            BASE_COMMIT="${commit}"
-            break
-        fi
+    until fetch_base_build "${MERGE_BASE}" "${TTFX_DIR}/base.tar.gz"; do
         if (( poll % 5 == 0 )); then
-            state="$("${HEAD_JULIA}" --startup-file=no "${TTFX_UTILS}/ttfx_build_state.jl" "${TTFX_GITHUB_REPO}" "${commit}")"
+            state="$("${HEAD_JULIA}" --startup-file=no "${TTFX_UTILS}/ttfx_build_state.jl" "${TTFX_GITHUB_REPO}" "${MERGE_BASE}")"
         fi
         poll=$(( poll + 1 ))
         case "${state}" in
             pending|unknown)
-                if (( $(date +%s) < deadline )); then
-                    echo "$(date -u +%H:%M:%S)  build of ${commit:0:10} not staged yet (${state}); waiting"
-                    sleep 60
-                    continue
+                if (( $(date +%s) >= deadline )); then
+                    echo "^^^ +++"
+                    echo "The ${BASE_BRANCH} build of the merge-base ${MERGE_BASE:0:10} was not ready after ${TTFX_BASE_WAIT_MINUTES} minutes (state: ${state}); retry this job once it is" >&2
+                    exit 1
                 fi
-                why="its build was not ready after ${TTFX_BASE_WAIT_MINUTES} minutes"
+                echo "$(date -u +%H:%M:%S)  build of ${MERGE_BASE:0:10} not staged yet (${state}); waiting"
+                sleep 60
                 ;;
             *)
                 # success with nothing to fetch: expired from both locations; failure or
                 # none: not coming
-                why="its build: ${state}"
+                echo "^^^ +++"
+                echo "No ${BASE_BRANCH} build of the merge-base ${MERGE_BASE:0:10} to compare against (its build: ${state})" >&2
+                exit 1
                 ;;
         esac
-        steps_back=$(( steps_back + 1 ))
-        if (( steps_back > TTFX_BASE_LOOKBACK )); then
-            echo "^^^ +++"
-            echo "No ${BASE_BRANCH} build within ${TTFX_BASE_LOOKBACK} commits before the merge-base ${MERGE_BASE:0:10}; rebase the pull request" >&2
-            exit 1
-        fi
-        [[ -n "${reason}" ]] || reason="${why}"
-        echo "build of ${commit:0:10}: ${why}; trying its parent"
-        commit="$(git rev-parse "${commit}^")"
-        poll=0
     done
-    if [[ "${BASE_COMMIT}" == "${MERGE_BASE}" ]]; then
-        BASE_NOTE="the ${BASE_BRANCH} build of the merge-base"
-    else
-        BASE_NOTE="${steps_back} commit(s) before the merge-base ${MERGE_BASE:0:10} on ${BASE_BRANCH} (${reason})"
-    fi
+    BASE_NOTE="the ${BASE_BRANCH} build of the merge-base"
     install_julia "${TTFX_DIR}/base.tar.gz" base
     ARMS=( "base=${TTFX_DIR}/base" "head=${TTFX_DIR}/head" )
 fi
