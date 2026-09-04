@@ -10,6 +10,7 @@
 #   --depot DIR          depot shared by every arm: packages and artifacts are reused,
 #                        compiled code is cleared before every sample (default: temporary)
 #   --workdir DIR        per-arm copies of the task projects go here (default: temporary)
+#   --logdir DIR         full output of every failed subprocess is kept here
 #   --blocks N           ABBA blocks: every task is measured N times per arm, the arm order
 #                        reversed on alternate blocks (default 2)
 #   --repeats N          task script runs per sample; the first is the cold one, later ones
@@ -43,7 +44,7 @@ end
 
 function parse_args(args)
     opts = Dict{String,Any}(
-        "tasks" => nothing, "exclude" => nothing, "depot" => nothing, "workdir" => nothing,
+        "tasks" => nothing, "exclude" => nothing, "depot" => nothing, "workdir" => nothing, "logdir" => nothing,
         "blocks" => "2", "repeats" => "2", "timeout" => "1800",
         "results" => "results.json", "meta" => "results-meta.json", "snippets-commit" => "")
     arms = Arm[]
@@ -137,10 +138,20 @@ function run_timed(cmd::Cmd, timeout::Float64)
     return out, String(take!(err)), success(proc) && !timed_out[], timed_out[]
 end
 
-function failure_message(what, err, timed_out, timeout)
+# Where the full output of failed subprocesses goes; the record keeps only a summary.
+const LOGDIR = Ref{Union{Nothing,String}}(nothing)
+
+function failure_message(what, out, err, timed_out, timeout; logname = nothing)
     why = timed_out ? "$what timed out after $(timeout)s" : "$what failed"
     lines = filter(!isempty, strip.(split(err, '\n')))
-    return isempty(lines) ? why : why * ": " * join(last(lines, min(5, length(lines))), " | ")
+    msg = isempty(lines) ? why : why * ": " * join(last(lines, min(5, length(lines))), " | ")
+    if LOGDIR[] !== nothing && logname !== nothing
+        mkpath(LOGDIR[])
+        path = joinpath(LOGDIR[], logname * ".log")
+        write(path, "--- stdout ---\n" * out * "\n--- stderr ---\n" * err)
+        msg *= " (full output in $(basename(path)))"
+    end
+    return msg
 end
 
 # Identify the build behind an arm. Read through the binary itself, so what is recorded is
@@ -152,7 +163,7 @@ function build_info(arm::Arm, timeout::Float64)
                       Sys.MACHINE, string(Sys.CPU_THREADS)], '\\n')
     end"""
     out, err, ok, timed_out = run_timed(`$(arm.julia) --startup-file=no -e $code`, timeout)
-    ok || error("$(arm.label): " * failure_message("probing $(arm.julia)", err, timed_out, timeout))
+    ok || error("$(arm.label): " * failure_message("probing $(arm.julia)", out, err, timed_out, timeout))
     f = split(out, '\n')
     length(f) == 7 || error("$(arm.label): unexpected probe output $(repr(out))")
     return (; label = arm.label, root = arm.root, version = f[1], commit = f[2],
@@ -199,25 +210,25 @@ end
 
 # Resolve and download the task's packages for one arm, without precompiling. Each arm
 # gets its own copy of the project, so each resolves as a user of that build would.
-function instantiate(arm::Arm, depot::String, proj::String, timeout::Float64)
+function instantiate(arm::Arm, depot::String, proj::String, timeout::Float64, logname::String)
     code = "using Pkg; Pkg.instantiate()"
     cmd = addenv(`$(arm.julia) --startup-file=no --project=$proj -e $code`,
                  arm_env(arm, depot)..., "JULIA_PKG_PRECOMPILE_AUTO" => "0")
-    _, err, ok, timed_out = run_timed(cmd, timeout)
-    ok || return failure_message("instantiate", err, timed_out, timeout)
+    out, err, ok, timed_out = run_timed(cmd, timeout)
+    ok || return failure_message("instantiate", out, err, timed_out, timeout; logname = logname * "-instantiate")
     return nothing
 end
 
 # One sample: clear the caches, precompile the project, then run the task script
 # `repeats` times in fresh processes.
-function measure(arm::Arm, depot::String, proj::String, repeats::Int, timeout::Float64)
+function measure(arm::Arm, depot::String, proj::String, repeats::Int, timeout::Float64, logname::String)
     clear_compiled!(depot)
     env = arm_env(arm, depot)
     precomp_code = "using Pkg; t = @elapsed Pkg.precompile(); print(\"__TTFX_T__:\", t)"
     out, err, ok, timed_out = run_timed(
         addenv(`$(arm.julia) --startup-file=no --project=$proj -e $precomp_code`,
                env..., "JULIA_PKG_PRECOMPILE_AUTO" => "0"), timeout)
-    ok || return (; status = "error", error = failure_message("precompile", err, timed_out, timeout))
+    ok || return (; status = "error", error = failure_message("precompile", out, err, timed_out, timeout; logname = logname * "-precompile"))
     pm = match(r"__TTFX_T__:([\d.eE+-]+)", out)
     pm === nothing && return (; status = "error", error = "could not parse precompile time from $(repr(out))")
     precompile_time = parse(Float64, pm.captures[1])
@@ -229,7 +240,7 @@ function measure(arm::Arm, depot::String, proj::String, repeats::Int, timeout::F
         out, err, ok, timed_out = run_timed(task_cmd, timeout)
         m = match(r"([\d.]+),\s*([\d.]+),\s*([\d.]+)\s+seconds", out)
         if m === nothing || !ok
-            last_err = failure_message("task", err, timed_out, timeout)
+            last_err = failure_message("task", out, err, timed_out, timeout; logname = logname * "-task$(length(load_ts) + 1)")
             break
         end
         lt, rt, tt = parse.(Float64, m.captures)
@@ -248,6 +259,7 @@ function main()
     depot = something(opts["depot"], mktempdir(; prefix = "ttfx-depot-"))
     workdir = something(opts["workdir"], mktempdir(; prefix = "ttfx-work-"))
     mkpath(depot); mkpath(workdir)
+    LOGDIR[] = opts["logdir"]
 
     all_tasks = find_tasks(abspath(opts["tasks"]))
     tasks, stale = select_tasks(all_tasks, opts["exclude"])
@@ -294,7 +306,7 @@ function main()
             mkpath(dirname(proj))
             cp(task.dir, proj)
             projs[arm.label] = proj
-            msg = instantiate(arm, depot, proj, timeout)
+            msg = instantiate(arm, depot, proj, timeout, "$(task.package)-$(task.task)-$(arm.label)")
             msg === nothing || (failed[arm.label] = "instantiate: " * msg)
         end
         for block in 1:blocks
@@ -304,7 +316,7 @@ function main()
                     (; status = "error", error = failed[arm.label])
                 else
                     try
-                        measure(arm, depot, projs[arm.label], repeats, timeout)
+                        measure(arm, depot, projs[arm.label], repeats, timeout, "$(task.package)-$(task.task)-$(arm.label)-b$block")
                     catch e
                         (; status = "error", error = sprint(showerror, e))
                     end

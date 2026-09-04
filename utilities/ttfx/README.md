@@ -45,6 +45,9 @@ a Buildkite annotation and uploads the data as artifacts. Nothing is posted to G
 beyond the commit status: the job runs the pull request's own code, so it holds no
 GitHub token.
 
+In this repository's own self-test pipeline the commit under test is a julia master
+commit, and its parent stands in for the merge-base, so the same path runs there.
+
 ## Master and release branches (julia-ci)
 
 One arm, `head`, measured `TTFX_BLOCKS` times per task; no comparison. The report is
@@ -57,6 +60,7 @@ a per-task summary. The data is kept as Buildkite artifacts of the job for
 | `ttfx/results-meta.json` | the builds (`arms.<label>`: version, commit, date, CPU threads seen), machine, settings, task list, snippets commit, Buildkite build |
 | `ttfx/report.md`, `ttfx/compare.json` | the report and, on pull requests, the per-task and suite verdicts |
 | `ttfx/benchmark.log` | the driver's log |
+| `ttfx/logs/*.log` | full stdout and stderr of every subprocess that failed |
 
 `load_times[1]` and `run_times[1]` are the cold numbers; `precompile_time` is one
 sample per record, take the minimum over blocks for a task.

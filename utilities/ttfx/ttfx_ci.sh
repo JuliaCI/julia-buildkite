@@ -35,11 +35,11 @@ rm -rf "${TTFX_DIR}"
 mkdir -p "${TTFX_DIR}"
 
 # Whatever was measured is kept, even when the job fails part way
-# shellcheck disable=SC2329  # invoked by the EXIT trap
+# shellcheck disable=SC2317,SC2329  # invoked by the EXIT trap
 upload_results() {
     echo "--- Upload results"
     local pattern
-    for pattern in "ttfx/*.json" "ttfx/*.md" "ttfx/*.log"; do
+    for pattern in "ttfx/*.json" "ttfx/*.md" "ttfx/*.log" "ttfx/logs/*.log"; do
         if compgen -G "${pattern}" >/dev/null; then
             buildkite-agent artifact upload "${pattern}" || true
         fi
@@ -77,17 +77,19 @@ fetch_base_build() {
     return 1
 }
 
-# JuliaLang/julia, from https://github.com/JuliaLang/julia.git or git@github.com:JuliaLang/julia.git
+# JuliaLang/julia, from https://github.com/JuliaLang/julia.git or git@github.com:JuliaLang/julia.git.
+# The self-test pipeline's BUILDKITE_REPO is this repository while the commits it builds
+# are julia's, so anything that is not a julia repository falls back to upstream.
 github_repo() {
     local r="${BUILDKITE_REPO:-}"
-    if [[ "${r}" != *github.com* ]]; then
-        echo "JuliaLang/julia"
-        return
-    fi
     r="${r#*github.com}"
     r="${r#[:/]}"
     r="${r%.git}"
-    echo "${r%/}"
+    r="${r%/}"
+    if [[ "${r}" != */julia ]]; then
+        r="JuliaLang/julia"
+    fi
+    echo "${r}"
 }
 TTFX_GITHUB_REPO="${TTFX_GITHUB_REPO:-$(github_repo)}"
 
@@ -99,15 +101,23 @@ HEAD_JULIA="${TTFX_DIR}/head/bin/julia"
 MODE="standalone"
 ARMS=( "head=${TTFX_DIR}/head" )
 BASE_NOTE=""
-# Only julia-pr builds a pull request of julia itself; the self-test pipeline's builds
-# are pull requests of this repository, measuring a julia master commit.
+# Only julia-pr builds a pull request of julia itself. The self-test pipeline's builds are
+# pull requests of this repository measuring a julia master commit; there the parent
+# commit stands in for the merge-base, so the comparison path is exercised too.
+MERGE_BASE=""
 if [[ "${BUILDKITE_PIPELINE_SLUG:-}" == "julia-pr" && "${BUILDKITE_PULL_REQUEST:-false}" != "false" ]]; then
-    MODE="compare"
     BASE_BRANCH="${BUILDKITE_PULL_REQUEST_BASE_BRANCH:-master}"
     echo "--- Find the merge-base with ${BASE_BRANCH}"
     git fetch --no-tags --quiet "${BUILDKITE_REPO}" "refs/heads/${BASE_BRANCH}"
     MERGE_BASE="$(git merge-base HEAD FETCH_HEAD)"
     echo "merge-base: ${MERGE_BASE}"
+elif [[ "${BUILDKITE_PIPELINE_SLUG:-}" == julia-buildkite* ]]; then
+    BASE_BRANCH="master"
+    MERGE_BASE="$(git rev-parse HEAD^)"
+    echo "--- Self-test: comparing against the parent commit ${MERGE_BASE}"
+fi
+if [[ -n "${MERGE_BASE}" ]]; then
+    MODE="compare"
 
     echo "--- Fetch the ${BASE_BRANCH} build of the merge-base"
     # julia-ci stages the tarball as soon as the merge-base's build job finishes, so a
@@ -177,7 +187,7 @@ if [[ "${TTFX_EXCLUDE}" != "none" ]]; then
 fi
 "${HEAD_JULIA}" --startup-file=no "${TTFX_UTILS}/ttfx_bench.jl" \
     --tasks "${TTFX_DIR}/snippets/tasks" ${exclude_args[@]+"${exclude_args[@]}"} \
-    --depot "${TTFX_DIR}/depot" --workdir "${TTFX_DIR}/work" \
+    --depot "${TTFX_DIR}/depot" --workdir "${TTFX_DIR}/work" --logdir "${TTFX_DIR}/logs" \
     --blocks "${TTFX_BLOCKS}" --repeats "${TTFX_REPEATS}" \
     --results "${TTFX_DIR}/results.json" --meta "${TTFX_DIR}/results-meta.json" \
     --snippets-commit "${SNIPPETS_COMMIT}" \

@@ -2,3 +2,4 @@
 # task in the snippets checkout runs. Names that no longer exist there are ignored.
 JET/Type-Stability-Analysis         # JET does not support the development version of Julia
 Enzyme/Gradient-Of-Square-Norm      # precompilation fails on master (GPUCompiler)
+Mooncake/Gradient-Of-Square-Norm    # needs chalk-lab/Mooncake.jl#1272, which the snippets repository does not pin yet
