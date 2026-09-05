@@ -45,7 +45,8 @@ steps:
           fi
 
           echo "--- Build Julia from source"
-          make --output-sync -j$${JULIA_NUM_THREADS}
+          # Older Julia trees ignore this option and retain ordinary coverage.
+          make --output-sync -j$${JULIA_NUM_THREADS} JULIA_COVERAGE_IMAGES=1
 
           echo "--- Print Julia version info"
           ./julia --color=yes -e 'using InteractiveUtils; InteractiveUtils.versioninfo()'
@@ -114,7 +115,7 @@ steps:
           fi
 
           echo "--- Build Julia from source"
-          make -j$${JULIA_NUM_THREADS}
+          make -j$${JULIA_NUM_THREADS} JULIA_COVERAGE_IMAGES=1
 
           echo "--- Print Julia version info"
           ./julia --color=yes -e 'using InteractiveUtils; InteractiveUtils.versioninfo()'
@@ -178,7 +179,7 @@ steps:
                   [[ -n $${CODECOV_TOKEN} && -n $${COVERALLS_TOKEN} ]] || { echo 'Coverage token fetch returned an empty value' >&2; exit 1; };
                 fi &&
                 echo '--- Build Julia from source' &&
-                make -j$${JULIA_NUM_THREADS} VERBOSE=1 &&
+                make -j$${JULIA_NUM_THREADS} VERBOSE=1 JULIA_COVERAGE_IMAGES=1 &&
                 echo '--- Print Julia version info' &&
                 ./usr/bin/julia.exe --color=yes -e 'using InteractiveUtils; InteractiveUtils.versioninfo()' &&
                 ./usr/bin/julia.exe --color=yes -e '@info \"\" Sys.CPU_THREADS' &&
