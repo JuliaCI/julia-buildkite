@@ -12,7 +12,7 @@ repository's `main` branch at job time; everything that runs them lives here.
 | `ttfx_launch.sh` | the launch step: decides whether this build is measured, uploads the job |
 | `paths.txt` | the paths a pull request must touch to be measured without the label |
 | `ttfx_ci.sh` | the job: fetch the builds, check out the snippets, benchmark, compare, report |
-| `ttfx_bench.jl` | the driver: interleaved ABBA measurement, one record per task, arm and block |
+| `ttfx_bench.jl` | the driver: interleaved ABBA measurement, one record per task, arm and block, and the trace-compile runs |
 | `ttfx_compare.jl` | the verdict and the markdown report |
 | `ttfx_build_state.jl` | whether a commit's julia-ci build is pending, done, failed or absent |
 | `exclude.txt` | tasks not measured; every other task in the checkout is |
@@ -50,8 +50,10 @@ Every task is measured `TTFX_BLOCKS` times per arm, the arm order reversed on al
 blocks (`base head head base`), so drift over the hour lands on both arms alike. Each
 sample clears compiled code and the JIT object cache, precompiles once, then runs the
 task script `TTFX_REPEATS` times (three) in fresh processes: the first run is the cold
-measurement, the later ones hit whatever caches the first populated. The depot holds packages and artifacts only; the
-agent user's own depot is not on the path.
+measurement, the later ones hit whatever caches the first populated. After the timed runs
+of block 1 the script runs once more per arm, not timed, with `--trace-compile` and
+`--trace-compile-timing`; those logs are the `trace-compile.tar.gz` artifact. The depot
+holds packages and artifacts only; the agent user's own depot is not on the path.
 
 A task's metric is a robust regression when the head samples are all slower than every
 base sample, every block's head/base ratio exceeds the metric's threshold, and the
@@ -85,6 +87,7 @@ else:
 | `ttfx/report.md`, `ttfx/compare.json` | the report and, on pull requests, the per-task and suite verdicts |
 | `ttfx/benchmark.log` | the driver's log |
 | `ttfx/logs/*.log` | full stdout and stderr of every subprocess that failed |
+| `ttfx/trace-compile.tar.gz` | `trace/<Package>-<Task>-<arm>.log`: the `--trace-compile --trace-compile-timing` output of one extra run of the task script per task and arm, after the timed runs of block 1 and not timed itself |
 
 `load_times[1]` and `run_times[1]` are the cold numbers; `precompile_time` is one
 sample per record, take the minimum over blocks for a task.
@@ -95,4 +98,5 @@ Environment variables on the job: `TTFX_EXCLUDE` (default `exclude.txt`, or `non
 `TTFX_BLOCKS` (2), `TTFX_REPEATS` (3), `TTFX_BASE_WAIT_MINUTES` (20),
 `TTFX_SNIPPETS_REPO` and `TTFX_SNIPPETS_REF`; on the launch step, `TTFX_PATHS` (default
 `paths.txt`). The job's budget is the sum of the tasks' precompile times, times two arms,
-times the blocks, plus package downloads: exclude tasks before raising the timeout.
+times the blocks, plus one untimed run of every task script per arm, plus package
+downloads: exclude tasks before raising the timeout.

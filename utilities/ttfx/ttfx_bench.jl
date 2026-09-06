@@ -11,6 +11,9 @@
 #                        compiled code is cleared before every sample (default: temporary)
 #   --workdir DIR        per-arm copies of the task projects go here (default: temporary)
 #   --logdir DIR         full output of every failed subprocess is kept here
+#   --tracedir DIR       keep the --trace-compile --trace-compile-timing output of one extra,
+#                        untimed run of each task script per arm, after the timed repeats of
+#                        block 1, as DIR/<Package>-<Task>-<arm>.log
 #   --blocks N           ABBA blocks: every task is measured N times per arm, the arm order
 #                        reversed on alternate blocks (default 2)
 #   --repeats N          task script runs per sample; the first is the cold one, later ones
@@ -47,6 +50,7 @@ end
 function parse_args(args)
     opts = Dict{String,Any}(
         "tasks" => nothing, "exclude" => nothing, "depot" => nothing, "workdir" => nothing, "logdir" => nothing,
+        "tracedir" => nothing,
         "blocks" => "2", "repeats" => "3", "timeout" => "1800",
         "results" => "results.json", "meta" => "results-meta.json", "snippets-commit" => "")
     arms = Arm[]
@@ -221,9 +225,25 @@ function instantiate(arm::Arm, depot::String, proj::String, timeout::Float64, lo
     return nothing
 end
 
+# The task script once more, after the timed runs so it warms nothing they measure, with
+# --trace-compile --trace-compile-timing writing every method the process compiles, and
+# how long each took, to `tracefile`. A failed run (a build without --trace-compile-timing,
+# say) is noted at the end of the file and does not touch the record.
+function trace_compile(arm::Arm, env, proj::String, timeout::Float64, tracefile::String, logname::String)
+    mkpath(dirname(tracefile))
+    rm(tracefile; force = true)
+    cmd = addenv(`$(arm.julia) --startup-file=no --project=$proj --trace-compile=$tracefile --trace-compile-timing $(joinpath(proj, "task.jl"))`, env...)
+    out, err, ok, timed_out = run_timed(cmd, timeout)
+    ok || open(io -> println(io, "# ", failure_message("trace run", out, err, timed_out, timeout; logname = logname * "-trace")), tracefile, "a")
+    statements = isfile(tracefile) ? count(contains("precompile("), eachline(tracefile)) : 0
+    return (; file = tracefile, statements, ok)
+end
+
 # One sample: clear the caches, precompile the project, then run the task script
-# `repeats` times in fresh processes.
-function measure(arm::Arm, depot::String, proj::String, repeats::Int, timeout::Float64, logname::String)
+# `repeats` times in fresh processes. With `tracefile`, the script runs once more after
+# them, untimed and instrumented (trace_compile).
+function measure(arm::Arm, depot::String, proj::String, repeats::Int, timeout::Float64, logname::String;
+                 tracefile::Union{Nothing,String} = nothing)
     clear_compiled!(depot)
     env = arm_env(arm, depot)
     precomp_code = "using Pkg; t = @elapsed Pkg.precompile(); print(\"__TTFX_T__:\", t)"
@@ -249,8 +269,10 @@ function measure(arm::Arm, depot::String, proj::String, repeats::Int, timeout::F
         push!(load_ts, lt); push!(run_ts, rt); push!(total_ts, tt)
     end
     status = length(load_ts) == repeats ? "ok" : isempty(load_ts) ? "error" : "partial"
+    trace = tracefile === nothing || isempty(load_ts) ? nothing :
+        trace_compile(arm, env, proj, timeout, tracefile, logname)
     return (; status, error = status == "ok" ? nothing : last_err, precompile_time,
-              load_times = load_ts, run_times = run_ts, total_times = total_ts)
+              load_times = load_ts, run_times = run_ts, total_times = total_ts, trace)
 end
 
 function main()
@@ -262,6 +284,7 @@ function main()
     workdir = something(opts["workdir"], mktempdir(; prefix = "ttfx-work-"))
     mkpath(depot); mkpath(workdir)
     LOGDIR[] = opts["logdir"]
+    tracedir = opts["tracedir"]
 
     all_tasks = find_tasks(abspath(opts["tasks"]))
     tasks, stale = select_tasks(all_tasks, opts["exclude"])
@@ -320,7 +343,9 @@ function main()
                     (; status = "error", error = failed[arm.label])
                 else
                     try
-                        measure(arm, depot, projs[arm.label], repeats, timeout, "$(task.package)-$(task.task)-$(arm.label)-b$block")
+                        measure(arm, depot, projs[arm.label], repeats, timeout, "$(task.package)-$(task.task)-$(arm.label)-b$block";
+                                tracefile = tracedir === nothing || block != 1 ? nothing :
+                                    joinpath(tracedir, "$(task.package)-$(task.task)-$(arm.label).log"))
                     catch e
                         (; status = "error", error = sprint(showerror, e))
                     end
@@ -342,6 +367,11 @@ function main()
                     println("  block $block  $(rpad(arm.label, 8)) \e[31mFAILED\e[0m ($(rec.status)): $(rec.error)")
                     println("^^^ +++")
                     stop = true
+                end
+                trace = get(result, :trace, nothing)
+                if trace !== nothing
+                    println("  trace    $(rpad(arm.label, 8)) $(trace.statements) precompile statements in $(basename(trace.file))",
+                            trace.ok ? "" : " (the instrumented run failed, see the end of the file)")
                 end
                 flush(stdout)
             end

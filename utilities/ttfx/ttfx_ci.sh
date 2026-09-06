@@ -36,8 +36,12 @@ mkdir -p "${TTFX_DIR}"
 # shellcheck disable=SC2317,SC2329  # invoked by the EXIT trap
 upload_results() {
     echo "--- Upload results"
+    # The per-task trace-compile logs go as one tarball
+    if compgen -G "ttfx/trace/*.log" >/dev/null; then
+        tar -czf ttfx/trace-compile.tar.gz -C ttfx trace
+    fi
     local pattern
-    for pattern in "ttfx/*.json" "ttfx/*.md" "ttfx/*.log" "ttfx/logs/*.log"; do
+    for pattern in "ttfx/*.json" "ttfx/*.md" "ttfx/*.log" "ttfx/trace-compile.tar.gz" "ttfx/logs/*.log"; do
         if compgen -G "${pattern}" >/dev/null; then
             buildkite-agent artifact upload "${pattern}" || true
         fi
@@ -172,7 +176,7 @@ fi
     --depot "${TTFX_DIR}/depot" --workdir "${TTFX_DIR}/work" --logdir "${TTFX_DIR}/logs" \
     --blocks "${TTFX_BLOCKS}" --repeats "${TTFX_REPEATS}" \
     --results "${TTFX_DIR}/results.json" --meta "${TTFX_DIR}/results-meta.json" \
-    --snippets-commit "${SNIPPETS_COMMIT}" \
+    --tracedir "${TTFX_DIR}/trace" --snippets-commit "${SNIPPETS_COMMIT}" \
     "${ARMS[@]}" 2>&1 | tee "${TTFX_DIR}/benchmark.log"
 
 echo "+++ Report"
