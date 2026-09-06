@@ -95,7 +95,7 @@ class RenderLaunchPipelineTests(unittest.TestCase):
     def test_normal_mode_excludes_schedule_groups(self):
         output = render()
 
-        for group in ("Build", "Check", "Test", "Allow Fail", "Publish"):
+        for group in ("Build", "Check", "Test", "Allow Fail", "JuliaC", "TTFX", "Publish"):
             self.assertIn(f'group: "{group}"', output)
         self.assertNotIn('group: "Source Build"', output)
         self.assertNotIn("PUBLISH_SCHEDULED", output)
