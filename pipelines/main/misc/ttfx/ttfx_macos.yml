@@ -5,6 +5,11 @@ steps:
         key: "ttfx_${TRIPLET?}"
         depends_on:
           - "build_${TRIPLET?}"
+        # The job's own status rather than its group's, so a pull request the launcher
+        # does not measure shows none
+        notify:
+          - github_commit_status:
+              context: "TTFX"
         plugins:
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"

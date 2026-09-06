@@ -1,0 +1,7 @@
+# Paths a pull request must touch for the TTFX job to run without the `needs TTFX check`
+# label, one git pathspec per line (a directory covers everything below it), # comments.
+# The runtime and the compiler, and the loading and precompilation machinery.
+src/
+Compiler/
+base/loading.jl
+base/precompilation.jl

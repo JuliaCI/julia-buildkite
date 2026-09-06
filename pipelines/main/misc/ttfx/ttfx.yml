@@ -1,23 +1,19 @@
 steps:
   - group: "TTFX"
-    notify:
-      - github_commit_status:
-          context: "TTFX"
     steps:
       - label: "Launch TTFX benchmark jobs"
-        # A julia-pr build is measured against the master build of its
-        # merge-base; a julia-ci commit, and the julia master commit the
-        # julia-buildkite self-test builds, on their own (utilities/ttfx/README.md).
+        # julia-ci commits and the julia-buildkite self-test are always measured. A
+        # julia-pr pull request is measured only when it touches a path in
+        # utilities/ttfx/paths.txt (the runtime, the compiler, loading) or has the
+        # `needs TTFX check` label; ttfx_launch.sh decides. The TTFX commit status is
+        # the job's own, so a pull request that is not measured shows none
+        # (utilities/ttfx/README.md).
         if: pipeline.slug == "julia-pr" || pipeline.slug == "julia-ci" || pipeline.slug == "julia-buildkite-ci"
         plugins:
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
-        commands: |
-          GROUP="TTFX" \
-              bash .buildkite/utilities/arches_pipeline_upload.sh \
-              .buildkite/pipelines/main/misc/ttfx/ttfx_macos.arches \
-              .buildkite/pipelines/main/misc/ttfx/ttfx_macos.yml
+        commands: "bash .buildkite/utilities/ttfx/ttfx_launch.sh"
         agents:
           queue: "launch"
           os: "linux"

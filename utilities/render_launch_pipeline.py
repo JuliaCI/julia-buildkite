@@ -673,8 +673,10 @@ def main():
     blocks.append(verbatim_group_text(os.path.join(MISC, "juliac", "test_juliac.yml")))
 
     # TTFX: benchmarks the build on the Julia-TTFX-Snippets tasks, against the
-    # master build of the merge-base on pull requests (utilities/ttfx/README.md).
-    # A launcher with its own group + notify -- include verbatim.
+    # master build of the merge-base on pull requests, which are measured only
+    # when they touch the compiler, runtime or loading code or carry the
+    # `needs TTFX check` label (utilities/ttfx/README.md). A launcher with its
+    # own group -- include verbatim.
     blocks.append(verbatim_group_text(os.path.join(MISC, "ttfx", "ttfx.yml")))
 
     blocks.append(publish_group_text())
