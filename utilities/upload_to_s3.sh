@@ -11,7 +11,7 @@
 # (Sourced file: deliberately no `set` of shell options here -- they would
 # leak into the calling script; strict mode belongs to the entrypoints.)
 
-# Tell the AWS CLI not to contact the metadata service; credentials come
+# Tell the AWS CLI not to contact the EC2 metadata service; credentials come
 # from OIDC web identity (AWS_WEB_IDENTITY_TOKEN_FILE / AWS_ROLE_ARN).
 export AWS_EC2_METADATA_DISABLED=true
 
@@ -39,9 +39,9 @@ upload_to_s3() {
     # that verify_trusted_commit.sh checks before a publish, so the stamp is
     # trustworthy provenance -- and it is what lets a second build of the
     # SAME commit be treated as idempotent below.
-    local metadata_args=()
+    local s3_metadata_args=()
     if [[ "${BUILDKITE_COMMIT:-}" =~ ^[0-9a-f]{40}$ ]]; then
-        metadata_args=( --metadata "build-commit=${BUILDKITE_COMMIT}" )
+        s3_metadata_args=( --metadata "build-commit=${BUILDKITE_COMMIT}" )
     fi
 
     # Debug/test stacks (UPLOAD_TO_S3_OVERWRITE=1) re-publish the same commit
@@ -53,7 +53,7 @@ upload_to_s3() {
         aws s3api put-object \
             --bucket "${bucket}" --key "${key}" \
             --body "${file}" ${acl_args[@]+"${acl_args[@]}"} \
-            ${metadata_args[@]+"${metadata_args[@]}"} >/dev/null
+            ${s3_metadata_args[@]+"${s3_metadata_args[@]}"} >/dev/null
         echo "uploaded (overwrite): s3://${target}"
         return 0
     fi
@@ -62,7 +62,7 @@ upload_to_s3() {
     if output="$(aws s3api put-object \
             --bucket "${bucket}" --key "${key}" \
             --body "${file}" ${acl_args[@]+"${acl_args[@]}"} \
-            ${metadata_args[@]+"${metadata_args[@]}"} \
+            ${s3_metadata_args[@]+"${s3_metadata_args[@]}"} \
             --if-none-match '*' 2>&1)"; then
         echo "uploaded (write-once): s3://${target}"
         return 0
@@ -75,7 +75,7 @@ upload_to_s3() {
             --query '[ETag, Metadata."build-commit"]' --output text)"
         remote_etag="$(cut -f1 <<<"${remote_info}" | tr -d '"')"
         remote_commit="$(cut -f2 <<<"${remote_info}")"
-        # `--output text` renders a missing metadata entry as literal "None"
+        # `--output text` renders a missing S3 metadata entry as literal "None"
         [[ "${remote_commit}" == "None" ]] && remote_commit=""
         if [[ "${local_md5}" == "${remote_etag}" ]]; then
             echo "already exists with identical content, skipping: s3://${target}"
