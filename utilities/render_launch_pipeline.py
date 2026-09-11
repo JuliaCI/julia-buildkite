@@ -35,6 +35,13 @@ omitted (see OMITTED_POWERPC below). This matches the runtime behaviour.
 
 The result is grouped into one `group:` per label: Build, Check, Test,
 Allow Fail, JuliaSyntax, JuliaC.
+
+SOURCE_BUILD=true renders the standard Build / Test / Allow Fail groups with
+every build compiling its dependencies from source (USE_BINARYBUILDER=0) --
+see the source-build mode section below. It is meant for manual "New Build"
+runs (the New Build dialog's environment box reaches this renderer through
+the launch step's env), e.g. to check that the release branch still builds
+from source before tagging.
 """
 
 import os
@@ -50,6 +57,69 @@ ARCHES_ENV_SH = os.path.join(UTIL_DIR, "arches_env.sh")
 
 PLATFORMS = os.path.join(ROOT, "pipelines", "main", "platforms")
 MISC = os.path.join(ROOT, "pipelines", "main", "misc")
+
+
+# --------------------------------------------------------------------------
+# source-build mode (SOURCE_BUILD=true)
+# --------------------------------------------------------------------------
+# Renders the standard per-commit pipeline, but with every build job compiling
+# its dependencies from source instead of downloading BinaryBuilder tarballs.
+# The test jobs are unchanged (they consume whatever artifact the build
+# produced), so this answers "does this ref build from source on every
+# platform, and does the result pass the test suite" -- e.g. on a release
+# branch before tagging, where the from-source path otherwise only gets
+# exercised by users after the release.
+#
+# Deliberate differences from the normal per-commit render:
+#   * every build row gets USE_BINARYBUILDER=0 appended to MAKE_FLAGS (a
+#     make command-line flag, so it overrides Make.user and the environment)
+#     and the from-source TIMEOUT (compiling LLVM dwarfs the BB timeouts);
+#   * Linux rows are moved from the package_linux rootfs onto llvm_passes:
+#     package_linux has no gfortran (OpenBLAS) and is missing parts of the
+#     from-source toolchain -- llvm_passes carries the full toolchain (it is
+#     the image the scheduled source build uses on julia-buildkite main);
+#   * no publish wait/trigger: source-built binaries must never be promoted;
+#   * no Check group: its jobs build julia their own way regardless of
+#     MAKE_FLAGS, so they would only duplicate the normal CI run's work
+#     without testing the source build;
+#   * the github_commit_status contexts are suffixed " (source build)" so a
+#     manual run cannot overwrite the commit's real Build / Test statuses.
+SOURCE_BUILD = os.environ.get("SOURCE_BUILD") == "true"
+
+# Minutes; matches the from-source build row in build_linux.schedule.arches.
+SOURCE_BUILD_TIMEOUT = 240
+
+# ARCH_ROOTFS -> (image, tag, treehash) replacing package_linux rows.
+# Treehashes are the artifact_hash values from the rootfs-images v8.5 release
+# build (its "Linux" GitHub Actions run); x86_64 matches the llvm_passes hash
+# already pinned in misc/analyzegc.yml.
+SOURCE_BUILD_ROOTFS = {
+    "x86_64":  ("llvm_passes", "v8.5", "630126d5595f428ef824651b9be020ffc485eb6f"),
+    "i686":    ("llvm_passes", "v8.5", "3d1a64df225c1ee12fe8bc554bd2ac946a99e02e"),
+    "aarch64": ("llvm_passes", "v8.5", "7e5f35dd121157cb0efda4d84f33d55b8b76b36a"),
+}
+
+
+def apply_source_build(env, yaml_file, where):
+    """Mutate one per-commit build row for source-build mode. Test rows pass
+    through untouched: they depend on the build key and download its artifact
+    regardless of how it was produced."""
+    if not yaml_file.startswith("build_"):
+        return
+    flags = env.get("MAKE_FLAGS", "")
+    env["MAKE_FLAGS"] = (flags + "," if flags else "") + "USE_BINARYBUILDER=0"
+    timeout = int(env["TIMEOUT"]) if env.get("TIMEOUT", "").isdigit() else 0
+    env["TIMEOUT"] = str(max(timeout, SOURCE_BUILD_TIMEOUT))
+    image = env.get("ROOTFS_IMAGE_NAME", "")
+    if image == "package_linux":
+        name, tag, treehash = SOURCE_BUILD_ROOTFS[env["ARCH_ROOTFS"]]
+        env["ROOTFS_IMAGE_NAME"] = name
+        env["ROOTFS_TAG"] = tag
+        env["ROOTFS_HASH"] = treehash
+    elif image:
+        # e.g. package_linux_mmtk: no from-source-capable variant exists, so
+        # the row keeps its image and its build shows what actually breaks.
+        sys.stderr.write(f"{where}: source-build mode keeps rootfs {image}\n")
 
 
 # --------------------------------------------------------------------------
@@ -298,6 +368,8 @@ def render_arches_group_text(arches_file, yaml_file, group, allow_fail,
         if extra_env:
             env.update(extra_env)
         where = f"{yaml_file} [{arch_env.get('TRIPLET', '?')}]"
+        if SOURCE_BUILD:
+            apply_source_build(env, yaml_file, where)
         rendered = interpolate(template_text, env, where)
         chunks.append(extract_inner_steps_text(rendered, where))
     return "\n".join(c for c in chunks if c)
@@ -386,6 +458,8 @@ def emit_group(label, steps_text):
     already-re-indented (6-space `- `) concatenation of inner step blocks."""
     out = [f'  - group: "{label}"']
     context = GROUP_NOTIFY.get(label)
+    if context is not None and SOURCE_BUILD:
+        context += " (source build)"
     if context is not None:
         out.append("    notify:")
         out.append("      - github_commit_status:")
@@ -466,6 +540,19 @@ TRAILER = '''\
 
 
 def main():
+    if SOURCE_BUILD:
+        # See the source-build mode section up top for what is (and is not)
+        # rendered here and why. No TRAILER: never publish a source build.
+        blocks = [
+            build_group_text(),
+            test_group_text(),
+            allow_fail_group_text(),
+        ]
+        sys.stdout.write("steps:\n")
+        sys.stdout.write("\n".join(blocks))
+        sys.stdout.write("\n")
+        return
+
     blocks = [
         build_group_text(),
         check_group_text(),
