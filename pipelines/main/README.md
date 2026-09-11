@@ -22,6 +22,15 @@ builds go to `julialang-nogpl`, while optimized builds use
 Pull requests with the `needs full CI` label also run the scheduled workloads.
 Coverage data is collected but not uploaded to Codecov or Coveralls.
 
+To check that a ref still builds from source on the whole platform matrix
+(e.g. a release branch before tagging), create a manual "New Build" on
+`julia-pr` or `julia-ci` with `SOURCE_BUILD=true` in the environment box.
+That renders the standard Build / Test / Allow Fail groups with
+`USE_BINARYBUILDER=0` on every build (bigger timeouts, Linux rows on the
+full-toolchain `llvm_passes` rootfs) and never publishes; commit statuses
+are posted under separate `... (source build)` contexts. See the
+source-build mode section in `utilities/render_launch_pipeline.py`.
+
 Each build step stages its unsigned tarball directly (write-once, no relay
 jobs) to a commit-sha-gated path in its pipeline's own ephemeral staging
 bucket: `julia-pr` builds go to `julialang-ephemeral-pr` (where juliaup
