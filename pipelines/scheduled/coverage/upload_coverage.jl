@@ -150,14 +150,6 @@ end
 
 @info "After filtering for source files: $(length(fcs))"
 
-# Exclude all stdlib JLLs (stdlibs of the form `stdlib/*_jll/`).
-filter!(fc -> !occursin(r"^stdlib/[A-Za-z0-9]*?_jll/", fc.filename), fcs)
-
-@info "After excluding JLLs: $(length(fcs))"
-
-fcs = Coverage.merge_coverage_counts(fcs)
-sort!(fcs; by = fc -> fc.filename)
-
 # Report paths relative to the julia checkout.
 fcs = map(fcs) do fc
     fc.filename ∈ base_jl_files && return Coverage.FileCoverage("base/" * fc.filename, fc.source, fc.coverage)
@@ -169,6 +161,11 @@ fcs = map(fcs) do fc
     end
     return fc
 end
+
+# Exclude stdlib JLL wrappers after converting installed paths to checkout paths.
+filter!(fc -> !occursin(r"^stdlib/[^/]+_jll/", fc.filename), fcs)
+
+@info "After excluding JLLs: $(length(fcs))"
 
 # Must occur after truncation performed above
 # Exclude all external stdlibs (stdlibs that live in external repos).
@@ -187,6 +184,12 @@ filter!(fcs) do fc
 end
 
 @info "After final filtering: $(length(fcs))"
+
+# Merge after path normalization so aliases of the same source are reported once.
+fcs = Coverage.merge_coverage_counts(fcs)
+sort!(fcs; by = fc -> fc.filename)
+
+@info "After merging: $(length(fcs))"
 
 # Mark uncompiled source lines as uncovered instead of omitting them.
 for fc in fcs
