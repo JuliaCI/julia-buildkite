@@ -6,7 +6,18 @@
 # Here is an example of a triplet: `x86_64-linux-gnu`
 ARCH="$(cut -d- -f1 <<<"${TRIPLET}")"
 export ARCH
+
+# Map optimized triplets through the base OS lookup, then restore the opt suffix.
+OS_SUFFIX=""
+TRIPLET_BASE="${TRIPLET}"
 case "${TRIPLET}" in
+    *opt)
+        OS_SUFFIX="opt"
+        TRIPLET_BASE="${TRIPLET%opt}"
+        ;;
+esac
+
+case "${TRIPLET_BASE}" in
     # Linux
     *-gnu)
         OS="linux"
@@ -35,9 +46,6 @@ case "${TRIPLET}" in
     *-gnunogpl) # builds that use `USE_GPL_LIBS=0`
         OS="linuxnogpl"
         ;;
-    *-gnuopt) # optimized Linux builds
-        OS="linuxopt"
-        ;;
     *-musl)
         OS="musl"
         ;;
@@ -55,9 +63,6 @@ case "${TRIPLET}" in
     *-apple-darwinnogpl) # builds that use `USE_GPL_LIBS=0`
         OS="macosnogpl"
         ;;
-    *-apple-darwinopt) # optimized macOS builds
-        OS="macosopt"
-        ;;
     # FreeBSD
     *-freebsd)
         OS="freebsd"
@@ -68,4 +73,5 @@ case "${TRIPLET}" in
         exit 1
         ;;
 esac
+OS="${OS}${OS_SUFFIX}"
 export OS
