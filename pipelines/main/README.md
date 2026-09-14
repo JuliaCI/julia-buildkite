@@ -14,12 +14,12 @@ Builds are split across three Buildkite pipelines by trust level (see
 
 The daily `julia-ci` schedule runs coverage, a from-source assertion build
 with rr tests, no-GPL builds for Linux, macOS, and Windows, and optimized
-builds for x86-64 Linux and for x86-64 and aarch64 macOS. The optimized
-builds use `JULIA_CI_BUILD_MODE=opt` to run Julia's `contrib/optimized` flow:
-PGO and ThinLTO on both platforms, plus BOLT on Linux x86-64. They have
-allow-fail tests. The schedule does not repeat the per-commit groups.
-`julia-publish` promotes the scheduled artifacts; no-GPL builds go to
-`julialang-nogpl`, while optimized builds use
+builds for x86-64 Linux, i686 Linux, and x86-64 and aarch64 macOS. The
+optimized builds use `JULIA_CI_BUILD_MODE=opt` to run Julia's
+`contrib/optimized` flow: PGO and ThinLTO everywhere, plus BOLT on Linux
+x86-64. They have allow-fail tests. The schedule does not repeat the
+per-commit groups. `julia-publish` promotes the scheduled artifacts; no-GPL
+builds go to `julialang-nogpl`, while optimized builds use
 `julialangnightlies/bin/linuxopt/` and `julialangnightlies/bin/macosopt/`.
 
 Pull requests with the `needs full CI` label also run the scheduled workloads.

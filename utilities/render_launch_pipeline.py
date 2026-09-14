@@ -451,6 +451,7 @@ SCHEDULE_GROUPS = [
     ]),
     ("Optimized Tests (Allow Fail)", "true", [
         ("test_linux.opt.arches", "test_linux.yml"),
+        ("test_linux.i686.opt.arches", "test_linux.i686.yml"),
         ("test_macos.opt.arches", "test_macos.yml"),
     ]),
 ]
