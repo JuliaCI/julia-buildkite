@@ -62,32 +62,35 @@ class RenderLaunchPipelineTests(unittest.TestCase):
         self.assertNotIn('group: "Build"', output)
         self.assertNotIn('group: "Test"', output)
 
-        self.assertEqual(output.count('key: "build_'), 6)
-        self.assertEqual(output.count('key: "test_'), 3)
-        self.assertEqual(output.count("soft_fail: false"), 6)
-        self.assertEqual(output.count("soft_fail: true"), 3)
+        self.assertEqual(output.count('key: "build_'), 8)
+        self.assertEqual(output.count('key: "test_'), 5)
+        self.assertEqual(output.count("soft_fail: false"), 8)
+        self.assertEqual(output.count("soft_fail: true"), 5)
         self.assertEqual(
             output.count('depends_on:\n          - "build_x86_64-linux-gnusrcassert"'),
             2,
         )
-        self.assertEqual(
-            output.count('depends_on:\n          - "build_x86_64-linux-gnuopt"'),
-            2,  # its test job, and its publish trigger
-        )
+        for triplet in ("x86_64-linux-gnuopt", "x86_64-apple-darwinopt", "aarch64-apple-darwinopt"):
+            self.assertEqual(
+                output.count(f'depends_on:\n          - "build_{triplet}"'),
+                2,  # its test job, and its publish trigger
+            )
         self.assertEqual(output.count('JULIA_CI_BUILD_MODE: "pgo-lto-bolt"'), 1)
+        self.assertEqual(output.count('JULIA_CI_BUILD_MODE: "pgo-lto"'), 2)
 
         # One scheduled publish trigger per scheduled upload triplet, each
         # gated on that triplet's own jobs; no docs trigger, no wait barrier.
         publish = publish_group(output)
-        self.assertEqual(publish.count('trigger: "julia-publish"'), 5)
-        self.assertEqual(publish.count('PUBLISH_SCHEDULED: "true"'), 5)
-        self.assertEqual(publish.count('if: pipeline.slug == "julia-ci"'), 5)
+        self.assertEqual(publish.count('trigger: "julia-publish"'), 7)
+        self.assertEqual(publish.count('PUBLISH_SCHEDULED: "true"'), 7)
+        self.assertEqual(publish.count('if: pipeline.slug == "julia-ci"'), 7)
         self.assertNotIn('PUBLISH_TARGET: "docs"', output)
         self.assertNotIn("wait:", output)
         self.assertNotIn("PUBLISH_NOGPL", output)
         self.assertIn('label: ":rocket: publish x86_64-linux-gnuopt (scheduled)"', publish)
         self.assertIn('message: "publish x86_64-linux-gnuopt: ${BUILDKITE_MESSAGE}"', publish)
-        self.assertIn(depends_on("build_x86_64-linux-gnuopt", "test_x86_64-linux-gnuopt"), publish)
+        for triplet in ("x86_64-linux-gnuopt", "x86_64-apple-darwinopt", "aarch64-apple-darwinopt"):
+            self.assertIn(depends_on(f"build_{triplet}", f"test_{triplet}"), publish)
         # no-GPL builds have no test jobs: they publish straight after the build
         self.assertIn(depends_on("build_x86_64-w64-mingw32nogpl"), publish)
         self.assertIn(depends_on("build_aarch64-apple-darwinnogpl"), publish)

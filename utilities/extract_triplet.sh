@@ -55,6 +55,9 @@ case "${TRIPLET}" in
     *-apple-darwinnogpl) # builds that use `USE_GPL_LIBS=0`
         OS="macosnogpl"
         ;;
+    *-apple-darwinopt) # optimized macOS builds
+        OS="macosopt"
+        ;;
     # FreeBSD
     *-freebsd)
         OS="freebsd"

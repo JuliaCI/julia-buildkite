@@ -22,4 +22,5 @@ steps:
           # Receive some environment mappings from our templating engine
           TRIPLET: "${TRIPLET?}"
           MAKE_FLAGS: "${MAKE_FLAGS?}"
+          JULIA_CI_BUILD_MODE: "${JULIA_CI_BUILD_MODE-}"
           BUILDKITE_CANCEL_SIGNAL: "SIGQUIT"

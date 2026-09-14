@@ -42,6 +42,7 @@ else
             .buildkite/pipelines/scheduled/platforms/upload_macos.no_gpl.arches
             .buildkite/pipelines/scheduled/platforms/upload_windows.no_gpl.arches
             .buildkite/pipelines/scheduled/platforms/upload_linux.opt.arches
+            .buildkite/pipelines/scheduled/platforms/upload_macos.opt.arches
         )
     elif [[ -n "${PUBLISH_ARCHES_FILES:-}" ]]; then
         # shellcheck disable=SC2206

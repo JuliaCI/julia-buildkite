@@ -92,7 +92,7 @@ UPLOAD_EXTENSIONS=( "tar.gz" )
 # macOS: the build_ step staged an assembled (unsigned) Julia.app. Unpack it,
 # codesign everything in it (the launcher + the bundled julia tree), then derive
 # both products from the signed bundle: the .tar.gz (the tree) and the .dmg.
-if [[ "${OS}" == "macos" || "${OS}" == "macosnogpl" ]]; then
+if [[ "${OS}" == macos* ]]; then
     APP_NAME="Julia-${MAJMIN?}.app"
     echo "--- [mac] Download + unpack the staged unsigned .app"
     aws s3 cp "s3://${STAGING_TARGET}.app.tar.gz" "${UPLOAD_FILENAME}.app.tar.gz"
