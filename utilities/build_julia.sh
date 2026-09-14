@@ -29,7 +29,8 @@ echo
 buildkite-agent --version
 
 # Optimized builds compile LLVM from source, which the macOS agents have no CMake for.
-if [[ "${ROOTFS_IMAGE_NAME-}" == "llvm_passes" || -n "${JULIA_CI_BUILD_MODE-}" ]]; then
+# Upstream publishes no 32-bit x86 CMake binaries, so i686 keeps the rootfs' own.
+if [[ "${ARCH?}" != "i686" ]] && [[ "${ROOTFS_IMAGE_NAME-}" == "llvm_passes" || -n "${JULIA_CI_BUILD_MODE-}" ]]; then
     echo "--- Update CMake"
     contrib/download_cmake.sh
 fi
