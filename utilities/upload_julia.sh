@@ -175,7 +175,7 @@ if [[ "${OS}" == macos* ]]; then
     else
         UPLOAD_EXTENSIONS+=( "dmg" )
     fi
-elif [[ "${OS}" == "windows" || "${OS}" == "windowsnogpl" ]]; then
+elif [[ "${OS}" == windows* ]]; then
     echo "--- [windows] Extract pre-built Julia"
     # JULIA_INSTALL_DIR is shared across the triplets published sequentially
     # by publish.sh; clear out the previous triplet's tree (e.g. the signed

@@ -40,6 +40,17 @@ def render(*args, source=None):
     ).stdout
 
 
+# The scheduled optimized platforms with a build, a test and a publish job; i686
+# has two test jobs and is checked separately.
+OPT_TRIPLETS = (
+    "x86_64-linux-gnuopt",
+    "aarch64-linux-gnuopt",
+    "x86_64-apple-darwinopt",
+    "aarch64-apple-darwinopt",
+    "x86_64-w64-mingw32opt",
+)
+
+
 def publish_group(output):
     """The text of the trailing Publish group."""
     return output[output.index('  - group: "Publish"'):]
@@ -62,16 +73,15 @@ class RenderLaunchPipelineTests(unittest.TestCase):
         self.assertNotIn('group: "Build"', output)
         self.assertNotIn('group: "Test"', output)
 
-        self.assertEqual(output.count('key: "build_'), 10)
-        self.assertEqual(output.count('key: "test_'), 8)
-        self.assertEqual(output.count("soft_fail: false"), 10)
-        self.assertEqual(output.count("soft_fail: true"), 8)
+        self.assertEqual(output.count('key: "build_'), 11)
+        self.assertEqual(output.count('key: "test_'), 9)
+        self.assertEqual(output.count("soft_fail: false"), 11)
+        self.assertEqual(output.count("soft_fail: true"), 9)
         self.assertEqual(
             output.count('depends_on:\n          - "build_x86_64-linux-gnusrcassert"'),
             2,
         )
-        for triplet in ("x86_64-linux-gnuopt", "aarch64-linux-gnuopt",
-                        "x86_64-apple-darwinopt", "aarch64-apple-darwinopt"):
+        for triplet in OPT_TRIPLETS:
             self.assertEqual(
                 output.count(f'depends_on:\n          - "build_{triplet}"'),
                 2,  # its test job, and its publish trigger
@@ -80,7 +90,7 @@ class RenderLaunchPipelineTests(unittest.TestCase):
             output.count('depends_on:\n          - "build_i686-linux-gnuopt"'),
             3,  # its two test jobs (net / no-net), and its publish trigger
         )
-        self.assertEqual(output.count('JULIA_CI_BUILD_MODE: "opt"'), 5)
+        self.assertEqual(output.count('JULIA_CI_BUILD_MODE: "opt"'), 6)
 
         # Check the new platform's rendered jobs, including agent routing and
         # sandbox images: aggregate job counts alone cannot catch a wrong arch.
@@ -112,17 +122,16 @@ class RenderLaunchPipelineTests(unittest.TestCase):
         # One scheduled publish trigger per scheduled upload triplet, each
         # gated on that triplet's own jobs; no docs trigger, no wait barrier.
         publish = publish_group(output)
-        self.assertEqual(publish.count('trigger: "julia-publish"'),9)
-        self.assertEqual(publish.count('PUBLISH_SCHEDULED: "true"'),9)
-        self.assertEqual(publish.count('if: pipeline.slug == "julia-ci"'),9)
+        self.assertEqual(publish.count('trigger: "julia-publish"'), 10)
+        self.assertEqual(publish.count('PUBLISH_SCHEDULED: "true"'), 10)
+        self.assertEqual(publish.count('if: pipeline.slug == "julia-ci"'), 10)
         self.assertNotIn('PUBLISH_TARGET: "docs"', output)
         self.assertNotIn("wait:", output)
         self.assertNotIn("PUBLISH_NOGPL", output)
         self.assertIn('label: ":rocket: publish x86_64-linux-gnuopt (scheduled)"', publish)
         self.assertIn('message: "publish x86_64-linux-gnuopt: ${BUILDKITE_MESSAGE}"', publish)
         self.assertIn('PUBLISH_TARGET: "aarch64-linux-gnuopt"', publish)
-        for triplet in ("x86_64-linux-gnuopt", "aarch64-linux-gnuopt",
-                        "x86_64-apple-darwinopt", "aarch64-apple-darwinopt"):
+        for triplet in OPT_TRIPLETS:
             self.assertIn(depends_on(f"build_{triplet}", f"test_{triplet}"), publish)
         self.assertIn(depends_on("build_i686-linux-gnuopt", "test_i686-linux-gnuopt",
                                  "test_i686-linux-gnuoptnet"), publish)
@@ -137,7 +146,30 @@ class RenderLaunchPipelineTests(unittest.TestCase):
             self.assertIn(f'group: "{group}"', output)
         self.assertNotIn('group: "Source Build"', output)
         self.assertNotIn("PUBLISH_SCHEDULED", output)
-        self.assertNotIn("aarch64-linux-gnuopt", output)
+        for triplet in (*OPT_TRIPLETS, "i686-linux-gnuopt"):
+            self.assertNotIn(triplet, output)
+
+    def test_optimized_windows_build_environment(self):
+        output = render(source="schedule")
+        build = re.search(
+            r'^      - label: ":windows: build x86_64-w64-mingw32opt"\n'
+            r'.*?(?=^      - label:|^  - group:|\Z)',
+            output, re.M | re.S,
+        ).group()
+        self.assertIn('image: "juliapackaging/package-windows-x86_64:v8.9"', build)
+        self.assertIn('timeout_in_minutes: 600', build)
+        self.assertIn('soft_fail: false', build)
+        self.assertIn('TRIPLET: "x86_64-w64-mingw32opt"', build)
+        self.assertIn('JULIA_CI_BUILD_MODE: "opt"', build)
+        # The Docker plugin must forward the mode into the build container.
+        self.assertRegex(build, r'environment:\n(?:.*\n)*?\s+- "JULIA_CI_BUILD_MODE"')
+        test = re.search(
+            r'^      - label: ":windows: test x86_64-w64-mingw32opt"\n'
+            r'.*?(?=^      - label:|^  - group:|\Z)',
+            output, re.M | re.S,
+        ).group()
+        self.assertIn('timeout_in_minutes: 225', test)
+        self.assertIn('soft_fail: true', test)
 
     def test_optimized_i686_jobs(self):
         for args, source in (((), "schedule"), (("--scheduled-workloads",), None)):
@@ -212,9 +244,9 @@ class RenderLaunchPipelineTests(unittest.TestCase):
         self.assertNotIn('group: "Publish"', output)
         self.assertNotIn('trigger: "julia-publish"', output)
         self.assertNotIn("PUBLISH_NOGPL", output)
-
-        self.assertIn('key: "build_aarch64-linux-gnuopt"', output)
-        self.assertIn('key: "test_aarch64-linux-gnuopt"', output)
+        for triplet in OPT_TRIPLETS:
+            self.assertIn(f'key: "build_{triplet}"', output)
+            self.assertIn(f'key: "test_{triplet}"', output)
 
     def test_scheduled_workloads_option_never_publishes(self):
         output = render("--scheduled-workloads", source="schedule")

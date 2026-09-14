@@ -100,7 +100,7 @@ esac
 
 # Determine if we need to add `.exe` onto the end of our executables
 EXE=""
-if [[ "${OS}" == "windows" ]]; then
+if [[ "${OS}" == windows* ]]; then
     EXE=".exe"
 fi
 
