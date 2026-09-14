@@ -86,44 +86,23 @@ filter_buildroot() {
     fi
 }
 
-if [[ "${JULIA_CI_BUILD_MODE-}" == "pgo-lto-bolt" ]]; then
-    echo "--- Build Julia (optimized: PGO+LTO+BOLT)"
+if [[ "${JULIA_CI_BUILD_MODE-}" == "opt" ]]; then
+    echo "--- Build Julia (optimized: PGO+LTO, plus BOLT where supported)"
     echo "Note: The log stream is filtered. [buildroot] replaces pwd $(pwd)"
-    BOLT_MAKE=( "${MAKE}" -C contrib/pgo-lto-bolt "${MFLAGS[@]}" "STAGE2_BUILD=$(pwd)" )
+    # Let Julia choose the platform's optimizations and build into the checkout
+    # for the version checks and packaging below.
+    OPT_MAKE=( "${MAKE}" -C contrib/optimized "${MFLAGS[@]}" "STAGE2_BUILD=$(pwd)" )
+    "${OPT_MAKE[@]}" all 2>&1 | filter_buildroot
 
-    # stage1 only collects compiler profiles. Avoid building its sysimage for
-    # every CPU target; stage2 still uses the release target list from MFLAGS.
-    echo "--- [pgo-lto-bolt] make stage1"
-    "${BOLT_MAKE[@]}" "JULIA_CPU_TARGET=generic" stage1 2>&1 | filter_buildroot
-
-    # These must be separate make invocations. FILES_TO_OPTIMIZE is derived
-    # from stage1's library symlinks when each invocation starts.
-    for STAGE in stage2 copy_originals bolt_instrument finish_stage2 merge_data bolt; do
-        echo "--- [pgo-lto-bolt] make ${STAGE}"
-        "${BOLT_MAKE[@]}" "${STAGE}" 2>&1 | filter_buildroot
+    echo "--- [opt] Upload profile data to buildkite"
+    PROFILE_ARTIFACTS=$("${OPT_MAKE[@]}" --no-print-directory print-profile-artifacts)
+    # The makefile returns whitespace-separated paths/globs relative to the checkout.
+    for ARTIFACT in ${PROFILE_ARTIFACTS}; do
+        buildkite-agent artifact upload "${ARTIFACT}"
     done
 
-    echo "--- [pgo-lto-bolt] Upload profile data to buildkite"
-    buildkite-agent artifact upload "contrib/pgo-lto-bolt/profiles/merged.prof"
-    buildkite-agent artifact upload "contrib/pgo-lto-bolt/profiles-bolt/*.merged.fdata"
-
-    echo "--- [pgo-lto-bolt] Delete pre-BOLT library originals"
-    "${BOLT_MAKE[@]}" delete_originals
-elif [[ "${JULIA_CI_BUILD_MODE-}" == "pgo-lto" ]]; then
-    # For platforms without BOLT support, e.g. macOS.
-    echo "--- Build Julia (optimized: PGO+LTO)"
-    echo "Note: The log stream is filtered. [buildroot] replaces pwd $(pwd)"
-    PGO_MAKE=( "${MAKE}" -C contrib/pgo-lto "${MFLAGS[@]}" "STAGE2_BUILD=$(pwd)" )
-
-    # As above, stage1 only collects compiler profiles.
-    echo "--- [pgo-lto] make stage1"
-    "${PGO_MAKE[@]}" "JULIA_CPU_TARGET=generic" stage1 2>&1 | filter_buildroot
-
-    echo "--- [pgo-lto] make stage2"
-    "${PGO_MAKE[@]}" stage2 2>&1 | filter_buildroot
-
-    echo "--- [pgo-lto] Upload profile data to buildkite"
-    buildkite-agent artifact upload "contrib/pgo-lto/profiles/merged.prof"
+    echo "--- [opt] Delete pre-BOLT library originals"
+    "${OPT_MAKE[@]}" delete-originals
 elif [[ -n "${JULIA_CI_BUILD_MODE-}" ]]; then
     echo "ERROR: unknown JULIA_CI_BUILD_MODE '${JULIA_CI_BUILD_MODE}'" >&2
     exit 1
