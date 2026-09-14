@@ -92,6 +92,8 @@ if [[ "${JULIA_CI_BUILD_MODE-}" == "opt" ]]; then
     # Let Julia choose the platform's optimizations and build into the checkout
     # for the version checks and packaging below.
     OPT_MAKE=( "${MAKE}" -C contrib/optimized "${MFLAGS[@]}" "STAGE2_BUILD=$(pwd)" )
+    # Keep packaging from replacing the source-built LLVM tools with BinaryBuilder's.
+    export USE_BINARYBUILDER_LLVM=0
     "${OPT_MAKE[@]}" all 2>&1 | filter_buildroot
 
     echo "--- [opt] Upload profile data to buildkite"
