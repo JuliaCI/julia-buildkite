@@ -65,7 +65,7 @@ fi
 
 # Make sure that temp files and temp directories are created in a location that is
 # backed by real storage, and not by a tmpfs, as some tests don't like that on Linux
-if [[ "${OS}" == "linux" ]]; then
+if [[ "${OS}" == linux* ]]; then
     TMPDIR="$(pwd)/tmp"
     export TMPDIR
     mkdir -p "${TMPDIR}"

@@ -75,8 +75,7 @@ class RenderLaunchPipelineTests(unittest.TestCase):
                 output.count(f'depends_on:\n          - "build_{triplet}"'),
                 2,  # its test job, and its publish trigger
             )
-        self.assertEqual(output.count('JULIA_CI_BUILD_MODE: "pgo-lto-bolt"'), 1)
-        self.assertEqual(output.count('JULIA_CI_BUILD_MODE: "pgo-lto"'), 2)
+        self.assertEqual(output.count('JULIA_CI_BUILD_MODE: "opt"'), 3)
 
         # One scheduled publish trigger per scheduled upload triplet, each
         # gated on that triplet's own jobs; no docs trigger, no wait barrier.
