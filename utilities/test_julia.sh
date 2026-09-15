@@ -30,7 +30,7 @@ fi
 
 # If we're on macOS, we need to re-sign the downloaded tarball so it will
 # execute on this machine
-if [[ "${OS}" == "macos" ]]; then
+if [[ "${OS}" == macos* ]]; then
     echo "--- [mac] Codesigning"
     .buildkite/utilities/macos/codesign.sh "${JULIA_INSTALL_DIR}"
     echo "--- [mac] Update checksums for stdlib cachefiles after codesigning"
@@ -193,7 +193,7 @@ if [[ -z "${USE_RR-}" ]]; then
     ulimit -c unlimited
     if [[ "${OS}" == linux* || "${OS}" == "musl" ]]; then
         echo "Core dump pattern:         $(cat /proc/sys/kernel/core_pattern)"
-    elif [[ "${OS}" == "macos" || "${OS}" == "freebsd" ]]; then
+    elif [[ "${OS}" == macos* || "${OS}" == "freebsd" ]]; then
         echo "Core dump pattern:         $(sysctl -n kern.corefile)"
     fi
     echo "Core dump size limit:      $(ulimit -c)"

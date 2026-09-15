@@ -404,6 +404,7 @@ SCHEDULE_UPLOAD_ARCHES = [
     "upload_macos.no_gpl.arches",
     "upload_windows.no_gpl.arches",
     "upload_linux.opt.arches",
+    "upload_macos.opt.arches",
 ]
 
 # The Check steps that stage the per-commit (platform-independent) products
@@ -446,9 +447,11 @@ SCHEDULE_GROUPS = [
     ]),
     ("Optimized Build", "false", [
         ("build_linux.opt.arches", "build_linux.yml"),
+        ("build_macos.opt.arches", "build_macos.yml"),
     ]),
     ("Optimized Tests (Allow Fail)", "true", [
         ("test_linux.opt.arches", "test_linux.yml"),
+        ("test_macos.opt.arches", "test_macos.yml"),
     ]),
 ]
 

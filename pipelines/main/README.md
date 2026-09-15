@@ -13,11 +13,13 @@ Builds are split across three Buildkite pipelines by trust level (see
 | `julia-publish` | (triggered by `julia-ci`) signs + promotes        | trusted (KMS signing keys)     |
 
 The daily `julia-ci` schedule runs coverage, a from-source assertion build
-with rr tests, no-GPL builds for Linux, macOS, and Windows, and an x86-64
-Linux PGO+LTO+BOLT build with allow-fail tests. It does not repeat the
-per-commit groups. `julia-publish` promotes the scheduled artifacts; no-GPL
-builds go to `julialang-nogpl`, while optimized builds use
-`julialangnightlies/bin/linuxopt/`.
+with rr tests, no-GPL builds for Linux, macOS, and Windows, an x86-64 Linux
+PGO+LTO+BOLT build, and x86-64 and aarch64 macOS PGO+LTO builds. The
+optimized builds have allow-fail tests; macOS skips BOLT because it cannot
+rewrite Julia's Mach-O libraries. It does not repeat the per-commit
+groups. `julia-publish` promotes the scheduled artifacts; no-GPL builds go to
+`julialang-nogpl`, while optimized builds use
+`julialangnightlies/bin/linuxopt/` and `julialangnightlies/bin/macosopt/`.
 
 Pull requests with the `needs full CI` label also run the scheduled workloads.
 Coverage data is collected but not uploaded to Codecov or Coveralls.

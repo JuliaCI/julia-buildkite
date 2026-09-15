@@ -28,7 +28,8 @@ ld -v
 echo
 buildkite-agent --version
 
-if [[ "${ROOTFS_IMAGE_NAME-}" == "llvm_passes" ]]; then
+# Optimized builds compile LLVM from source, which the macOS agents have no CMake for.
+if [[ "${ROOTFS_IMAGE_NAME-}" == "llvm_passes" || -n "${JULIA_CI_BUILD_MODE-}" ]]; then
     echo "--- Update CMake"
     contrib/download_cmake.sh
 fi
@@ -108,6 +109,21 @@ if [[ "${JULIA_CI_BUILD_MODE-}" == "pgo-lto-bolt" ]]; then
 
     echo "--- [pgo-lto-bolt] Delete pre-BOLT library originals"
     "${BOLT_MAKE[@]}" delete_originals
+elif [[ "${JULIA_CI_BUILD_MODE-}" == "pgo-lto" ]]; then
+    # For platforms without BOLT support, e.g. macOS.
+    echo "--- Build Julia (optimized: PGO+LTO)"
+    echo "Note: The log stream is filtered. [buildroot] replaces pwd $(pwd)"
+    PGO_MAKE=( "${MAKE}" -C contrib/pgo-lto "${MFLAGS[@]}" "STAGE2_BUILD=$(pwd)" )
+
+    # As above, stage1 only collects compiler profiles.
+    echo "--- [pgo-lto] make stage1"
+    "${PGO_MAKE[@]}" "JULIA_CPU_TARGET=generic" stage1 2>&1 | filter_buildroot
+
+    echo "--- [pgo-lto] make stage2"
+    "${PGO_MAKE[@]}" stage2 2>&1 | filter_buildroot
+
+    echo "--- [pgo-lto] Upload profile data to buildkite"
+    buildkite-agent artifact upload "contrib/pgo-lto/profiles/merged.prof"
 elif [[ -n "${JULIA_CI_BUILD_MODE-}" ]]; then
     echo "ERROR: unknown JULIA_CI_BUILD_MODE '${JULIA_CI_BUILD_MODE}'" >&2
     exit 1
@@ -170,7 +186,7 @@ UPLOAD_TO_S3_ACL=none upload_to_s3 "${UPLOAD_FILENAME}.tar.gz" "${STAGING_TARGET
 # .dmg -- it needs no app-building tools and no Mac. The .app is staged
 # UNSIGNED (MACOS_CODESIGN_IDENTITY is unset) under a separate key; the tree
 # tarball above is unchanged (test jobs still consume it).
-if [[ "${OS}" == "macos" || "${OS}" == "macosnogpl" ]]; then
+if [[ "${OS}" == macos* ]]; then
     echo "--- [mac] Assemble the unsigned Julia.app"
     # Pass the same MFLAGS as the main build (esp. TAGGED_RELEASE_BANNER): the
     # contrib/mac/app rule re-runs binary-dist, and without the matching flags

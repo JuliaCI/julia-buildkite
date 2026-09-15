@@ -59,7 +59,7 @@ case "${ARCH?}" in
         ;;
     aarch64)
         case "${OS?}" in
-            macos)
+            macos*)
                 JULIA_CPU_TARGETS+=(
                     # Absolute base aarch64 feature set
                     "generic"
