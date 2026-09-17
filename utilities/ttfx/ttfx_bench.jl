@@ -24,15 +24,20 @@
 #   --snippets-commit X  recorded in the metadata
 #
 # Records: {arm, package, task, block, order, status, error, precompile_time, load_times,
-# run_times, total_times, load_stats, run_stats, packages_hash}. `order` is the arm's
-# position within the block.
+# run_times, total_times, load_stats, run_stats, load_times_gcoff, run_times_gcoff,
+# total_times_gcoff, load_stats_gcoff, run_stats_gcoff, gc_after_load, error_gcoff,
+# packages_hash}. `order` is the arm's position within the block.
 # A task that fails on any arm finishes the current block, so every arm gets its one try,
 # and skips the remaining blocks: a broken package does not cost the whole ABBA.
 # The task script prints "load, run, total seconds"; the `*_times` arrays keep every
 # repeat in run order, and `*_stats` what `@time` would have added for the phase: gc time
-# and pauses, allocation, compilation and recompilation time (see instrument_task).
-# `packages_hash` identifies the resolved package versions so a comparison can tell a
-# build difference from a resolution difference.
+# and pauses, allocation, compilation and recompilation time (see instrument_task). The
+# `*_gcoff` fields are a second set of repeats with the GC disabled for both phases and
+# one forced collection between them (`gc_after_load`, seconds, excluded from both), so
+# load and run can be read without GC pauses landing in them; a failure there is kept in
+# `error_gcoff` and does not affect `status`. `packages_hash` identifies the resolved
+# package versions so a comparison can tell a build difference from a resolution
+# difference.
 
 using Dates, Printf, SHA, TOML
 include(joinpath(@__DIR__, "ttfx_json.jl"))
@@ -112,6 +117,13 @@ function clear_compiled!(depot::String)
         d = joinpath(depot, sub)
         isdir(d) && rm(d; recursive = true)
     end
+end
+
+# Only the JIT object cache, so a second set of repeats starts as cold as the first did
+# without precompiling again.
+function clear_objcache!(depot::String)
+    d = joinpath(depot, "cache")
+    isdir(d) && rm(d; recursive = true)
 end
 
 # The depot goes first, followed by the arm's own stdlib caches. The default depot path
@@ -234,8 +246,14 @@ end
 # differences as one JSON line, so every timed run records what `@time` reports besides
 # wall time: gc time and pauses, allocation, compilation and recompilation time. The
 # snapshot goes before the clock so its own cost falls outside the phase it opens.
-# `Base.cumulative_compile_timing(true)` is what `@time` enables too. The original
-# `task.jl` is left alone, and a script without exactly these markers runs as it is.
+# `Base.cumulative_compile_timing(true)` is what `@time` enables too.
+#
+# With `TTFX_GC=off` in the environment the same script disables the GC before the first
+# marker and forces one full collection right after the second, so load runs without GC
+# pauses and run starts from a collected heap without any; the collection's time is
+# reported as `gc_after_load` and kept out of both phases by shifting `__t1` by as much
+# as `__t2` moves. The original `task.jl` is left alone, and a script without exactly
+# these markers runs as it is.
 const PHASE_MARKERS = ("__t1 = time()", "__t2 = time()", "__t3 = time()")
 const STATS_PREFIX = "__TTFX_STATS__:"
 
@@ -243,14 +261,28 @@ function instrument_task(proj::String)
     script = joinpath(proj, "task.jl")
     src = read(script, String)
     all(m -> count(m, src) == 1, PHASE_MARKERS) || return script, false
-    for (i, m) in enumerate(PHASE_MARKERS)
-        src = replace(src, m => "__ttfx_s$i = (Base.gc_num(), Base.cumulative_compile_time_ns()); " * m)
-    end
-    src = "Base.cumulative_compile_timing(true)\n" * src * "\n" * """
+    snapshot(i) = "__ttfx_s$i = (Base.gc_num(), Base.cumulative_compile_time_ns())"
+    src = replace(src,
+        PHASE_MARKERS[1] => snapshot(1) * "; " * PHASE_MARKERS[1],
+        PHASE_MARKERS[2] => snapshot(2) * "; " * PHASE_MARKERS[2] * """
+
+        __ttfx_gc_after_load = 0.0
+        __ttfx_s2r = __ttfx_s2
+        if __ttfx_gc_off
+            GC.enable(true); GC.gc(); GC.enable(false)
+            __ttfx_gc_after_load = time() - __t2
+            __t1 += __ttfx_gc_after_load
+            $(replace(snapshot(2), "__ttfx_s2" => "__ttfx_s2r")); __t2 = time()
+        end""",
+        PHASE_MARKERS[3] => snapshot(3) * "; " * PHASE_MARKERS[3])
+    src = "const __ttfx_gc_off = get(ENV, \"TTFX_GC\", \"\") == \"off\"\n" *
+          "Base.cumulative_compile_timing(true)\n__ttfx_gc_off && GC.enable(false)\n" * src * "\n" * """
+    __ttfx_gc_off && GC.enable(true)
     let stats(a, b) = (d = Base.GC_Diff(b[1], a[1]);
             "{\\"gc_time\\":\$(d.total_time / 1e9),\\"gc_pauses\\":\$(d.pause),\\"gc_full\\":\$(d.full_sweep),\\"allocd\\":\$(d.allocd)," *
             "\\"compile_time\\":\$((b[2][1] - a[2][1]) / 1e9),\\"recompile_time\\":\$((b[2][2] - a[2][2]) / 1e9)}")
-        println(stdout, "$STATS_PREFIX{\\"load\\":", stats(__ttfx_s1, __ttfx_s2), ",\\"run\\":", stats(__ttfx_s2, __ttfx_s3), "}")
+        println(stdout, "$STATS_PREFIX{\\"gc_off\\":\$__ttfx_gc_off,\\"gc_after_load\\":\$__ttfx_gc_after_load,\\"load\\":",
+                stats(__ttfx_s1, __ttfx_s2), ",\\"run\\":", stats(__ttfx_s2r, __ttfx_s3), "}")
     end
     """
     instrumented = joinpath(proj, "task_ttfx.jl")
@@ -289,30 +321,54 @@ function measure(arm::Arm, depot::String, proj::String, script::String, repeats:
     precompile_time = parse(Float64, pm.captures[1])
 
     task_cmd = addenv(`$(arm.julia) --startup-file=no --project=$proj $script`, env...)
-    load_ts, run_ts, total_ts = Float64[], Float64[], Float64[]
-    load_st, run_st = Any[], Any[]
-    last_err = ""
+    r = run_repeats(task_cmd, repeats, timeout, logname * "-task")
+    status = length(r.load) == repeats ? "ok" : isempty(r.load) ? "error" : "partial"
+    # The GC-off repeats only exist for an instrumented script (the env var does nothing
+    # to a plain task.jl), and are skipped once the normal ones failed. The object cache
+    # the normal repeats filled goes first, so their first repeat is as cold as the
+    # normal first repeat was.
+    g = nothing
+    if script != joinpath(proj, "task.jl") && status != "error"
+        clear_objcache!(depot)
+        g = run_repeats(addenv(task_cmd, "TTFX_GC" => "off"), repeats, timeout, logname * "-gcoff")
+    end
+    trace = tracefile === nothing || isempty(r.load) ? nothing :
+        trace_compile(arm, env, proj, script, timeout, tracefile, logname)
+    return (; status, error = status == "ok" ? nothing : r.err, precompile_time,
+              load_times = r.load, run_times = r.run, total_times = r.total,
+              load_stats = r.load_stats, run_stats = r.run_stats,
+              load_times_gcoff = g === nothing ? Float64[] : g.load,
+              run_times_gcoff = g === nothing ? Float64[] : g.run,
+              total_times_gcoff = g === nothing ? Float64[] : g.total,
+              load_stats_gcoff = g === nothing ? Any[] : g.load_stats,
+              run_stats_gcoff = g === nothing ? Any[] : g.run_stats,
+              gc_after_load = g === nothing ? Float64[] : g.gc_after_load,
+              error_gcoff = g === nothing || length(g.load) == repeats ? nothing : g.err,
+              trace)
+end
+
+# The task script `repeats` times in fresh processes, stopping at the first failure.
+function run_repeats(task_cmd::Cmd, repeats::Int, timeout::Float64, logname::String)
+    load, run, total, gc_after_load = Float64[], Float64[], Float64[], Float64[]
+    load_stats, run_stats = Any[], Any[]
+    err_msg = ""
     for _ in 1:repeats
         out, err, ok, timed_out = run_timed(task_cmd, timeout)
         m = match(r"([\d.]+),\s*([\d.]+),\s*([\d.]+)\s+seconds", out)
         if m === nothing || !ok
-            last_err = failure_message("task", out, err, timed_out, timeout; logname = logname * "-task$(length(load_ts) + 1)")
+            err_msg = failure_message("task", out, err, timed_out, timeout; logname = logname * "$(length(load) + 1)")
             break
         end
         lt, rt, tt = parse.(Float64, m.captures)
-        push!(load_ts, lt); push!(run_ts, rt); push!(total_ts, tt)
+        push!(load, lt); push!(run, rt); push!(total, tt)
         sm = match(Regex("^" * STATS_PREFIX * raw"(\{.*\})$", "m"), out)
         if sm !== nothing
             st = json_parse(sm.captures[1])
-            push!(load_st, st["load"]); push!(run_st, st["run"])
+            push!(load_stats, st["load"]); push!(run_stats, st["run"])
+            push!(gc_after_load, Float64(st["gc_after_load"]))
         end
     end
-    status = length(load_ts) == repeats ? "ok" : isempty(load_ts) ? "error" : "partial"
-    trace = tracefile === nothing || isempty(load_ts) ? nothing :
-        trace_compile(arm, env, proj, script, timeout, tracefile, logname)
-    return (; status, error = status == "ok" ? nothing : last_err, precompile_time,
-              load_times = load_ts, run_times = run_ts, total_times = total_ts,
-              load_stats = load_st, run_stats = run_st, trace)
+    return (; load, run, total, load_stats, run_stats, gc_after_load, err = err_msg)
 end
 
 function main()
@@ -402,6 +458,13 @@ function main()
                          total_times = get(result, :total_times, Float64[]),
                          load_stats = get(result, :load_stats, Any[]),
                          run_stats = get(result, :run_stats, Any[]),
+                         load_times_gcoff = get(result, :load_times_gcoff, Float64[]),
+                         run_times_gcoff = get(result, :run_times_gcoff, Float64[]),
+                         total_times_gcoff = get(result, :total_times_gcoff, Float64[]),
+                         load_stats_gcoff = get(result, :load_stats_gcoff, Any[]),
+                         run_stats_gcoff = get(result, :run_stats_gcoff, Any[]),
+                         gc_after_load = get(result, :gc_after_load, Float64[]),
+                         error_gcoff = get(result, :error_gcoff, nothing),
                          packages_hash = packages_hash(projs[arm.label]))
                 push!(records, rec)
                 write_results()
@@ -414,6 +477,11 @@ function main()
                                 "", l["gc_time"], l["gc_pauses"], l["compile_time"],
                                 r["gc_time"], r["gc_pauses"], r["compile_time"], r["recompile_time"])
                     end
+                    if !isempty(rec.load_times_gcoff)
+                        @printf("           %-8s gc off: load=%6.2fs  run=%6.2fs  (forced gc after load %5.2fs)\n", "",
+                                rec.load_times_gcoff[1], rec.run_times_gcoff[1], rec.gc_after_load[1])
+                    end
+                    rec.error_gcoff === nothing || println("           gc-off runs failed: $(rec.error_gcoff)")
                 else
                     # Red, and `^^^ +++` makes Buildkite expand this task's log group
                     println("  block $block  $(rpad(arm.label, 8)) \e[31mFAILED\e[0m ($(rec.status)): $(rec.error)")

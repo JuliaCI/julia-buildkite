@@ -50,7 +50,8 @@ Every task is measured `TTFX_BLOCKS` times per arm, the arm order reversed on al
 blocks (`base head head base`), so drift over the hour lands on both arms alike. Each
 sample clears compiled code and the JIT object cache, precompiles once, then runs the
 task script `TTFX_REPEATS` times (three) in fresh processes: the first run is the cold
-measurement, the later ones hit whatever caches the first populated. After the timed runs
+measurement, the later ones hit whatever caches the first populated. The script then runs
+`TTFX_REPEATS` more times with the GC disabled (see the artifact table below). After the timed runs
 of block 1 the script runs once more per arm, not timed, with `--trace-compile` and
 `--trace-compile-timing`; those logs are the `trace-compile.tar.gz` artifact. The depot
 holds packages and artifacts only; the agent user's own depot is not on the path.
@@ -82,7 +83,7 @@ else:
 
 | artifact | content |
 |---|---|
-| `ttfx/results.json` | records: `arm, package, task, block, order, status, error, precompile_time, load_times, run_times, total_times, load_stats, run_stats, packages_hash` |
+| `ttfx/results.json` | records: `arm, package, task, block, order, status, error, precompile_time, load_times, run_times, total_times, load_stats, run_stats, load_times_gcoff, run_times_gcoff, total_times_gcoff, load_stats_gcoff, run_stats_gcoff, gc_after_load, error_gcoff, packages_hash` |
 | `ttfx/results-meta.json` | the builds (`arms.<label>`: version, commit, date, CPU threads seen), machine, settings, task list, snippets commit, Buildkite build |
 | `ttfx/report.md`, `ttfx/compare.json` | the report and, on pull requests, the per-task and suite verdicts |
 | `ttfx/benchmark.log` | the driver's log |
@@ -99,6 +100,19 @@ snapshots the GC and compile-time counters at the script's `__t1`/`__t2`/`__t3` 
 with `Base.cumulative_compile_timing(true)` enabled as `@time` does. A script without
 those markers runs as it is and records no stats. They tell a GC pause or a
 recompilation apart from a genuinely slower load or first call.
+
+After the normal repeats the instrumented script runs the same number of times again with
+`TTFX_GC=off`, with the JIT object cache cleared first so the first of them is as cold as
+the first normal repeat: the GC is disabled before the first marker, one full collection is forced
+right after the load phase (its time is `gc_after_load` and is excluded from both phases),
+and the GC stays off through the run phase. `load_times_gcoff` and `run_times_gcoff` are
+therefore the phases without any GC pause in them, and the difference to the normal repeats
+is what the GC cost. The first normal repeat alone pays the operating system's first-load
+cost of the freshly written pkgimages (sizeable on macOS), which no later repeat gets back,
+so read the GC-off load against the second normal repeat rather than the first. These runs
+do not affect `status`; if one fails (a task that allocates
+too much to run without collection, say) the message is kept in `error_gcoff` and the
+normal numbers stand.
 
 ## Knobs
 
