@@ -82,7 +82,7 @@ else:
 
 | artifact | content |
 |---|---|
-| `ttfx/results.json` | records: `arm, package, task, block, order, status, error, precompile_time, load_times, run_times, total_times, packages_hash` |
+| `ttfx/results.json` | records: `arm, package, task, block, order, status, error, precompile_time, load_times, run_times, total_times, load_stats, run_stats, packages_hash` |
 | `ttfx/results-meta.json` | the builds (`arms.<label>`: version, commit, date, CPU threads seen), machine, settings, task list, snippets commit, Buildkite build |
 | `ttfx/report.md`, `ttfx/compare.json` | the report and, on pull requests, the per-task and suite verdicts |
 | `ttfx/benchmark.log` | the driver's log |
@@ -91,6 +91,14 @@ else:
 
 `load_times[1]` and `run_times[1]` are the cold numbers; `precompile_time` is one
 sample per record, take the minimum over blocks for a task.
+`load_stats` and `run_stats` hold, per repeat, what `@time` reports besides wall time for
+that phase: `gc_time`, `gc_pauses`, `gc_full`, `allocd` (bytes), `compile_time` and
+`recompile_time` (seconds). The driver gets them by running an instrumented copy of the
+task script (`task_ttfx.jl`, written next to `task.jl` in the arm's project copy) that
+snapshots the GC and compile-time counters at the script's `__t1`/`__t2`/`__t3` markers,
+with `Base.cumulative_compile_timing(true)` enabled as `@time` does. A script without
+those markers runs as it is and records no stats. They tell a GC pause or a
+recompilation apart from a genuinely slower load or first call.
 
 ## Knobs
 

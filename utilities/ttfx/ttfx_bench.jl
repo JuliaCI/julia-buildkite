@@ -24,12 +24,15 @@
 #   --snippets-commit X  recorded in the metadata
 #
 # Records: {arm, package, task, block, order, status, error, precompile_time, load_times,
-# run_times, total_times, packages_hash}. `order` is the arm's position within the block.
+# run_times, total_times, load_stats, run_stats, packages_hash}. `order` is the arm's
+# position within the block.
 # A task that fails on any arm finishes the current block, so every arm gets its one try,
 # and skips the remaining blocks: a broken package does not cost the whole ABBA.
 # The task script prints "load, run, total seconds"; the `*_times` arrays keep every
-# repeat in run order. `packages_hash` identifies the resolved package versions so a
-# comparison can tell a build difference from a resolution difference.
+# repeat in run order, and `*_stats` what `@time` would have added for the phase: gc time
+# and pauses, allocation, compilation and recompilation time (see instrument_task).
+# `packages_hash` identifies the resolved package versions so a comparison can tell a
+# build difference from a resolution difference.
 
 using Dates, Printf, SHA, TOML
 include(joinpath(@__DIR__, "ttfx_json.jl"))
@@ -225,14 +228,44 @@ function instantiate(arm::Arm, depot::String, proj::String, timeout::Float64, lo
     return nothing
 end
 
+# The snippets mark their phases with `__t1 = time()` (before `using`), `__t2 = time()`
+# (after it) and `__t3 = time()` (after the work). Write a copy of the script that also
+# snapshots the GC and compile-time counters at each marker and prints the per-phase
+# differences as one JSON line, so every timed run records what `@time` reports besides
+# wall time: gc time and pauses, allocation, compilation and recompilation time. The
+# snapshot goes before the clock so its own cost falls outside the phase it opens.
+# `Base.cumulative_compile_timing(true)` is what `@time` enables too. The original
+# `task.jl` is left alone, and a script without exactly these markers runs as it is.
+const PHASE_MARKERS = ("__t1 = time()", "__t2 = time()", "__t3 = time()")
+const STATS_PREFIX = "__TTFX_STATS__:"
+
+function instrument_task(proj::String)
+    script = joinpath(proj, "task.jl")
+    src = read(script, String)
+    all(m -> count(m, src) == 1, PHASE_MARKERS) || return script, false
+    for (i, m) in enumerate(PHASE_MARKERS)
+        src = replace(src, m => "__ttfx_s$i = (Base.gc_num(), Base.cumulative_compile_time_ns()); " * m)
+    end
+    src = "Base.cumulative_compile_timing(true)\n" * src * "\n" * """
+    let stats(a, b) = (d = Base.GC_Diff(b[1], a[1]);
+            "{\\"gc_time\\":\$(d.total_time / 1e9),\\"gc_pauses\\":\$(d.pause),\\"gc_full\\":\$(d.full_sweep),\\"allocd\\":\$(d.allocd)," *
+            "\\"compile_time\\":\$((b[2][1] - a[2][1]) / 1e9),\\"recompile_time\\":\$((b[2][2] - a[2][2]) / 1e9)}")
+        println(stdout, "$STATS_PREFIX{\\"load\\":", stats(__ttfx_s1, __ttfx_s2), ",\\"run\\":", stats(__ttfx_s2, __ttfx_s3), "}")
+    end
+    """
+    instrumented = joinpath(proj, "task_ttfx.jl")
+    write(instrumented, src)
+    return instrumented, true
+end
+
 # The task script once more, after the timed runs so it warms nothing they measure, with
 # --trace-compile --trace-compile-timing writing every method the process compiles, and
 # how long each took, to `tracefile`. A failed run (a build without --trace-compile-timing,
 # say) is noted at the end of the file and does not touch the record.
-function trace_compile(arm::Arm, env, proj::String, timeout::Float64, tracefile::String, logname::String)
+function trace_compile(arm::Arm, env, proj::String, script::String, timeout::Float64, tracefile::String, logname::String)
     mkpath(dirname(tracefile))
     rm(tracefile; force = true)
-    cmd = addenv(`$(arm.julia) --startup-file=no --project=$proj --trace-compile=$tracefile --trace-compile-timing $(joinpath(proj, "task.jl"))`, env...)
+    cmd = addenv(`$(arm.julia) --startup-file=no --project=$proj --trace-compile=$tracefile --trace-compile-timing $script`, env...)
     out, err, ok, timed_out = run_timed(cmd, timeout)
     ok || open(io -> println(io, "# ", failure_message("trace run", out, err, timed_out, timeout; logname = logname * "-trace")), tracefile, "a")
     statements = isfile(tracefile) ? count(contains("precompile("), eachline(tracefile)) : 0
@@ -242,7 +275,7 @@ end
 # One sample: clear the caches, precompile the project, then run the task script
 # `repeats` times in fresh processes. With `tracefile`, the script runs once more after
 # them, untimed and instrumented (trace_compile).
-function measure(arm::Arm, depot::String, proj::String, repeats::Int, timeout::Float64, logname::String;
+function measure(arm::Arm, depot::String, proj::String, script::String, repeats::Int, timeout::Float64, logname::String;
                  tracefile::Union{Nothing,String} = nothing)
     clear_compiled!(depot)
     env = arm_env(arm, depot)
@@ -255,8 +288,9 @@ function measure(arm::Arm, depot::String, proj::String, repeats::Int, timeout::F
     pm === nothing && return (; status = "error", error = "could not parse precompile time from $(repr(out))")
     precompile_time = parse(Float64, pm.captures[1])
 
-    task_cmd = addenv(`$(arm.julia) --startup-file=no --project=$proj $(joinpath(proj, "task.jl"))`, env...)
+    task_cmd = addenv(`$(arm.julia) --startup-file=no --project=$proj $script`, env...)
     load_ts, run_ts, total_ts = Float64[], Float64[], Float64[]
+    load_st, run_st = Any[], Any[]
     last_err = ""
     for _ in 1:repeats
         out, err, ok, timed_out = run_timed(task_cmd, timeout)
@@ -267,12 +301,18 @@ function measure(arm::Arm, depot::String, proj::String, repeats::Int, timeout::F
         end
         lt, rt, tt = parse.(Float64, m.captures)
         push!(load_ts, lt); push!(run_ts, rt); push!(total_ts, tt)
+        sm = match(Regex("^" * STATS_PREFIX * raw"(\{.*\})$", "m"), out)
+        if sm !== nothing
+            st = json_parse(sm.captures[1])
+            push!(load_st, st["load"]); push!(run_st, st["run"])
+        end
     end
     status = length(load_ts) == repeats ? "ok" : isempty(load_ts) ? "error" : "partial"
     trace = tracefile === nothing || isempty(load_ts) ? nothing :
-        trace_compile(arm, env, proj, timeout, tracefile, logname)
+        trace_compile(arm, env, proj, script, timeout, tracefile, logname)
     return (; status, error = status == "ok" ? nothing : last_err, precompile_time,
-              load_times = load_ts, run_times = run_ts, total_times = total_ts, trace)
+              load_times = load_ts, run_times = run_ts, total_times = total_ts,
+              load_stats = load_st, run_stats = run_st, trace)
 end
 
 function main()
@@ -324,6 +364,7 @@ function main()
         println("--- $label")
         flush(stdout)
         projs = Dict{String,String}()
+        scripts = Dict{String,String}()
         failed = Dict{String,String}()
         for arm in arms
             proj = joinpath(workdir, "tasks", arm.label, task.package, task.task)
@@ -333,6 +374,9 @@ function main()
             projs[arm.label] = proj
             msg = instantiate(arm, depot, proj, timeout, "$(task.package)-$(task.task)-$(arm.label)")
             msg === nothing || (failed[arm.label] = "instantiate: " * msg)
+            scripts[arm.label], instrumented = instrument_task(proj)
+            instrumented || arm !== first(arms) ||
+                println("  note: task.jl does not use the standard phase markers, so no per-phase gc/compile stats")
         end
         stop = false
         for block in 1:blocks
@@ -343,7 +387,7 @@ function main()
                     (; status = "error", error = failed[arm.label])
                 else
                     try
-                        measure(arm, depot, projs[arm.label], repeats, timeout, "$(task.package)-$(task.task)-$(arm.label)-b$block";
+                        measure(arm, depot, projs[arm.label], scripts[arm.label], repeats, timeout, "$(task.package)-$(task.task)-$(arm.label)-b$block";
                                 tracefile = tracedir === nothing || block != 1 ? nothing :
                                     joinpath(tracedir, "$(task.package)-$(task.task)-$(arm.label).log"))
                     catch e
@@ -356,12 +400,20 @@ function main()
                          load_times = get(result, :load_times, Float64[]),
                          run_times = get(result, :run_times, Float64[]),
                          total_times = get(result, :total_times, Float64[]),
+                         load_stats = get(result, :load_stats, Any[]),
+                         run_stats = get(result, :run_stats, Any[]),
                          packages_hash = packages_hash(projs[arm.label]))
                 push!(records, rec)
                 write_results()
                 if rec.status == "ok"
                     @printf("  block %d  %-8s precompile=%7.2fs  load=%6.2fs  run=%6.2fs\n", block, arm.label,
                             rec.precompile_time, rec.load_times[1], rec.run_times[1])
+                    if !isempty(rec.run_stats)
+                        l, r = rec.load_stats[1], rec.run_stats[1]
+                        @printf("           %-8s load: gc %5.2fs (%d pauses) compile %5.2fs   run: gc %6.3fs (%d) compile %6.3fs recompile %6.3fs\n",
+                                "", l["gc_time"], l["gc_pauses"], l["compile_time"],
+                                r["gc_time"], r["gc_pauses"], r["compile_time"], r["recompile_time"])
+                    end
                 else
                     # Red, and `^^^ +++` makes Buildkite expand this task's log group
                     println("  block $block  $(rpad(arm.label, 8)) \e[31mFAILED\e[0m ($(rec.status)): $(rec.error)")
