@@ -58,7 +58,10 @@ holds packages and artifacts only; the agent user's own depot is not on the path
 
 A task's metric is a robust regression when the head samples are all slower than every
 base sample, every block's head/base ratio exceeds the metric's threshold, and the
-difference clears an absolute floor; improvements are the mirror image. Per metric,
+difference clears an absolute floor; improvements are the mirror image. Load and run are
+judged twice, as measured and from the repeats with the GC off, and either counts: a
+difference that only shows with the GC on was GC pauses, one that only shows with it off
+was hidden by them. Per metric,
 the geometric mean of the ratios over the suite is judged per block against a tighter
 threshold, which catches a small cost spread across every package. Thresholds are the
 `METRICS` table in `ttfx_compare.jl`. A task that fails on head and passes on base is a
