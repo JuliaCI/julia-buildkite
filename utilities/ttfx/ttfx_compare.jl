@@ -58,11 +58,22 @@ function value(r, key)
     end
 end
 
+# The same phase measured with the GC disabled (see the driver), for load and run only;
+# nothing for records from before the driver recorded it.
+function value_gcoff(r, key)
+    r["status"] == "error" && return nothing
+    key in ("load", "run") || return nothing
+    t = get(r, key * "_times_gcoff", Any[])
+    return isempty(t) ? nothing : Float64(t[1])
+end
+
 median(x) = (s = sort(x); n = length(s); isodd(n) ? s[(n + 1) ÷ 2] : (s[n ÷ 2] + s[n ÷ 2 + 1]) / 2)
 geomean(x) = exp(sum(log, x) / length(x))
 fmt(x) = x === nothing ? "–" : x >= 100 ? string(round(Int, x)) : x >= 10 ? string(round(x; digits = 1)) : string(round(x; digits = 2))
 fmtr(x) = string(round(x; digits = 3))
 pct(x) = string(round(Int, 100x)) * "%"
+# A head/base ratio as a signed percentage change
+change(x) = (x >= 1 ? "+" : "") * string(round(100 * (x - 1); digits = 1)) * "%"
 code(s) = "`" * s * "`"
 
 # recs[task][arm] => records sorted by block
@@ -113,34 +124,56 @@ function compare_task(name, byarm, base, head, nblocks)
         bv = [value(r, m.key) for r in b]; hv = [value(r, m.key) for r in h]
         (any(isnothing, bv) || any(isnothing, hv)) && continue
         bv = Float64.(bv); hv = Float64.(hv)
-        ratios = hv ./ bv
-        verdict = if all(>(1 + m.threshold), ratios) && minimum(hv) > maximum(bv) && median(hv) - median(bv) >= m.floor
-            "regression"
-        elseif all(<(1 - m.threshold), ratios) && maximum(hv) < minimum(bv) && median(bv) - median(hv) >= m.floor
-            "improvement"
-        else
-            "same"
+        verdict = judge(bv, hv, m)
+        out["metrics"][m.key] = Dict("base" => bv, "head" => hv, "ratios" => hv ./ bv, "verdict" => verdict)
+        # Load and run are also judged with the GC off, and either measurement counts: a
+        # difference that only shows with the GC on was GC pauses, one that only shows with
+        # it off was hidden by them.
+        gb = [value_gcoff(r, m.key) for r in b]; gh = [value_gcoff(r, m.key) for r in h]
+        gverdict = "same"
+        if !any(isnothing, gb) && !any(isnothing, gh)
+            gb = Float64.(gb); gh = Float64.(gh)
+            gverdict = judge(gb, gh, m)
+            merge!(out["metrics"][m.key], Dict("gcoff_base" => gb, "gcoff_head" => gh,
+                                                "gcoff_ratios" => gh ./ gb, "gcoff_verdict" => gverdict))
         end
-        verdict == "regression" && push!(out["regressions"], m.key)
-        verdict == "improvement" && push!(out["improvements"], m.key)
-        out["metrics"][m.key] = Dict("base" => bv, "head" => hv, "ratios" => ratios, "verdict" => verdict)
+        if verdict == "regression" || gverdict == "regression"
+            push!(out["regressions"], m.key)
+        elseif verdict == "improvement" || gverdict == "improvement"
+            push!(out["improvements"], m.key)
+        end
     end
     return out
 end
 
+# Robust: the two builds' samples do not overlap, every block agrees beyond the threshold,
+# and the medians differ by at least the floor.
+function judge(bv, hv, m)
+    ratios = hv ./ bv
+    if all(>(1 + m.threshold), ratios) && minimum(hv) > maximum(bv) && median(hv) - median(bv) >= m.floor
+        "regression"
+    elseif all(<(1 - m.threshold), ratios) && maximum(hv) < minimum(bv) && median(bv) - median(hv) >= m.floor
+        "improvement"
+    else
+        "same"
+    end
+end
+
+# Per metric, the geometric mean of the per-task ratios, per block; load and run once more
+# from the GC-off repeats (suite keys `load_gcoff`, `run_gcoff`).
 function compare_suite(tasks, nblocks)
     suite = Dict{String,Any}()
-    for m in METRICS
+    for m in METRICS, field in ("ratios", "gcoff_ratios")
+        has(t) = haskey(t["metrics"], m.key) && haskey(t["metrics"][m.key], field)
         gs = Float64[]
         for k in 1:nblocks
-            rs = [t["metrics"][m.key]["ratios"][k] for t in tasks if haskey(t["metrics"], m.key)]
+            rs = [t["metrics"][m.key][field][k] for t in tasks if has(t)]
             isempty(rs) && break
             push!(gs, geomean(rs))
         end
         length(gs) == nblocks || continue
         verdict = all(>(1 + m.suite), gs) ? "regression" : all(<(1 - m.suite), gs) ? "improvement" : "same"
-        n = count(t -> haskey(t["metrics"], m.key), tasks)
-        suite[m.key] = Dict("geomeans" => gs, "verdict" => verdict, "n_tasks" => n)
+        suite[field == "ratios" ? m.key : m.key * "_gcoff"] = Dict("geomeans" => gs, "verdict" => verdict, "n_tasks" => count(has, tasks))
     end
     return suite
 end
@@ -166,29 +199,35 @@ function write_comparison(io, opts, meta, tasks, suite, nblocks)
     println(io, header, "\n")
     println(io, "**", nreg == 0 ? "No robust regressions" : "$nreg robust regression" * (nreg == 1 ? "" : "s"),
             ", ", nimp, " improvement", nimp == 1 ? "" : "s", ".** ",
-            "Robust: the two builds' samples do not overlap and every block agrees beyond the threshold (",
-            join([m.name * " " * pct(m.threshold) for m in METRICS], ", "), "); the suite row uses the geometric mean over tasks.\n")
-    println(io, "| suite (geomean head/base) | per block | threshold | |")
+            "Robust: samples do not overlap and every block clears the threshold (",
+            join([m.name * " " * pct(m.threshold) for m in METRICS], ", "),
+            "); load and run are also judged from the repeats with the GC off, and either counts (bold marks which).\n")
+    println(io, "| suite (geomean over tasks) | change per block | with GC off | threshold |")
     println(io, "|---|---|---|---|")
     for m in METRICS
         haskey(suite, m.key) || continue
         s = suite[m.key]
-        mark = s["verdict"] == "regression" ? "**regression**" : s["verdict"] == "improvement" ? "improvement" : ""
-        println(io, "| ", m.name, " (", s["n_tasks"], s["n_tasks"] == 1 ? " task) | " : " tasks) | ", join(fmtr.(s["geomeans"]), ", "), " | ±", pct(m.suite), " | ", mark, " |")
+        marked(s) = (v = s["verdict"]; c = join(change.(s["geomeans"]), ", "); v == "same" ? c : "**" * c * " " * v * "**")
+        g = get(suite, m.key * "_gcoff", nothing)
+        println(io, "| ", m.name, " (", s["n_tasks"], s["n_tasks"] == 1 ? " task) | " : " tasks) | ", marked(s), " | ",
+                g === nothing ? "–" : marked(g), " | ±", pct(m.suite), " |")
     end
     for (title, field) in (("Regressions", "regressions"), ("Improvements", "improvements"))
         rows = [(t, k) for t in tasks for k in t[field]]
         isempty(rows) && continue
         println(io, "\n### ", title, "\n")
-        println(io, "| task | metric | base (s) | head (s) | head/base per block |")
-        println(io, "|---|---|---|---|---|")
+        println(io, "| task | metric | base (s) | head (s) | change per block | with GC off |")
+        println(io, "|---|---|---|---|---|---|")
         for (t, k) in rows
             if k in ("fails", "fixed")
-                println(io, "| ", t["name"], " | | | | ", t["note"], " |")
+                println(io, "| ", t["name"], " | | | | ", t["note"], " | |")
             else
                 m = t["metrics"][k]
+                bold(s, v) = v == "same" ? s : "**" * s * "**"
+                normal = bold(join(change.(m["ratios"]), ", "), m["verdict"])
+                gcoff = haskey(m, "gcoff_ratios") ? bold(join(change.(m["gcoff_ratios"]), ", "), m["gcoff_verdict"]) : "–"
                 println(io, "| ", t["name"], " | ", k, " | ", join(fmt.(m["base"]), ", "), " | ", join(fmt.(m["head"]), ", "),
-                        " | ", join(fmtr.(m["ratios"]), ", "), " |")
+                        " | ", normal, " | ", gcoff, " |")
             end
         end
     end
