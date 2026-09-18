@@ -244,16 +244,27 @@ end
 # (after it) and `__t3 = time()` (after the work). Write a copy of the script that also
 # snapshots the GC and compile-time counters at each marker and prints the per-phase
 # differences as one JSON line, so every timed run records what `@time` reports besides
-# wall time: gc time and pauses, allocation, compilation and recompilation time. The
-# snapshot goes before the clock so its own cost falls outside the phase it opens.
+# wall time: gc time and pauses, allocation, compilation and recompilation time.
 # `Base.cumulative_compile_timing(true)` is what `@time` enables too.
 #
 # With `TTFX_GC=off` in the environment the same script disables the GC before the first
 # marker and forces one full collection right after the second, so load runs without GC
 # pauses and run starts from a collected heap without any; the collection's time is
 # reported as `gc_after_load` and kept out of both phases by shifting `__t1` by as much
-# as `__t2` moves. The original `task.jl` is left alone, and a script without exactly
-# these markers runs as it is.
+# as `__t2` moves.
+#
+# Nothing may be added inside a timed window. Every toplevel expression of a script is
+# lowered and evaluated on its own, a fraction of a millisecond each, so a statement of
+# its own between the markers is a fixed cost on every task and a 10 to 25 percent
+# regression on the tasks whose run is a few milliseconds. Each addition is therefore
+# part of its marker's own expression, before the clock that opens a window or after the
+# one that closes it. Nothing may be compiled before `__t1` either: the first native
+# compile initializes the JIT, a cost a user's `using` pays and load must keep. What
+# remains is the second marker's block being lowered inside the load window, about a
+# quarter of a millisecond against loads of tens of milliseconds and up.
+#
+# The original `task.jl` is left alone, and a script without exactly these markers runs
+# as it is.
 const PHASE_MARKERS = ("__t1 = time()", "__t2 = time()", "__t3 = time()")
 const STATS_PREFIX = "__TTFX_STATS__:"
 
@@ -261,20 +272,24 @@ function instrument_task(proj::String)
     script = joinpath(proj, "task.jl")
     src = read(script, String)
     all(m -> count(m, src) == 1, PHASE_MARKERS) || return script, false
-    snapshot(i) = "__ttfx_s$i = (Base.gc_num(), Base.cumulative_compile_time_ns())"
+    snapshot(name) = "$name = (Base.gc_num(), Base.cumulative_compile_time_ns())"
     src = replace(src,
-        PHASE_MARKERS[1] => snapshot(1) * "; " * PHASE_MARKERS[1],
-        PHASE_MARKERS[2] => snapshot(2) * "; " * PHASE_MARKERS[2] * """
-
-        __ttfx_gc_after_load = 0.0
-        __ttfx_s2r = __ttfx_s2
-        if __ttfx_gc_off
-            GC.enable(true); GC.gc(); GC.enable(false)
-            __ttfx_gc_after_load = time() - __t2
-            __t1 += __ttfx_gc_after_load
-            $(replace(snapshot(2), "__ttfx_s2" => "__ttfx_s2r")); __t2 = time()
+        PHASE_MARKERS[1] => "begin " * snapshot("__ttfx_s1") * "; " * PHASE_MARKERS[1] * " end",
+        PHASE_MARKERS[2] => """
+        begin
+            $(snapshot("__ttfx_s2"))
+            __ttfx_gc_after_load = 0.0
+            __ttfx_s2r = __ttfx_s2
+            if __ttfx_gc_off
+                __ttfx_t = time()
+                GC.enable(true); GC.gc(); GC.enable(false)
+                __ttfx_gc_after_load = time() - __ttfx_t
+                __t1 += __ttfx_gc_after_load
+                $(snapshot("__ttfx_s2r"))
+            end
+            $(PHASE_MARKERS[2])
         end""",
-        PHASE_MARKERS[3] => snapshot(3) * "; " * PHASE_MARKERS[3])
+        PHASE_MARKERS[3] => PHASE_MARKERS[3] * "\n" * snapshot("__ttfx_s3"))
     src = "const __ttfx_gc_off = get(ENV, \"TTFX_GC\", \"\") == \"off\"\n" *
           "Base.cumulative_compile_timing(true)\n__ttfx_gc_off && GC.enable(false)\n" * src * "\n" * """
     __ttfx_gc_off && GC.enable(true)
