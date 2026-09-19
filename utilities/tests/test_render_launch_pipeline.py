@@ -62,10 +62,10 @@ class RenderLaunchPipelineTests(unittest.TestCase):
         self.assertNotIn('group: "Build"', output)
         self.assertNotIn('group: "Test"', output)
 
-        self.assertEqual(output.count('key: "build_'), 8)
-        self.assertEqual(output.count('key: "test_'), 5)
-        self.assertEqual(output.count("soft_fail: false"), 8)
-        self.assertEqual(output.count("soft_fail: true"), 5)
+        self.assertEqual(output.count('key: "build_'), 9)
+        self.assertEqual(output.count('key: "test_'), 7)
+        self.assertEqual(output.count("soft_fail: false"), 9)
+        self.assertEqual(output.count("soft_fail: true"), 7)
         self.assertEqual(
             output.count('depends_on:\n          - "build_x86_64-linux-gnusrcassert"'),
             2,
@@ -75,14 +75,18 @@ class RenderLaunchPipelineTests(unittest.TestCase):
                 output.count(f'depends_on:\n          - "build_{triplet}"'),
                 2,  # its test job, and its publish trigger
             )
-        self.assertEqual(output.count('JULIA_CI_BUILD_MODE: "opt"'), 3)
+        self.assertEqual(
+            output.count('depends_on:\n          - "build_i686-linux-gnuopt"'),
+            3,  # its two test jobs (net / no-net), and its publish trigger
+        )
+        self.assertEqual(output.count('JULIA_CI_BUILD_MODE: "opt"'), 4)
 
         # One scheduled publish trigger per scheduled upload triplet, each
         # gated on that triplet's own jobs; no docs trigger, no wait barrier.
         publish = publish_group(output)
-        self.assertEqual(publish.count('trigger: "julia-publish"'), 7)
-        self.assertEqual(publish.count('PUBLISH_SCHEDULED: "true"'), 7)
-        self.assertEqual(publish.count('if: pipeline.slug == "julia-ci"'), 7)
+        self.assertEqual(publish.count('trigger: "julia-publish"'), 8)
+        self.assertEqual(publish.count('PUBLISH_SCHEDULED: "true"'), 8)
+        self.assertEqual(publish.count('if: pipeline.slug == "julia-ci"'), 8)
         self.assertNotIn('PUBLISH_TARGET: "docs"', output)
         self.assertNotIn("wait:", output)
         self.assertNotIn("PUBLISH_NOGPL", output)
@@ -90,6 +94,8 @@ class RenderLaunchPipelineTests(unittest.TestCase):
         self.assertIn('message: "publish x86_64-linux-gnuopt: ${BUILDKITE_MESSAGE}"', publish)
         for triplet in ("x86_64-linux-gnuopt", "x86_64-apple-darwinopt", "aarch64-apple-darwinopt"):
             self.assertIn(depends_on(f"build_{triplet}", f"test_{triplet}"), publish)
+        self.assertIn(depends_on("build_i686-linux-gnuopt", "test_i686-linux-gnuopt",
+                                 "test_i686-linux-gnuoptnet"), publish)
         # no-GPL builds have no test jobs: they publish straight after the build
         self.assertIn(depends_on("build_x86_64-w64-mingw32nogpl"), publish)
         self.assertIn(depends_on("build_aarch64-apple-darwinnogpl"), publish)
@@ -101,6 +107,34 @@ class RenderLaunchPipelineTests(unittest.TestCase):
             self.assertIn(f'group: "{group}"', output)
         self.assertNotIn('group: "Source Build"', output)
         self.assertNotIn("PUBLISH_SCHEDULED", output)
+
+    def test_optimized_i686_jobs(self):
+        for args, source in (((), "schedule"), (("--scheduled-workloads",), None)):
+            with self.subTest(args=args, source=source):
+                output = render(*args, source=source)
+                jobs = {}
+                for block in output.split("      - label: ")[1:]:
+                    key = re.search(r'^        key: "([^"]+)"$', block, re.M)
+                    if key:
+                        jobs[key[1]] = block
+
+                build = jobs["build_i686-linux-gnuopt"]
+                self.assertIn("/v8.5/llvm_passes.i686.tar.gz", build)
+                self.assertIn('rootfs_treehash: "3d1a64df225c1ee12fe8bc554bd2ac946a99e02e"', build)
+                self.assertIn('JULIA_CI_BUILD_MODE: "opt"', build)
+                self.assertIn("soft_fail: false", build)
+
+                for suffix, group in (("", "no-net"), ("net", "net")):
+                    job = jobs[f"test_i686-linux-gnuopt{suffix}"]
+                    self.assertIn("/v8.5/tester_linux.i686.tar.gz", job)
+                    self.assertIn('rootfs_treehash: "732df9bae7e11ac7c03bd6bd4f15027750552057"', job)
+                    self.assertIn(f'i686_GROUP: "{group}"', job)
+                    self.assertIn("soft_fail: true", job)
+                    self.assertIn('depends_on:\n          - "build_i686-linux-gnuopt"', job)
+
+                for key in ("build_i686-linux-gnuopt", "test_i686-linux-gnuopt", "test_i686-linux-gnuoptnet"):
+                    self.assertIn('arch: "x86_64"', jobs[key])
+                    self.assertIn('TRIPLET: "i686-linux-gnuopt"', jobs[key])
 
     def test_publish_triggers_gate_on_their_own_platform(self):
         output = render()
