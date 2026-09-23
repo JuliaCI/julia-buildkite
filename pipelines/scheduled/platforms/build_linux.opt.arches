@@ -1,9 +1,12 @@
 # ROOTFS_IMAGE_NAME    TRIPLET                ARCH      ARCH_ROOTFS    JULIA_CI_BUILD_MODE    MAKE_FLAGS    TIMEOUT    ROOTFS_TAG     ROOTFS_HASH
 llvm_passes            x86_64-linux-gnuopt    x86_64    x86_64         opt                    .             .          v8.5           630126d5595f428ef824651b9be020ffc485eb6f
 llvm_passes            i686-linux-gnuopt      x86_64    i686           opt                    .             .          v8.5           3d1a64df225c1ee12fe8bc554bd2ac946a99e02e
+llvm_passes            aarch64-linux-gnuopt   aarch64   aarch64        opt                    .             420        v8.5           7e5f35dd121157cb0efda4d84f33d55b8b76b36a
 
 # These special lines allow us to embed default values for the columns above.
 # Any column without a default mapping here will simply substitute a `.` to the empty string
 
 # Allow time for the instrumented and optimized LLVM and Julia builds.
+# The aarch64 override allows headroom for shared CI hosts: a host run took
+# ~95 min at -j24; agent cpusets provide about 16 cores. Revisit after CI runs.
 #default TIMEOUT 360
