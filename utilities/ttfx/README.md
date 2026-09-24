@@ -23,7 +23,7 @@ repository's `main` branch at job time; everything that runs them lives here.
 |---|---|---|
 | `julia-pr` (pull requests) | only when the pull request touches a path in `paths.txt` (`src/`, `Compiler/`, `base/loading.jl`, `base/precompilation.jl`), or has the `needs TTFX check` label | comparison: the pull request's build against the master build of its merge-base |
 | `julia-ci` (master, release branches, the nightly schedule) | every build | absolute: the build alone |
-| `julia-buildkite-ci` (this repository's self-test) | every build | comparison: the julia master commit under test against its parent |
+| `julia-buildkite-ci` (this repository's self-test) | every build | comparison: the julia master commit under test against a recent ancestor julia-ci built, usually its parent |
 
 The group's launch step, `ttfx_launch.sh`, decides. On a pull request without the label it
 fetches the target branch and diffs the merge-base against the head, restricted to the
@@ -75,7 +75,11 @@ report and the data as artifacts. Nothing is posted to GitHub beyond the commit 
 the job runs the pull request's own code, so it holds no GitHub token.
 
 In this repository's own self-test pipeline the commit under test is a julia master
-commit, and its parent stands in for the merge-base, so the same path runs there.
+commit, and a recent ancestor stands in for the merge-base, so the same path runs there.
+That is usually the parent, but julia-ci builds only the tip of a push, so a parent merged
+moments before its child may have no build. The job takes the nearest of the last five
+first-parent ancestors whose tarball exists, else the nearest whose build is still running
+(or whose state GitHub could not tell) and waits for it, else fails.
 
 ## Absolute mode: master and release branches (julia-ci)
 
