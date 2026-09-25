@@ -1,9 +1,13 @@
 # OS       TRIPLET                    ARCH          TIMEOUT
-macos      x86_64-apple-darwinopt     x86_64        .
+macos      x86_64-apple-darwinopt     x86_64        315
 macos      aarch64-apple-darwinopt    aarch64       .
 
 # These special lines allow us to embed default values for the columns above.
 # Any column without a default mapping here will simply substitute a `.` to the empty string
 
 # Use the regular macOS test timeout.
+# The x86_64 override is needed because scheduled builds also run the external
+# stdlib tests (~4h of extra test time), and the 4-core Intel testers need
+# ~215-235 min for the full suite, more than the 180 min test budget of the
+# default. 315 gives the tests 270 min.
 #default TIMEOUT 225
