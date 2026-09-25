@@ -23,8 +23,10 @@ TTFX_REPEATS="${TTFX_REPEATS:-3}"
 # Tasks not to run; "none" runs every task in the snippets checkout
 TTFX_EXCLUDE="${TTFX_EXCLUDE:-${TTFX_UTILS}/exclude.txt}"
 # The base build comes from where julia-ci stages its tarballs, or from the promoted
-# nightlies once the staged object has expired
+# nightlies once the staged object has expired. A pull request stacked on another one has
+# its base on that pull request's branch, built by julia-pr and staged in its own bucket.
 TTFX_BASE_STAGING_BUCKET="${TTFX_BASE_STAGING_BUCKET:-julialang-ephemeral-ci}"
+TTFX_BASE_PR_STAGING_BUCKET="${TTFX_BASE_PR_STAGING_BUCKET:-julialang-ephemeral-pr}"
 TTFX_NIGHTLIES_URL="${TTFX_NIGHTLIES_URL:-https://julialangnightlies-s3.julialang.org}"
 # How long to wait for the merge-base's build; a macOS aarch64 build takes about 18 minutes
 TTFX_BASE_WAIT_MINUTES="${TTFX_BASE_WAIT_MINUTES:-20}"
@@ -62,21 +64,31 @@ install_julia() {
     echo "${name}: $("${dir}/bin/julia" --startup-file=no -e 'print(VERSION, "  ", Base.GIT_VERSION_INFO.commit)')"
 }
 
-# The base tarball of a commit: staged by julia-ci below the commit sha, or already promoted
-# to the nightlies. Both are readable anonymously.
+# The base tarball of a commit: staged by julia-ci below the commit sha, already promoted
+# to the nightlies, or staged by julia-pr when the commit is on a pull request's branch.
+# All are readable anonymously.
 fetch_base_build() {
     local commit="$1" out="$2"
     local short="${commit:0:${SHORT_COMMIT_LENGTH}}"
     local name="julia-${short}-${OS}-${ARCH}.tar.gz"
     local url
     for url in "https://${TTFX_BASE_STAGING_BUCKET}.s3.amazonaws.com/${S3_BUCKET_PREFIX}/${commit}/${name}" \
-               "${TTFX_NIGHTLIES_URL}/${S3_BUCKET_PREFIX}/${OS}/${ARCH}/${MAJMIN}/${name}"; do
+               "${TTFX_NIGHTLIES_URL}/${S3_BUCKET_PREFIX}/${OS}/${ARCH}/${MAJMIN}/${name}" \
+               "https://${TTFX_BASE_PR_STAGING_BUCKET}.s3.amazonaws.com/${S3_BUCKET_PREFIX}/${commit}/${name}"; do
         if curl -fsSL --retry 3 -o "${out}" "${url}"; then
             echo "downloaded ${url}"
             return 0
         fi
     done
     return 1
+}
+
+# The nearest first-parent ancestor of a commit (itself included) that julia-ci built.
+# Buildkite ignores a push whose commit message says [ci skip] or [skip ci], so such a
+# commit has no build of its own to compare against.
+nearest_built_commit() {
+    git rev-list --first-parent --max-count=1 --invert-grep -E \
+        --grep='\[(ci[ -]skip|skip[ -]ci)\]' "$1"
 }
 
 # JuliaLang/julia, from https://github.com/JuliaLang/julia.git or git@github.com:JuliaLang/julia.git.
@@ -105,7 +117,8 @@ ARMS=( "head=${TTFX_DIR}/head" )
 BASE_NOTE=""
 # Only julia-pr builds a pull request of julia itself. The self-test pipeline's builds are
 # pull requests of this repository measuring a julia master commit; there the parent
-# commit stands in for the merge-base, so the comparison path is exercised too.
+# commit stands in for the merge-base, so the comparison path is exercised too. Either
+# way, a base that is a [ci skip] commit gives way to its nearest ancestor that was built.
 MERGE_BASE=""
 if [[ "${BUILDKITE_PIPELINE_SLUG:-}" == "julia-pr" && "${BUILDKITE_PULL_REQUEST:-false}" != "false" ]]; then
     BASE_BRANCH="${BUILDKITE_PULL_REQUEST_BASE_BRANCH:-master}"
@@ -120,6 +133,11 @@ elif [[ "${BUILDKITE_PIPELINE_SLUG:-}" == julia-buildkite* ]]; then
 fi
 if [[ -n "${MERGE_BASE}" ]]; then
     MODE="compare"
+    built="$(nearest_built_commit "${MERGE_BASE}")"
+    if [[ -n "${built}" && "${built}" != "${MERGE_BASE}" ]]; then
+        echo "${MERGE_BASE:0:10} is a [ci skip] commit, never built; comparing against ${built}"
+        MERGE_BASE="${built}"
+    fi
 
     echo "--- Fetch the ${BASE_BRANCH} build of the merge-base"
     # julia-ci stages the tarball as soon as the merge-base's build job finishes, so a
