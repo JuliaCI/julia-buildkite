@@ -156,7 +156,7 @@ class RenderLaunchPipelineTests(unittest.TestCase):
             r'.*?(?=^      - label:|^  - group:|\Z)',
             output, re.M | re.S,
         ).group()
-        self.assertIn('image: "juliapackaging/package-windows-x86_64:v8.9"', build)
+        self.assertIn('image: "juliapackaging/package-windows-x86_64:v8.10"', build)
         self.assertIn('timeout_in_minutes: 600', build)
         self.assertIn('soft_fail: false', build)
         self.assertIn('TRIPLET: "x86_64-w64-mingw32opt"', build)
