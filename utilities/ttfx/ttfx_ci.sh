@@ -62,19 +62,15 @@ install_julia() {
     echo "${name}: $("${dir}/bin/julia" --startup-file=no -e 'print(VERSION, "  ", Base.GIT_VERSION_INFO.commit)')"
 }
 
-# Where the base tarball of a commit is: staged by julia-ci below the commit sha, or already
-# promoted to the nightlies. Both are readable anonymously.
-base_build_urls() {
-    local commit="$1"
-    local name="julia-${commit:0:${SHORT_COMMIT_LENGTH}}-${OS}-${ARCH}.tar.gz"
-    echo "https://${TTFX_BASE_STAGING_BUCKET}.s3.amazonaws.com/${S3_BUCKET_PREFIX}/${commit}/${name}"
-    echo "${TTFX_NIGHTLIES_URL}/${S3_BUCKET_PREFIX}/${OS}/${ARCH}/${MAJMIN}/${name}"
-}
-
+# The base tarball of a commit: staged by julia-ci below the commit sha, or already promoted
+# to the nightlies. Both are readable anonymously.
 fetch_base_build() {
     local commit="$1" out="$2"
+    local short="${commit:0:${SHORT_COMMIT_LENGTH}}"
+    local name="julia-${short}-${OS}-${ARCH}.tar.gz"
     local url
-    for url in $(base_build_urls "${commit}"); do
+    for url in "https://${TTFX_BASE_STAGING_BUCKET}.s3.amazonaws.com/${S3_BUCKET_PREFIX}/${commit}/${name}" \
+               "${TTFX_NIGHTLIES_URL}/${S3_BUCKET_PREFIX}/${OS}/${ARCH}/${MAJMIN}/${name}"; do
         if curl -fsSL --retry 3 -o "${out}" "${url}"; then
             echo "downloaded ${url}"
             return 0
@@ -83,15 +79,12 @@ fetch_base_build() {
     return 1
 }
 
-# Whether the base tarball of a commit exists, without downloading it
-base_build_exists() {
-    local url
-    for url in $(base_build_urls "$1"); do
-        if curl -fsIL --retry 3 -o /dev/null "${url}"; then
-            return 0
-        fi
-    done
-    return 1
+# The nearest first-parent ancestor of a commit (itself included) that julia-ci built.
+# Buildkite ignores a push whose commit message says [ci skip] or [skip ci], so such a
+# commit has no build of its own to compare against.
+nearest_built_commit() {
+    git rev-list --first-parent --max-count=1 --invert-grep -E \
+        --grep='\[(ci[ -]skip|skip[ -]ci)\]' "$1"
 }
 
 # JuliaLang/julia, from https://github.com/JuliaLang/julia.git or git@github.com:JuliaLang/julia.git.
@@ -119,9 +112,9 @@ MODE="standalone"
 ARMS=( "head=${TTFX_DIR}/head" )
 BASE_NOTE=""
 # Only julia-pr builds a pull request of julia itself. The self-test pipeline's builds are
-# pull requests of this repository measuring a julia master commit; there a recent
-# ancestor that julia-ci built stands in for the merge-base, so the comparison path is
-# exercised too.
+# pull requests of this repository measuring a julia master commit; there the parent
+# commit stands in for the merge-base, so the comparison path is exercised too. Either
+# way, a base that is a [ci skip] commit gives way to its nearest ancestor that was built.
 MERGE_BASE=""
 if [[ "${BUILDKITE_PIPELINE_SLUG:-}" == "julia-pr" && "${BUILDKITE_PULL_REQUEST:-false}" != "false" ]]; then
     BASE_BRANCH="${BUILDKITE_PULL_REQUEST_BASE_BRANCH:-master}"
@@ -131,39 +124,16 @@ if [[ "${BUILDKITE_PIPELINE_SLUG:-}" == "julia-pr" && "${BUILDKITE_PULL_REQUEST:
     echo "merge-base: ${MERGE_BASE}"
 elif [[ "${BUILDKITE_PIPELINE_SLUG:-}" == julia-buildkite* ]]; then
     BASE_BRANCH="master"
-    # julia-ci builds only the tip of a push, so a parent merged moments before the commit
-    # under test may never have been built. Take the nearest of the last few first-parent
-    # ancestors whose tarball exists; failing that, the nearest one still building (or
-    # whose state GitHub could not tell), for the wait below.
-    echo "--- Self-test: find a recent ancestor julia-ci built"
-    ANCESTORS="$(git rev-list --first-parent --max-count=5 HEAD^)"
-    for candidate in ${ANCESTORS}; do
-        if base_build_exists "${candidate}"; then
-            echo "${candidate:0:10}: built"
-            MERGE_BASE="${candidate}"
-            break
-        fi
-        echo "${candidate:0:10}: no tarball"
-    done
-    if [[ -z "${MERGE_BASE}" ]]; then
-        for candidate in ${ANCESTORS}; do
-            state="$("${HEAD_JULIA}" --startup-file=no "${TTFX_UTILS}/ttfx_build_state.jl" "${TTFX_GITHUB_REPO}" "${candidate}")"
-            echo "${candidate:0:10}: ${state}"
-            if [[ "${state}" == "pending" || "${state}" == "unknown" ]]; then
-                MERGE_BASE="${candidate}"
-                break
-            fi
-        done
-    fi
-    if [[ -z "${MERGE_BASE}" ]]; then
-        echo "^^^ +++"
-        echo "None of the last 5 ancestors of ${SHORT_COMMIT} has a master build, or one running, to compare against" >&2
-        exit 1
-    fi
-    echo "comparing against ${MERGE_BASE}"
+    MERGE_BASE="$(git rev-parse HEAD^)"
+    echo "--- Self-test: comparing against the parent commit ${MERGE_BASE}"
 fi
 if [[ -n "${MERGE_BASE}" ]]; then
     MODE="compare"
+    built="$(nearest_built_commit "${MERGE_BASE}")"
+    if [[ -n "${built}" && "${built}" != "${MERGE_BASE}" ]]; then
+        echo "${MERGE_BASE:0:10} is a [ci skip] commit, never built; comparing against ${built}"
+        MERGE_BASE="${built}"
+    fi
 
     echo "--- Fetch the ${BASE_BRANCH} build of the merge-base"
     # julia-ci stages the tarball as soon as the merge-base's build job finishes, so a
