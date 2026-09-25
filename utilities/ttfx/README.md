@@ -21,7 +21,7 @@ repository's `main` branch at job time; everything that runs them lives here.
 
 | pipeline | measured | mode |
 |---|---|---|
-| `julia-pr` (pull requests) | only when the pull request touches a path in `paths.txt` (`src/`, `Compiler/`, `base/loading.jl`, `base/precompilation.jl`), or has the `needs TTFX check` label | comparison: the pull request's build against the master build of its merge-base |
+| `julia-pr` (pull requests) | only when the pull request touches a path in `paths.txt` (`src/`, `Compiler/`, `base/loading.jl`, `base/precompilation.jl`), or has the `needs TTFX check` label | comparison: the pull request's build against the build of its merge-base (master's, or the base pull request's when stacked) |
 | `julia-ci` (master, release branches, the nightly schedule) | every build | absolute: the build alone |
 | `julia-buildkite-ci` (this repository's self-test) | every build | comparison: the julia master commit under test against its parent |
 
@@ -41,12 +41,15 @@ stages every build it makes below its commit sha, so the job fetches the base fr
 there (falling back to the promoted nightlies once the staged object has expired), and
 waits for it if the merge-base's build is still running, up to
 `TTFX_BASE_WAIT_MINUTES` (20 minutes, about one macOS aarch64 build; the job holds a
-macOS agent while it waits). Buildkite ignores a push whose commit message says
+macOS agent while it waits). A pull request stacked on another one targets that pull
+request's branch, so its merge-base was built by julia-pr instead; the job then fetches
+it from julia-pr's staging bucket. Buildkite ignores a push whose commit message says
 `[ci skip]` or `[skip ci]`, so when the merge-base is such a commit the job walks back
 along the target branch to the nearest one that was built, and compares against that.
 Otherwise there is no substitute base: if the wait runs out, or that build failed or
-was never started, the job fails and says why, and can be retried once the build exists. Both arms are re-signed and their stdlib pkgimage checksums repaired
-the same way the test jobs do.
+was never started, the job fails and says why, and can be retried once the build
+exists. Both arms are re-signed and their stdlib pkgimage checksums repaired the same
+way the test jobs do.
 
 Every task is measured `TTFX_BLOCKS` times per arm, the arm order reversed on alternate
 blocks (`base head head base`), so drift over the hour lands on both arms alike. Each

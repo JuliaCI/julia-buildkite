@@ -23,8 +23,10 @@ TTFX_REPEATS="${TTFX_REPEATS:-3}"
 # Tasks not to run; "none" runs every task in the snippets checkout
 TTFX_EXCLUDE="${TTFX_EXCLUDE:-${TTFX_UTILS}/exclude.txt}"
 # The base build comes from where julia-ci stages its tarballs, or from the promoted
-# nightlies once the staged object has expired
+# nightlies once the staged object has expired. A pull request stacked on another one has
+# its base on that pull request's branch, built by julia-pr and staged in its own bucket.
 TTFX_BASE_STAGING_BUCKET="${TTFX_BASE_STAGING_BUCKET:-julialang-ephemeral-ci}"
+TTFX_BASE_PR_STAGING_BUCKET="${TTFX_BASE_PR_STAGING_BUCKET:-julialang-ephemeral-pr}"
 TTFX_NIGHTLIES_URL="${TTFX_NIGHTLIES_URL:-https://julialangnightlies-s3.julialang.org}"
 # How long to wait for the merge-base's build; a macOS aarch64 build takes about 18 minutes
 TTFX_BASE_WAIT_MINUTES="${TTFX_BASE_WAIT_MINUTES:-20}"
@@ -62,15 +64,17 @@ install_julia() {
     echo "${name}: $("${dir}/bin/julia" --startup-file=no -e 'print(VERSION, "  ", Base.GIT_VERSION_INFO.commit)')"
 }
 
-# The base tarball of a commit: staged by julia-ci below the commit sha, or already promoted
-# to the nightlies. Both are readable anonymously.
+# The base tarball of a commit: staged by julia-ci below the commit sha, already promoted
+# to the nightlies, or staged by julia-pr when the commit is on a pull request's branch.
+# All are readable anonymously.
 fetch_base_build() {
     local commit="$1" out="$2"
     local short="${commit:0:${SHORT_COMMIT_LENGTH}}"
     local name="julia-${short}-${OS}-${ARCH}.tar.gz"
     local url
     for url in "https://${TTFX_BASE_STAGING_BUCKET}.s3.amazonaws.com/${S3_BUCKET_PREFIX}/${commit}/${name}" \
-               "${TTFX_NIGHTLIES_URL}/${S3_BUCKET_PREFIX}/${OS}/${ARCH}/${MAJMIN}/${name}"; do
+               "${TTFX_NIGHTLIES_URL}/${S3_BUCKET_PREFIX}/${OS}/${ARCH}/${MAJMIN}/${name}" \
+               "https://${TTFX_BASE_PR_STAGING_BUCKET}.s3.amazonaws.com/${S3_BUCKET_PREFIX}/${commit}/${name}"; do
         if curl -fsSL --retry 3 -o "${out}" "${url}"; then
             echo "downloaded ${url}"
             return 0
