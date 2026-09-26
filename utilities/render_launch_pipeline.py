@@ -373,6 +373,7 @@ TEST_ARCHES = [
 ALLOW_FAIL_BUILD_ARCHES = [
     ("build_linux.soft_fail.arches", "build_linux.yml"),
     ("build_macos.soft_fail.arches", "build_macos.yml"),
+    ("build_freebsd.soft_fail.arches", "build_freebsd.yml"),
 ]
 
 ALLOW_FAIL_TEST_ARCHES = [
