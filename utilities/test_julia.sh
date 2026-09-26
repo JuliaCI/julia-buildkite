@@ -53,7 +53,7 @@ unset JULIA_PKG_SERVER
 # precompile workers don't oversubscribe the machine.
 export JULIA_PRECOMPILE_THREADS="${JULIA_CPU_THREADS}"
 
-if [[ "${OS}" != "windows" ]]; then
+if [[ "${OS}" != windows* ]]; then
     # Tell timeout.jl to detach the process group, so we get core dumps from
     # each process.
     export JL_TERM_DETACH="true"
@@ -127,7 +127,7 @@ elif [[ "${USE_RR-}" == "" ]]; then
     fi
 
     # Disable `Profile` on win32, as our backtraces are extremely slow.
-    if [[ "${OS} ${ARCH}" == "windows i686" ]]; then
+    if [[ "${OS}" == windows* && "${ARCH}" == "i686" ]]; then
         TESTS_TO_SKIP+=( "Profile" )
     fi
 else
