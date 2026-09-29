@@ -31,63 +31,32 @@ steps:
               # 32-bit Julia on Windows is handled in the "adjustments" section below
             julia_version:
               # Don't put "1" here. Always include at least major and minor version.
-              - "1.0"
-              - "1.6" # old LTS
               - "1.10" # current LTS
-              - "1.12" # latest stable
+              - "1.13" # latest stable
           adjustments:
             # macOS x86_64 (Intel):
             - with:
                 agent_os: "macos"
                 agent_arch: "x86_64"
                 julia_arch: "x86_64"
-                julia_version: "1.0"
-            - with:
-                agent_os: "macos"
-                agent_arch: "x86_64"
-                julia_arch: "x86_64"
-                julia_version: "1.6" # old LTS
-            - with:
-                agent_os: "macos"
-                agent_arch: "x86_64"
-                julia_arch: "x86_64"
                 julia_version: "1.10" # current LTS
             - with:
                 agent_os: "macos"
                 agent_arch: "x86_64"
                 julia_arch: "x86_64"
-                julia_version: "1.12" # latest stable
+                julia_version: "1.13" # latest stable
             # macOS aarch64 (Apple Silicon):
-            # Note: Julia 1.0 and 1.6 did not have native aarch64 binaries for macOS, so we skip those
             - with:
                 agent_os: "macos"
                 agent_arch: "aarch64"
                 julia_arch: "aarch64"
-                julia_version: "1.10" # old LTS
+                julia_version: "1.10" # current LTS
             - with:
                 agent_os: "macos"
                 agent_arch: "aarch64"
                 julia_arch: "aarch64"
-                julia_version: "1.12" # latest stable
-            # For some reason, the Julia 1.0 tarball for Windows x86_64 doesn't seem to exist. Weird. Skip it for now, try to fix this in the future.
-            - with:
-                agent_os: "windows"
-                agent_arch: "x86_64"
-                julia_arch: "x86_64"
-                julia_version: "1.0"
-              skip: true
+                julia_version: "1.13" # latest stable
             # 32-bit Julia on Windows
-            # For some reason, the Julia 1.0 tarball for Windows i686 doesn't seem to exist. Weird. Skip it for now, try to fix this in the future.
-            # - with:
-            #     agent_os: "windows"
-            #     agent_arch: "x86_64"
-            #     julia_arch: "i686" # 32-bit Julia
-            #     julia_version: "1.0"
-            - with:
-                agent_os: "windows"
-                agent_arch: "x86_64"
-                julia_arch: "i686" # 32-bit Julia
-                julia_version: "1.6" # old LTS
             - with:
                 agent_os: "windows"
                 agent_arch: "x86_64"
@@ -97,7 +66,7 @@ steps:
                 agent_os: "windows"
                 agent_arch: "x86_64"
                 julia_arch: "i686" # 32-bit Julia
-                julia_version: "1.12" # latest stable
+                julia_version: "1.13" # latest stable
         plugins:
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"
@@ -158,10 +127,8 @@ steps:
               - "i686" # 32-bit Julia
             julia_version:
               # Don't put "1" here. Always include at least major and minor version.
-              - "1.0"
-              - "1.6" # old LTS
               - "1.10" # current LTS
-              - "1.12" # latest stable
+              - "1.13" # latest stable
         plugins:
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"
