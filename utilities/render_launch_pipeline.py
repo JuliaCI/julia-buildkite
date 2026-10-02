@@ -27,8 +27,8 @@ It reproduces, exactly, what `launch_untrusted_builders.yml` used to upload:
     per-file uploads did -- and converts `$$` -> `$`.
 
 CRITICAL interpolation rule: a `$$` (double dollar) is a Buildkite runtime
-escape and must be PRESERVED verbatim. Per-arch substitution here only touches
-single-`$` `${...}` references that are NOT preceded by another `$`.
+escape and must be PRESERVED verbatim. Per-arch substitution (interpolation.py)
+only touches `${...}` references that are not part of a `$$` escape.
 
 PowerPC: `launch_powerpc.jl` only uploads powerpc arches for Julia < 1.12. On
 current master (1.14) it is a no-op, so the powerpc arches are intentionally

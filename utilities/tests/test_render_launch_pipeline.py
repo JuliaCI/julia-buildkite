@@ -9,6 +9,8 @@ import unittest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 RENDERER = os.path.join(ROOT, "utilities", "render_launch_pipeline.py")
+sys.path.insert(0, os.path.join(ROOT, "utilities"))
+from interpolation import interpolate  # noqa: E402
 
 # The per-commit published platforms (pipelines/main/platforms/upload_*.arches).
 PUBLISHED_TRIPLETS = [
@@ -254,6 +256,20 @@ class RenderLaunchPipelineTests(unittest.TestCase):
         self.assertIn('group: "Source Build"', output)
         self.assertNotIn('group: "Publish"', output)
         self.assertNotIn('trigger: "julia-publish"', output)
+
+
+class InterpolateTests(unittest.TestCase):
+    def test_runtime_escapes_untouched(self):
+        for text in ("$${FOO}", "$$FOO", "$$$${FOO}"):
+            self.assertEqual(interpolate(text, {"FOO": "x"}, "test"), text)
+        # the expansion after a `$$` escape is still interpolated
+        self.assertEqual(interpolate("$$${FOO}", {"FOO": "x"}, "test"), "$$x")
+
+    def test_unsupported_expansion_rejected(self):
+        # these previously expanded to plain ${FOO}, dropping the suffix
+        for text in ("${FOO:0:2}", "${FOO/a/b}", "${FOO:=d}"):
+            with self.assertRaisesRegex(ValueError, "unsupported"):
+                interpolate(text, {"FOO": "x"}, "test")
 
 
 if __name__ == "__main__":

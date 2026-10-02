@@ -6,17 +6,20 @@ render_launch_pipeline.py.
 import re
 
 
-# Match a single-$ ${...} that is NOT preceded by another $ (i.e. not part of
-# a $$ runtime escape). We assert the char before the $ is not a $.
-_VAR_RE = re.compile(r'(?<!\$)\$\{([A-Za-z_][A-Za-z0-9_]*)([?+-]|:[?+-])?((?:[^{}]|\{[^}]*\})*)\}')
+# Match a $$ runtime escape (left untouched) or a ${...} expansion.
+_VAR_RE = re.compile(r'\$\$|\$\{([A-Za-z_][A-Za-z0-9_]*)([?+-]|:[?+-])?((?:[^{}]|\{[^}]*\})*)\}')
 
 
 def interpolate(text, env, where):
     """Resolve single-$ ${VAR}, ${VAR?}, ${VAR:?}, ${VAR-d}, ${VAR:-d},
-    ${VAR+a}, ${VAR:+a} against `env`. $$ escapes are left untouched because
-    the regex refuses a $ immediately before the ${."""
+    ${VAR+a}, ${VAR:+a} against `env`. $$ escapes are left untouched."""
     def repl(m):
+        if m.group(0) == "$$":
+            return "$$"
         name, op, arg = m.group(1), m.group(2), m.group(3)
+        if op is None and arg:
+            # e.g. ${VAR:0:2}, which would otherwise expand to plain ${VAR}
+            raise ValueError(f"{where}: unsupported expansion {m.group(0)}")
         present = name in env
         value = env.get(name, "")
         if op in (None, ""):
