@@ -23,9 +23,12 @@ steps:
               workspaces:
                 # Include `/cache/repos` so that our `git` version introspection works.
                 - "/cache/repos:/cache/repos"
+                # Build from `/julia` so serialized source paths are machine-independent.
+                # (`$$` defers interpolation from pipeline-upload time to job time.)
+                - "$${BUILDKITE_BUILD_CHECKOUT_PATH}:/julia"
         timeout_in_minutes: ${TIMEOUT?}
         soft_fail: ${ALLOW_FAIL?}
-        commands: "bash .buildkite/utilities/build_julia.sh"
+        commands: "cd /julia && bash .buildkite/utilities/build_julia.sh"
         agents:
           queue: "build"
           # Only run on `sandbox.jl` machines (not `docker`-isolated ones) since we need nestable sandboxing
