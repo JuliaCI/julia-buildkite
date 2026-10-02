@@ -112,14 +112,39 @@ def arches_envs(arches_path):
 _VAR_RE = re.compile(r'(?<!\$)\$\{([A-Za-z_][A-Za-z0-9_]*)([?+-]|:[?+-])?((?:[^{}]|\{[^}]*\})*)\}')
 
 
-def interpolate(text, env, where):
+def interpolate(text, env, where, allow_unsupported=False):
     """Resolve single-$ ${VAR}, ${VAR?}, ${VAR:?}, ${VAR-d}, ${VAR:-d},
     ${VAR+a}, ${VAR:+a} against `env`. $$ escapes are left untouched because
-    the regex refuses a $ immediately before the ${."""
+    the regex refuses a $ immediately before the ${.
+
+    Forms that `buildkite-agent pipeline upload` does not interpolate the same
+    way are rejected unless `allow_unsupported` is set, since the same
+    templates are also uploaded directly by the agent (e.g. by
+    build_request/launch.yml via arches_pipeline_upload.sh):
+      * `+`, `:+` and `:?`, which the agent fails to parse ("Expected an
+        operator" / "Unable to parse offset")
+      * a default / message containing `{`, `}` or `$`, which the agent
+        expands as nested interpolation and ends at the first `}`"""
     def repl(m):
         name, op, arg = m.group(1), m.group(2), m.group(3)
         present = name in env
         value = env.get(name, "")
+        if op is None and arg:
+            # e.g. ${VAR:0:2} or ${VAR/a/b}: matched only because the
+            # operator is optional, so the suffix would be silently dropped
+            raise ValueError(f"{where}: unrecognized expansion {m.group(0)}")
+        if not allow_unsupported:
+            if op in ("+", ":+", ":?"):
+                hint = f"; use ${{{name}:-}} instead" if op.endswith("+") else ""
+                raise ValueError(
+                    f"{where}: {m.group(0)} is not supported by "
+                    f"`buildkite-agent pipeline upload`{hint}"
+                )
+            if re.search(r"[{}$]", arg):
+                raise ValueError(
+                    f"{where}: {m.group(0)} is interpolated differently by "
+                    f"`buildkite-agent pipeline upload` (nested expansion)"
+                )
         if op in (None, ""):
             if not present:
                 raise KeyError(f"{where}: undefined arch var ${{{name}}}")

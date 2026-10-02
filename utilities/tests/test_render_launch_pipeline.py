@@ -256,5 +256,53 @@ class RenderLaunchPipelineTests(unittest.TestCase):
         self.assertNotIn('trigger: "julia-publish"', output)
 
 
+class InterpolateTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        sys.path.insert(0, os.path.dirname(RENDERER))
+        import render_launch_pipeline
+        cls.interpolate = staticmethod(render_launch_pipeline.interpolate)
+
+    def test_unsupported_rejected_by_default(self):
+        # `buildkite-agent pipeline upload` cannot parse the first four, and
+        # interpolates nested / braced defaults differently
+        for text in ("${FOO:+bar}", "${FOO+bar}", "${FOO:?}", "${FOO:?msg}",
+                     "${FOO:-${BAR}}", "${FOO-a{b}c}", "${FOO:-$BAR}"):
+            for env in ({}, {"FOO": ""}, {"FOO": "x"}):
+                with self.assertRaisesRegex(ValueError, "buildkite-agent"):
+                    self.interpolate(text, env, "test")
+
+    def test_unsupported_when_allowed(self):
+        def interp(text, env):
+            return self.interpolate(text, env, "test", allow_unsupported=True)
+        self.assertEqual(interp("${FOO:+bar}", {"FOO": "x"}), "bar")
+        self.assertEqual(interp("${FOO:+bar}", {"FOO": ""}), "")
+        self.assertEqual(interp("${FOO+bar}", {"FOO": ""}), "bar")
+        self.assertEqual(interp("${FOO+bar}", {}), "")
+        self.assertEqual(interp("${FOO:?}", {"FOO": "x"}), "x")
+        self.assertEqual(interp("${FOO:-${BAR}}", {}), "${BAR}")
+
+    def test_supported_forms(self):
+        def interp(text, env):
+            return self.interpolate(text, env, "test")
+        self.assertEqual(interp("${FOO}", {"FOO": "x"}), "x")
+        self.assertEqual(interp("${FOO?}", {"FOO": ""}), "")
+        self.assertEqual(interp("${FOO-d}", {"FOO": ""}), "")
+        self.assertEqual(interp("${FOO-d}", {}), "d")
+        self.assertEqual(interp("${FOO:-d}", {"FOO": ""}), "d")
+        self.assertEqual(interp("${FOO:-a b}", {}), "a b")
+
+    def test_unrecognized_expansion_always_rejected(self):
+        # these previously expanded to plain ${FOO}, dropping the suffix
+        for text in ("${FOO:0:2}", "${FOO:1}", "${FOO/a/b}", "${FOO:=d}"):
+            with self.assertRaisesRegex(ValueError, "unrecognized"):
+                self.interpolate(text, {"FOO": "x"}, "test",
+                                 allow_unsupported=True)
+
+    def test_runtime_escape_untouched(self):
+        self.assertEqual(self.interpolate("$${FOO:+bar}", {}, "test"),
+                         "$${FOO:+bar}")
+
+
 if __name__ == "__main__":
     unittest.main()
