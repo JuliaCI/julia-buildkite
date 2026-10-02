@@ -107,15 +107,31 @@ def arches_envs(arches_path):
 # bash-like ${VAR} interpolation for the arches-templated YAMLs
 # --------------------------------------------------------------------------
 
-# Match a single-$ ${...} that is NOT preceded by another $ (i.e. not part of
-# a $$ runtime escape). We assert the char before the $ is not a $.
-_VAR_RE = re.compile(r'(?<!\$)\$\{([A-Za-z_][A-Za-z0-9_]*)([?+-]|:[?+-])?((?:[^{}]|\{[^}]*\})*)\}')
+# Tokenize the way `buildkite-agent pipeline upload` (buildkite/interpolate)
+# does, scanning left to right with the alternatives tried in this order:
+#   `\\`             literal text
+#   `\$`, `$$`       runtime escapes, left for the final upload to convert
+#   `$(`             a shell command substitution, left alone
+#   `${NAME op arg}` a brace expansion we interpolate
+#   `${`             any other brace expansion (malformed / unrecognized)
+#   `$NAME`          a bare variable expansion
+# Text that matches none of these (including a lone `$`) is left as is.
+_TOKEN_RE = re.compile(
+    r'(?P<text>\\\\)'
+    r'|(?P<escape>\\\$|\$\$)'
+    r'|(?P<subst>\$\()'
+    r'|\$\{(?P<name>[A-Za-z_][A-Za-z0-9_]*)(?P<op>[?+-]|:[?+-])?'
+    r'(?P<arg>(?:[^{}]|\{[^}]*\})*)\}'
+    r'|(?P<brace>\$\{)'
+    r'|\$(?P<bare>[A-Za-z][A-Za-z0-9_]*)'
+)
 
 
 def interpolate(text, env, where, allow_unsupported=False):
-    """Resolve single-$ ${VAR}, ${VAR?}, ${VAR:?}, ${VAR-d}, ${VAR:-d},
-    ${VAR+a}, ${VAR:+a} against `env`. $$ escapes are left untouched because
-    the regex refuses a $ immediately before the ${.
+    r"""Resolve single-$ ${VAR}, ${VAR?}, ${VAR:?}, ${VAR-d}, ${VAR:-d},
+    ${VAR+a}, ${VAR:+a} against `env`. `$$` and `\$` escapes (and anything
+    else the agent does not interpolate) are left untouched for the final
+    `buildkite-agent pipeline upload`.
 
     Forms that `buildkite-agent pipeline upload` does not interpolate the same
     way are rejected unless `allow_unsupported` is set, since the same
@@ -124,14 +140,33 @@ def interpolate(text, env, where, allow_unsupported=False):
       * `+`, `:+` and `:?`, which the agent fails to parse ("Expected an
         operator" / "Unable to parse offset")
       * a default / message containing `{`, `}` or `$`, which the agent
-        expands as nested interpolation and ends at the first `}`"""
+        expands as nested interpolation and ends at the first `}`
+      * a name starting with `_`, which the agent fails to parse
+      * a bare `$VAR`, which this renderer leaves for the final upload to
+        resolve from the launch agent's env rather than the arch row's"""
     def repl(m):
-        name, op, arg = m.group(1), m.group(2), m.group(3)
+        if m.group("text") or m.group("escape") or m.group("subst"):
+            return m.group(0)
+        if m.group("brace"):
+            # e.g. ${VAR:0:2} or ${1}: not a form we can interpolate
+            raise ValueError(f"{where}: unrecognized expansion at "
+                             f"{text[m.start():m.start() + 20]!r}")
+        if m.group("bare"):
+            if not allow_unsupported:
+                raise ValueError(
+                    f"{where}: bare {m.group(0)} is left for `buildkite-agent "
+                    f"pipeline upload` to resolve from the launch agent's "
+                    f"env, not the arch row; use "
+                    f"${{{m.group('bare')}}} (or $${m.group('bare')} for a "
+                    f"runtime variable)"
+                )
+            return m.group(0)
+        name, op, arg = m.group("name"), m.group("op"), m.group("arg")
         present = name in env
         value = env.get(name, "")
         if op is None and arg:
-            # e.g. ${VAR:0:2} or ${VAR/a/b}: matched only because the
-            # operator is optional, so the suffix would be silently dropped
+            # e.g. ${VAR/a/b}: matched only because the operator is
+            # optional, so the suffix would be silently dropped
             raise ValueError(f"{where}: unrecognized expansion {m.group(0)}")
         if not allow_unsupported:
             if op in ("+", ":+", ":?"):
@@ -144,6 +179,12 @@ def interpolate(text, env, where, allow_unsupported=False):
                 raise ValueError(
                     f"{where}: {m.group(0)} is interpolated differently by "
                     f"`buildkite-agent pipeline upload` (nested expansion)"
+                )
+            if name.startswith("_"):
+                raise ValueError(
+                    f"{where}: {m.group(0)} is not supported by "
+                    f"`buildkite-agent pipeline upload` (names must start "
+                    f"with a letter)"
                 )
         if op in (None, ""):
             if not present:
@@ -164,7 +205,7 @@ def interpolate(text, env, where, allow_unsupported=False):
         if kind == "+":
             return arg if not empty else ""
         raise AssertionError(op)
-    return _VAR_RE.sub(repl, text)
+    return _TOKEN_RE.sub(repl, text)
 
 
 # --------------------------------------------------------------------------

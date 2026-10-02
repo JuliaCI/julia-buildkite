@@ -267,7 +267,9 @@ class InterpolateTests(unittest.TestCase):
         # `buildkite-agent pipeline upload` cannot parse the first four, and
         # interpolates nested / braced defaults differently
         for text in ("${FOO:+bar}", "${FOO+bar}", "${FOO:?}", "${FOO:?msg}",
-                     "${FOO:-${BAR}}", "${FOO-a{b}c}", "${FOO:-$BAR}"):
+                     "${FOO:-${BAR}}", "${FOO-a{b}c}", "${FOO:-$BAR}",
+                     "${_FOO}", "$FOO", "a $FOO.b", "$$$FOO", "\\$$FOO",
+                     "\\\\$FOO"):
             for env in ({}, {"FOO": ""}, {"FOO": "x"}):
                 with self.assertRaisesRegex(ValueError, "buildkite-agent"):
                     self.interpolate(text, env, "test")
@@ -281,6 +283,7 @@ class InterpolateTests(unittest.TestCase):
         self.assertEqual(interp("${FOO+bar}", {}), "")
         self.assertEqual(interp("${FOO:?}", {"FOO": "x"}), "x")
         self.assertEqual(interp("${FOO:-${BAR}}", {}), "${BAR}")
+        self.assertEqual(interp("$FOO", {"FOO": "x"}), "$FOO")
 
     def test_supported_forms(self):
         def interp(text, env):
@@ -294,14 +297,26 @@ class InterpolateTests(unittest.TestCase):
 
     def test_unrecognized_expansion_always_rejected(self):
         # these previously expanded to plain ${FOO}, dropping the suffix
-        for text in ("${FOO:0:2}", "${FOO:1}", "${FOO/a/b}", "${FOO:=d}"):
+        for text in ("${FOO:0:2}", "${FOO:1}", "${FOO/a/b}", "${FOO:=d}",
+                     "${1}", "${FOO"):
             with self.assertRaisesRegex(ValueError, "unrecognized"):
                 self.interpolate(text, {"FOO": "x"}, "test",
                                  allow_unsupported=True)
 
-    def test_runtime_escape_untouched(self):
-        self.assertEqual(self.interpolate("$${FOO:+bar}", {}, "test"),
-                         "$${FOO:+bar}")
+    def test_escapes_tokenized_like_agent(self):
+        def interp(text, env={"FOO": "x"}):
+            return self.interpolate(text, env, "test")
+        # `$$` and `\$` are runtime escapes, left for the final upload
+        for text in ("$${FOO:+bar}", "$$FOO", "\\${FOO:+bar}", "\\$FOO",
+                     "$(echo hi)", "a$", "$ b", "$1", "$_FOO"):
+            self.assertEqual(interp(text), text)
+        # ...but only consume their own two characters
+        self.assertEqual(interp("$$${FOO}"), "$$x")
+        self.assertEqual(interp("$$$${FOO}"), "$$$${FOO}")
+        self.assertEqual(interp("\\$${FOO}"), "\\$x")
+        # `\\` is literal text, so the expansion after it is interpolated
+        self.assertEqual(interp("\\\\${FOO}"), "\\\\x")
+        self.assertEqual(interp("$(echo ${FOO})"), "$(echo x)")
 
 
 if __name__ == "__main__":
