@@ -9,8 +9,10 @@ import unittest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 RENDERER = os.path.join(ROOT, "utilities", "render_launch_pipeline.py")
+INTERPOLATE_FROM_ENV = os.path.join(ROOT, "utilities", "interpolate_from_env.py")
 sys.path.insert(0, os.path.join(ROOT, "utilities"))
-from interpolation import interpolate  # noqa: E402
+from interpolation import _VAR_RE, interpolate  # noqa: E402
+from render_launch_pipeline import arches_envs  # noqa: E402
 
 # The per-commit published platforms (pipelines/main/platforms/upload_*.arches).
 PUBLISHED_TRIPLETS = [
@@ -270,6 +272,84 @@ class InterpolateTests(unittest.TestCase):
         for text in ("${FOO:0:2}", "${FOO/a/b}", "${FOO:=d}"):
             with self.assertRaisesRegex(ValueError, "unsupported"):
                 interpolate(text, {"FOO": "x"}, "test")
+
+    def test_dollar_in_value_rejected(self):
+        with self.assertRaisesRegex(ValueError, "contains"):
+            interpolate("${FOO}", {"FOO": "a$BAR"}, "test")
+
+    def test_operators_match_bash(self):
+        for form in ("${FOO?}", "${FOO:?}", "${FOO-d}", "${FOO:-d}",
+                     "${FOO+a}", "${FOO:+a}", "x${FOO:+a b}y"):
+            for env in ({}, {"FOO": ""}, {"FOO": "val"}):
+                with self.subTest(form=form, env=env):
+                    bash = subprocess.run(
+                        ["bash", "-c", f'printf %s "{form}"'],
+                        env={"PATH": os.environ["PATH"], **env},
+                        capture_output=True, text=True,
+                    )
+                    try:
+                        ours = interpolate(form, env, "test")
+                    except KeyError:
+                        ours = None
+                    self.assertEqual(ours, bash.stdout if bash.returncode == 0 else None)
+
+
+# (arches, template, extra env) for each template uploaded through
+# arches_pipeline_upload.sh rather than rendered into the main pipeline.
+DIRECT_UPLOADS = [
+    ("pipelines/main/platforms/build_linux.arches",
+     "pipelines/main/platforms/build_linux.yml",
+     {"GROUP": "Build", "ALLOW_FAIL": "false"}),
+    ("pipelines/main/misc/juliac/test_juliac_linux.arches",
+     "pipelines/main/misc/juliac/test_juliac_linux.yml",
+     {"GROUP": "JuliaC", "ALLOW_FAIL": "false"}),
+    ("pipelines/main/misc/juliac/test_juliac_macos.arches",
+     "pipelines/main/misc/juliac/test_juliac_macos.yml",
+     {"GROUP": "JuliaC", "ALLOW_FAIL": "false"}),
+    ("pipelines/main/misc/juliac/test_juliac_windows.arches",
+     "pipelines/main/misc/juliac/test_juliac_windows.yml",
+     {"GROUP": "JuliaC", "ALLOW_FAIL": "false"}),
+    ("pipelines/main/misc/ttfx/ttfx_macos.arches",
+     "pipelines/main/misc/ttfx/ttfx_macos.yml",
+     {"GROUP": "TTFX"}),
+]
+
+
+class InterpolateFromEnvTests(unittest.TestCase):
+    def test_direct_upload_templates_render(self):
+        for arches, template, extra_env in DIRECT_UPLOADS:
+            for arch_env in arches_envs(os.path.join(ROOT, arches)):
+                with self.subTest(template=template, triplet=arch_env["TRIPLET"]):
+                    output = subprocess.run(
+                        [sys.executable, INTERPOLATE_FROM_ENV, template],
+                        cwd=ROOT,
+                        env={"PATH": os.environ["PATH"], **extra_env, **arch_env},
+                        check=True, capture_output=True, text=True,
+                    ).stdout
+                    self.assertIn(arch_env["TRIPLET"], output)
+                    self.assertNotIn("${", output.replace("$$", ""))
+
+
+def is_arches_template(path):
+    """`X.yml` is an arches template iff `X.arches` or `X.*.arches` exists."""
+    stem = os.path.basename(path)[:-len(".yml")]
+    return any(f == f"{stem}.arches" or (f.startswith(f"{stem}.") and f.endswith(".arches"))
+               for f in os.listdir(os.path.dirname(path)))
+
+
+class AgentUploadedYamlTests(unittest.TestCase):
+    def test_no_agent_unsupported_operators(self):
+        # every other YAML is interpolated by `buildkite-agent pipeline
+        # upload` alone, which cannot parse these
+        for dirpath, _, files in os.walk(os.path.join(ROOT, "pipelines")):
+            for f in files:
+                path = os.path.join(dirpath, f)
+                if not f.endswith(".yml") or is_arches_template(path):
+                    continue
+                with open(path) as fh:
+                    for m in _VAR_RE.finditer(fh.read()):
+                        self.assertNotIn(m.group(2), ("+", ":+", ":?"),
+                                         f"{os.path.relpath(path, ROOT)}: {m.group(0)}")
 
 
 if __name__ == "__main__":

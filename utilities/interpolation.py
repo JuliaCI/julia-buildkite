@@ -1,6 +1,7 @@
 """
 bash-like `${VAR}` interpolation of arches-templated pipeline YAMLs, used by
-render_launch_pipeline.py.
+render_launch_pipeline.py and interpolate_from_env.py, so that every arches
+template is interpolated by the same code.
 """
 
 import re
@@ -22,6 +23,9 @@ def interpolate(text, env, where):
             raise ValueError(f"{where}: unsupported expansion {m.group(0)}")
         present = name in env
         value = env.get(name, "")
+        if "$" in value:
+            # `buildkite-agent pipeline upload` would interpolate it again
+            raise ValueError(f"{where}: value of ${{{name}}} contains `$`")
         if op in (None, ""):
             if not present:
                 raise KeyError(f"{where}: undefined arch var ${{{name}}}")
