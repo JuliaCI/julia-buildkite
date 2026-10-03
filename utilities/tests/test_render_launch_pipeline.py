@@ -237,9 +237,10 @@ class RenderLaunchPipelineTests(unittest.TestCase):
         # The docs trigger waits for the steps that stage the docs / source dists.
         self.assertIn(depends_on("doctest", "source_dist"), publish)
 
-    def test_release_tags_build_and_publish_nogpl(self):
+    def test_releases_build_and_publish_nogpl(self):
         for build_env in ({"BUILDKITE_TAG": "v1.14.0", "BUILDKITE_BRANCH": "v1.14.0"},
-                          {"BUILDKITE_BRANCH": "v1.14.0"}):
+                          {"BUILDKITE_BRANCH": "v1.14.0"},
+                          {"BUILDKITE_BRANCH": "release-1.14"}):
             output = render(BUILDKITE_PIPELINE_SLUG="julia-ci", **build_env)
             publish = publish_group(output)
 
@@ -254,8 +255,10 @@ class RenderLaunchPipelineTests(unittest.TestCase):
                 self.assertIn(depends_on(f"build_{triplet}"), publish)
             self.assertNotIn("PUBLISH_SCHEDULED", publish)
 
-        # Branch builds, and tag-like branches outside julia-ci, do not.
-        for build_env in ({"BUILDKITE_PIPELINE_SLUG": "julia-ci", "BUILDKITE_BRANCH": "release-1.14"},
+        # master (which gets them from the schedule), and release-like
+        # branches outside julia-ci, do not.
+        for build_env in ({"BUILDKITE_PIPELINE_SLUG": "julia-ci", "BUILDKITE_BRANCH": "master"},
+                          {"BUILDKITE_PIPELINE_SLUG": "julia-pr", "BUILDKITE_BRANCH": "release-1.14"},
                           {"BUILDKITE_PIPELINE_SLUG": "julia-pr", "BUILDKITE_BRANCH": "v2-feature"}):
             self.assertNotIn('group: "no_GPL"', render(**build_env))
 
@@ -277,6 +280,8 @@ class RenderLaunchPipelineTests(unittest.TestCase):
         for source, build_env in ((None, {}), ("schedule", {}),
                                   (None, {"BUILDKITE_PIPELINE_SLUG": "julia-ci",
                                           "BUILDKITE_TAG": "v1.14.0"}),
+                                  (None, {"BUILDKITE_PIPELINE_SLUG": "julia-ci",
+                                          "BUILDKITE_BRANCH": "release-1.14"}),
                                   (None, {"NOGPL_ONLY": "true"})):
             output = render(source=source, **build_env)
             keys = set(re.findall(r'^\s+key:\s*"?([^"\s]+)"?\s*$', output, re.M))

@@ -35,9 +35,9 @@ current master (1.14) it is a no-op, so the powerpc arches are intentionally
 omitted (see OMITTED_POWERPC below). This matches the runtime behaviour.
 
 Schedule builds emit the scheduled workload groups and publish triggers instead
-of the per-commit groups. Release tag builds add the no-GPL group (and its
-publish triggers) to the per-commit groups, and NOGPL_ONLY=true renders only
-those. Labeled PRs render the same workload groups as a
+of the per-commit groups. Release branch and tag builds add the no-GPL group
+(and its publish triggers) to the per-commit groups, and NOGPL_ONLY=true
+renders only those. Labeled PRs render the same workload groups as a
 supplemental pipeline, without publish triggers. Per-commit results are grouped
 into one `group:` per label: Build, Check, Test, Allow Fail, JuliaSyntax,
 JuliaLowering, JuliaC, TTFX, Publish.
@@ -644,13 +644,16 @@ def parse_args():
     return parser.parse_args()
 
 
-def is_release_tag_build():
-    """Whether this julia-ci build is a release tag build: the tag build
-    itself, or a build created with branch=v<version> (RELEASE_TAG_FLOW in
-    utilities/build_envs.sh)."""
-    return os.environ.get("BUILDKITE_PIPELINE_SLUG") == "julia-ci" and any(
-        re.match(r"v[0-9]", os.environ.get(var, ""))
-        for var in ("BUILDKITE_TAG", "BUILDKITE_BRANCH"))
+def is_release_build():
+    """Whether this julia-ci build is a release build: a push to a release-*
+    branch, the tag build itself, or a build created with branch=v<version>
+    (RELEASE_TAG_FLOW in utilities/build_envs.sh)."""
+    if os.environ.get("BUILDKITE_PIPELINE_SLUG") != "julia-ci":
+        return False
+    if os.environ.get("BUILDKITE_BRANCH", "").startswith("release-"):
+        return True
+    return any(re.match(r"v[0-9]", os.environ.get(var, ""))
+               for var in ("BUILDKITE_TAG", "BUILDKITE_BRANCH"))
 
 
 def nogpl_triplets():
@@ -723,9 +726,10 @@ def main():
     # own group -- include verbatim.
     blocks.append(verbatim_group_text(os.path.join(MISC, "ttfx", "ttfx.yml")))
 
-    # Releases also come as no-GPL builds, published to julialang-nogpl.
+    # Release branches and tags also come as no-GPL builds, published to
+    # julialang-nogpl (master gets them from the schedule instead).
     triplets = upload_triplets(UPLOAD_ARCHES, PLATFORMS)
-    if is_release_tag_build():
+    if is_release_build():
         label, allow_fail, arches = NOGPL_GROUP
         blocks.append(schedule_group_text(label, arches, allow_fail))
         triplets += nogpl_triplets()
