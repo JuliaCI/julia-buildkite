@@ -27,8 +27,8 @@ It reproduces, exactly, what `launch_untrusted_builders.yml` used to upload:
     per-file uploads did -- and converts `$$` -> `$`.
 
 CRITICAL interpolation rule: a `$$` (double dollar) is a Buildkite runtime
-escape and must be PRESERVED verbatim. Per-arch substitution here only touches
-single-`$` `${...}` references that are NOT preceded by another `$`.
+escape and must be PRESERVED verbatim. Per-arch substitution here leaves `$$`
+and `\\$` escapes untouched, as `buildkite-agent pipeline upload` does.
 
 PowerPC: `launch_powerpc.jl` only uploads powerpc arches for Julia < 1.12. On
 current master (1.14) it is a no-op, so the powerpc arches are intentionally
@@ -107,17 +107,23 @@ def arches_envs(arches_path):
 # bash-like ${VAR} interpolation for the arches-templated YAMLs
 # --------------------------------------------------------------------------
 
-# Match a single-$ ${...} that is NOT preceded by another $ (i.e. not part of
-# a $$ runtime escape). We assert the char before the $ is not a $.
-_VAR_RE = re.compile(r'(?<!\$)\$\{([A-Za-z_][A-Za-z0-9_]*)([?+-]|:[?+-])?((?:[^{}]|\{[^}]*\})*)\}')
+# Match, as `buildkite-agent pipeline upload` lexes them, a `\\` literal or a
+# `\$` / `$$` runtime escape (all left untouched), a ${...} expansion, or a
+# bare $VAR.
+_VAR_RE = re.compile(r'\\\\|\\\$|\$\$|\$\{([A-Za-z_][A-Za-z0-9_]*)([?+-]|:[?+-])?((?:[^{}]|\{[^}]*\})*)\}|\$([A-Za-z][A-Za-z0-9_]*)')
 
 
 def interpolate(text, env, where):
     """Resolve single-$ ${VAR}, ${VAR?}, ${VAR:?}, ${VAR-d}, ${VAR:-d},
-    ${VAR+a}, ${VAR:+a} against `env`. $$ escapes are left untouched because
-    the regex refuses a $ immediately before the ${."""
+    ${VAR+a}, ${VAR:+a} and bare $VAR against `env`. `$$` and `\\$` escapes are
+    left untouched."""
     def repl(m):
-        name, op, arg = m.group(1), m.group(2), m.group(3)
+        if m.group(1) is None and m.group(4) is None:
+            return m.group(0)
+        name, op, arg = m.group(1) or m.group(4), m.group(2), m.group(3) or ""
+        if op is None and arg:
+            # e.g. ${VAR:0:2}, which would otherwise expand to plain ${VAR}
+            raise ValueError(f"{where}: unsupported expansion {m.group(0)}")
         present = name in env
         value = env.get(name, "")
         if op in (None, ""):
@@ -135,9 +141,9 @@ def interpolate(text, env, where):
                 )
             return value
         if kind == "-":
-            return arg if empty else value
+            return interpolate(arg, env, where) if empty else value
         if kind == "+":
-            return arg if not empty else ""
+            return interpolate(arg, env, where) if not empty else ""
         raise AssertionError(op)
     return _VAR_RE.sub(repl, text)
 

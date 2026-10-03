@@ -256,5 +256,35 @@ class RenderLaunchPipelineTests(unittest.TestCase):
         self.assertNotIn('trigger: "julia-publish"', output)
 
 
+class InterpolateTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        sys.path.insert(0, os.path.dirname(RENDERER))
+        import render_launch_pipeline
+        cls.interpolate = staticmethod(render_launch_pipeline.interpolate)
+
+    def test_matches_agent(self):
+        # each expected output is what `buildkite-agent pipeline upload` makes
+        # of the template with this env
+        env = {"FOO": "x", "EMPTY": ""}
+        for text, expected in [
+            # runtime escapes are left for the final upload...
+            ("$${FOO}", "$${FOO}"), ("$$FOO", "$$FOO"), ("\\${FOO}", "\\${FOO}"),
+            # ...but only consume their own two characters
+            ("$$${FOO}", "$$x"), ("\\$$FOO", "\\$x"), ("\\\\${FOO}", "\\\\x"),
+            # bare variables
+            ("$FOO", "x"), ("a $FOO.b", "a x.b"),
+            # nested defaults
+            ("${EMPTY:-${FOO}}", "x"), ("${EMPTY:-$FOO}", "x"),
+        ]:
+            self.assertEqual(self.interpolate(text, env, "test"), expected, text)
+
+    def test_unsupported_expansion_rejected(self):
+        # these previously expanded to plain ${FOO}, dropping the suffix
+        for text in ("${FOO:0:2}", "${FOO/a/b}", "${FOO:=d}"):
+            with self.assertRaisesRegex(ValueError, "unsupported"):
+                self.interpolate(text, {"FOO": "x"}, "test")
+
+
 if __name__ == "__main__":
     unittest.main()
