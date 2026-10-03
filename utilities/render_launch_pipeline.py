@@ -34,8 +34,9 @@ current master (1.14) it is a no-op, so the powerpc arches are intentionally
 omitted (see OMITTED_POWERPC below). This matches the runtime behaviour.
 
 The result is grouped into one `group:` per label: Build, Check, Test,
-Allow Fail, JuliaSyntax, JuliaC. Release tag builds add a no_GPL group, published
-by a second julia-publish trigger, and NOGPL_ONLY=true renders only those.
+Allow Fail, JuliaSyntax, JuliaC. Release branch and tag builds add a no_GPL group,
+published by a second julia-publish trigger, and NOGPL_ONLY=true renders only
+those.
 """
 
 import os
@@ -476,13 +477,16 @@ def nogpl_group_text(allow_fail):
     return emit_group("no_GPL", "\n".join(c for c in chunks if c))
 
 
-def is_release_tag_build():
-    """Whether this julia-ci build is a release tag build: the tag build
-    itself, or a build created with branch=v<version> (RELEASE_TAG_FLOW in
-    utilities/build_envs.sh)."""
-    return os.environ.get("BUILDKITE_PIPELINE_SLUG") == "julia-ci" and any(
-        re.match(r"v[0-9]", os.environ.get(var, ""))
-        for var in ("BUILDKITE_TAG", "BUILDKITE_BRANCH"))
+def is_release_build():
+    """Whether this julia-ci build is a release build: a push to a release-*
+    branch, the tag build itself, or a build created with branch=v<version>
+    (RELEASE_TAG_FLOW in utilities/build_envs.sh)."""
+    if os.environ.get("BUILDKITE_PIPELINE_SLUG") != "julia-ci":
+        return False
+    if os.environ.get("BUILDKITE_BRANCH", "").startswith("release-"):
+        return True
+    return any(re.match(r"v[0-9]", os.environ.get(var, ""))
+               for var in ("BUILDKITE_TAG", "BUILDKITE_BRANCH"))
 
 
 # Trailing barrier + trigger of the trusted julia-publish pipeline (inlined
@@ -545,9 +549,10 @@ def main():
     # into either group, re-add the corresponding `blocks.append(...)` from
     # `main` (the juliasyntax.* / juliac/ YAMLs are already present in-tree).
 
-    # Releases also come as no-GPL builds. They soft-fail so that a broken
-    # no-GPL build cannot hold up the release behind the wait.
-    if is_release_tag_build():
+    # Release branches and tags also come as no-GPL builds. They soft-fail so
+    # that a broken no-GPL build cannot hold up the standard publish behind
+    # the wait.
+    if is_release_build():
         blocks.append(nogpl_group_text("true"))
         write_pipeline(blocks + [WAIT, PUBLISH_TRIGGER, NOGPL_PUBLISH_TRIGGER])
     else:
