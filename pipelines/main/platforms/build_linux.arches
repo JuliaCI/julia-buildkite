@@ -4,7 +4,6 @@ package_linux          x86_64-linux-gnu               x86_64         x86_64     
 package_linux          x86_64-linux-gnuassert         x86_64         x86_64         FORCE_ASSERTIONS=1,LLVM_ASSERTIONS=1,JL_CFLAGS=-Werror,JL_CXXFLAGS=-Werror              .             v8.8          7db0eac9cfbe5b38ecb05d2b91881f46cff4097d
 package_linux          x86_64-linux-gnuprofiling      x86_64         x86_64         WITH_TRACY=1,WITH_ITTAPI=1,WITH_TIMING_COUNTS=1,JL_CFLAGS=-Werror,JL_CXXFLAGS=-Werror           .             v8.8          7db0eac9cfbe5b38ecb05d2b91881f46cff4097d
 package_linux          aarch64-linux-gnu              aarch64        aarch64        JL_CFLAGS=-Werror,JL_CXXFLAGS=-Werror                                                    .             v8.8          52b733db5ed13474c82a64dcacfef1291b5c7725
-package_linux_mmtk     x86_64-linux-gnummtk           x86_64         x86_64         JL_CFLAGS=-Werror,JL_CXXFLAGS=-Werror,WITH_THIRD_PARTY_GC=mmtk,MMTK_PLAN=StickyImmix,MMTK_MOVING=0    .             v8.8          bad7f7890f46721083075b0c8ce9576de66be2c8
 package_linux_mmtk     x86_64-linux-gnummtkconcurrent x86_64         x86_64         JL_CFLAGS=-Werror,JL_CXXFLAGS=-Werror,WITH_THIRD_PARTY_GC=mmtk,MMTK_PLAN=ConcurrentImmix,MMTK_MOVING=0    .             v8.8          bad7f7890f46721083075b0c8ce9576de66be2c8
 # package_musl           x86_64-linux-musl              x86_64         x86_64         JL_CFLAGS=-Werror,JL_CXXFLAGS=-Werror                                                   .             v7.3          0566496527284ed8b638273babbb5735b44d2b7e
 
