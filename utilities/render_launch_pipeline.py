@@ -34,7 +34,8 @@ current master (1.14) it is a no-op, so the powerpc arches are intentionally
 omitted (see OMITTED_POWERPC below). This matches the runtime behaviour.
 
 The result is grouped into one `group:` per label: Build, Check, Test,
-Allow Fail, JuliaSyntax, JuliaC.
+Allow Fail, JuliaSyntax, JuliaC. Release tag builds add a no_GPL group, published
+by a second julia-publish trigger, and NOGPL_ONLY=true renders only those.
 """
 
 import os
@@ -50,6 +51,7 @@ ARCHES_ENV_SH = os.path.join(UTIL_DIR, "arches_env.sh")
 
 PLATFORMS = os.path.join(ROOT, "pipelines", "main", "platforms")
 MISC = os.path.join(ROOT, "pipelines", "main", "misc")
+SCHEDULED_PLATFORMS = os.path.join(ROOT, "pipelines", "scheduled", "platforms")
 
 
 # --------------------------------------------------------------------------
@@ -281,11 +283,11 @@ def load_group_text(path):
 
 
 def render_arches_group_text(arches_file, yaml_file, group, allow_fail,
-                             extra_env=None):
+                             extra_env=None, arches_dir=PLATFORMS):
     """Render the inner step block of an arches-templated platform YAML once
     per arch. Interpolation is applied to the source TEXT first, then the inner
     steps are sliced out. Returns the concatenated re-indented step text."""
-    arches_path = os.path.join(PLATFORMS, arches_file)
+    arches_path = os.path.join(arches_dir, arches_file)
     yaml_path = os.path.join(PLATFORMS, yaml_file)
     with open(yaml_path) as f:
         template_text = f.read()
@@ -452,10 +454,42 @@ def allow_fail_group_text():
     return emit_group("Allow Fail", "\n".join(c for c in chunks if c))
 
 
+# The no-GPL builds of releases, published to julialang-nogpl.
+NOGPL_BUILD_ARCHES = [
+    ("build_linux.no_gpl.arches", "build_linux.yml"),
+    ("build_macos.no_gpl.arches", "build_macos.yml"),
+    ("build_windows.no_gpl.arches", "build_windows.yml"),
+]
+
+NOGPL_UPLOAD_ARCHES = [
+    "upload_linux.no_gpl.arches",
+    "upload_macos.no_gpl.arches",
+    "upload_windows.no_gpl.arches",
+]
+
+
+def nogpl_group_text(allow_fail):
+    chunks = []
+    for arches, yml in NOGPL_BUILD_ARCHES:
+        chunks.append(render_arches_group_text(
+            arches, yml, "no_GPL", allow_fail, arches_dir=SCHEDULED_PLATFORMS))
+    return emit_group("no_GPL", "\n".join(c for c in chunks if c))
+
+
+def is_release_tag_build():
+    """Whether this julia-ci build is a release tag build: the tag build
+    itself, or a build created with branch=v<version> (RELEASE_TAG_FLOW in
+    utilities/build_envs.sh)."""
+    return os.environ.get("BUILDKITE_PIPELINE_SLUG") == "julia-ci" and any(
+        re.match(r"v[0-9]", os.environ.get(var, ""))
+        for var in ("BUILDKITE_TAG", "BUILDKITE_BRANCH"))
+
+
 # Trailing barrier + trigger of the trusted julia-publish pipeline (inlined
 # verbatim so the wait reliably barriers all dynamically-uploaded jobs).
-TRAILER = '''\
-  - wait: ~
+WAIT = "  - wait: ~"
+
+PUBLISH_TRIGGER = '''\
   - trigger: "julia-publish"
     label: ":rocket: trigger publish"
     if: pipeline.slug == "julia-ci"
@@ -464,8 +498,36 @@ TRAILER = '''\
       branch: "${BUILDKITE_BRANCH}"
       message: "publish: ${BUILDKITE_MESSAGE}"'''
 
+# Publishes only the no-GPL platforms (see PUBLISH_ARCHES_FILES in
+# utilities/publish.sh).
+NOGPL_PUBLISH_TRIGGER = '''\
+  - trigger: "julia-publish"
+    label: ":rocket: trigger publish (no-GPL)"
+    if: pipeline.slug == "julia-ci"
+    build:
+      commit: "${BUILDKITE_COMMIT}"
+      branch: "${BUILDKITE_BRANCH}"
+      message: "publish no-GPL: ${BUILDKITE_MESSAGE}"
+      env:
+        PUBLISH_ARCHES_FILES: "%s"''' % " ".join(
+    f".buildkite/pipelines/scheduled/platforms/{arches}"
+    for arches in NOGPL_UPLOAD_ARCHES)
+
+
+def write_pipeline(blocks):
+    sys.stdout.write("steps:\n")
+    sys.stdout.write("\n".join(blocks))
+    sys.stdout.write("\n")
+
 
 def main():
+    # NOGPL_ONLY=true (set when creating the build) builds and publishes only
+    # the no-GPL binaries, e.g. to add them to an already published release
+    # (branch=v<version>) without rebuilding everything else.
+    if os.environ.get("NOGPL_ONLY") == "true":
+        write_pipeline([nogpl_group_text("false"), WAIT, NOGPL_PUBLISH_TRIGGER])
+        return
+
     blocks = [
         build_group_text(),
         check_group_text(),
@@ -483,11 +545,13 @@ def main():
     # into either group, re-add the corresponding `blocks.append(...)` from
     # `main` (the juliasyntax.* / juliac/ YAMLs are already present in-tree).
 
-    sys.stdout.write("steps:\n")
-    sys.stdout.write("\n".join(blocks))
-    sys.stdout.write("\n")
-    sys.stdout.write(TRAILER)
-    sys.stdout.write("\n")
+    # Releases also come as no-GPL builds. They soft-fail so that a broken
+    # no-GPL build cannot hold up the release behind the wait.
+    if is_release_tag_build():
+        blocks.append(nogpl_group_text("true"))
+        write_pipeline(blocks + [WAIT, PUBLISH_TRIGGER, NOGPL_PUBLISH_TRIGGER])
+    else:
+        write_pipeline(blocks + [WAIT, PUBLISH_TRIGGER])
 
 
 if __name__ == "__main__":

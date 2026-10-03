@@ -25,7 +25,8 @@ ARCHES_FILES=(
     .buildkite/pipelines/main/platforms/upload_windows.arches
     .buildkite/pipelines/main/platforms/upload_freebsd.arches
 )
-# Allow callers (e.g. the scheduled no-GPL publish) to override the list.
+# Allow callers (e.g. the no-GPL publish of a release) to override the list;
+# the source dists are then left to the publish of the standard platforms.
 if [[ -n "${PUBLISH_ARCHES_FILES:-}" ]]; then
     # shellcheck disable=SC2206
     ARCHES_FILES=( ${PUBLISH_ARCHES_FILES} )
@@ -74,12 +75,14 @@ for triplet in "${TRIPLETS[@]}"; do
     fi
 done
 
-echo "+++ Publish source dists"
-# shellcheck source=SCRIPTDIR/aws_oidc.sh
-source .buildkite/utilities/aws_oidc.sh "${PUBLISH_OIDC_MODE}"
-if ! bash .buildkite/utilities/publish_srcdist.sh; then
-    echo "ERROR: publishing source dists failed" >&2
-    FAILED+=( "srcdist" )
+if [[ -z "${PUBLISH_ARCHES_FILES:-}" ]]; then
+    echo "+++ Publish source dists"
+    # shellcheck source=SCRIPTDIR/aws_oidc.sh
+    source .buildkite/utilities/aws_oidc.sh "${PUBLISH_OIDC_MODE}"
+    if ! bash .buildkite/utilities/publish_srcdist.sh; then
+        echo "ERROR: publishing source dists failed" >&2
+        FAILED+=( "srcdist" )
+    fi
 fi
 
 if [[ "${#FAILED[@]}" -gt 0 ]]; then

@@ -79,6 +79,8 @@ steps:
       # role-assuming "upload docs" job (see misc/deploy_docs.yml), and a
       # duplicate key across the build is rejected.
       - label: "deploy docs"
+        # Not for the no-GPL publish of a release; the standard one deploys them.
+        if: build.env("PUBLISH_ARCHES_FILES") == null
         plugins:
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"
