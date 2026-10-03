@@ -57,13 +57,16 @@ class PipelineDryRunTests(unittest.TestCase):
                         self.assertDryRuns(path, os.path.relpath(path, ROOT))
 
     def test_rendered_launch_pipeline(self):
-        for args in ([], ["--scheduled-workloads"]):
-            with self.subTest(args=args), tempfile.TemporaryDirectory() as tmp:
+        release = {"BUILDKITE_PIPELINE_SLUG": "julia-ci", "BUILDKITE_BRANCH": "v1.14.0"}
+        for args, build_env in (([], {}), (["--scheduled-workloads"], {}),
+                                ([], release), ([], {**release, "NOGPL_ONLY": "true"})):
+            with self.subTest(args=args, env=build_env), tempfile.TemporaryDirectory() as tmp:
                 rendered = os.path.join(tmp, "pipeline.yml")
                 with open(rendered, "w") as f:
                     subprocess.run([sys.executable, RENDERER, *args], cwd=ROOT,
+                                   env={**os.environ, **build_env},
                                    check=True, stdout=f, stderr=subprocess.DEVNULL)
-                self.assertDryRuns(rendered, f"render_launch_pipeline.py {' '.join(args)}")
+                self.assertDryRuns(rendered, f"render_launch_pipeline.py {' '.join(args)} {build_env}")
 
 
 if __name__ == "__main__":
