@@ -199,6 +199,20 @@ class RenderLaunchPipelineTests(unittest.TestCase):
                     self.assertIn('arch: "x86_64"', jobs[key])
                     self.assertIn('TRIPLET: "i686-linux-gnuopt"', jobs[key])
 
+    def test_freebsd_aarch64_build_and_test_are_soft_failing(self):
+        output = render()
+        allow_fail = output[output.index('  - group: "Allow Fail"'):]
+        for kind, queue in (("build", "build"), ("test", "test")):
+            key = f"{kind}_aarch64-unknown-freebsd"
+            self.assertEqual(output.count(f'key: "{key}"'), 1)
+            step = allow_fail.split(f'key: "{key}"', 1)[1].split('      - label:', 1)[0]
+            self.assertIn('soft_fail: true', step)
+            self.assertIn(f'queue: "{queue}"', step)
+            self.assertIn('os: "freebsd"', step)
+            self.assertIn('arch: "aarch64"', step)
+        self.assertIn('depends_on:\n          - "build_aarch64-unknown-freebsd"', allow_fail)
+        self.assertNotIn('PUBLISH_TARGET: "aarch64-unknown-freebsd"', output)
+
     def test_publish_triggers_gate_on_their_own_platform(self):
         output = render()
         publish = publish_group(output)
