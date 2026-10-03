@@ -24,12 +24,14 @@ PUBLISHED_TRIPLETS = [
 ]
 
 
-def render(*args, source=None):
+def render(*args, source=None, **build_env):
     env = os.environ.copy()
-    if source is None:
-        env.pop("BUILDKITE_SOURCE", None)
-    else:
+    for var in ("BUILDKITE_SOURCE", "BUILDKITE_PIPELINE_SLUG", "BUILDKITE_TAG",
+                "BUILDKITE_BRANCH", "NOGPL_ONLY"):
+        env.pop(var, None)
+    if source is not None:
         env["BUILDKITE_SOURCE"] = source
+    env.update(build_env)
     return subprocess.run(
         [sys.executable, RENDERER, *args],
         cwd=ROOT,
@@ -38,6 +40,14 @@ def render(*args, source=None):
         capture_output=True,
         text=True,
     ).stdout
+
+
+NOGPL_TRIPLETS = [
+    "x86_64-linux-gnunogpl",
+    "x86_64-apple-darwinnogpl",
+    "aarch64-apple-darwinnogpl",
+    "x86_64-w64-mingw32nogpl",
+]
 
 
 # The scheduled optimized platforms with a build, a test and a publish job; i686
@@ -227,9 +237,48 @@ class RenderLaunchPipelineTests(unittest.TestCase):
         # The docs trigger waits for the steps that stage the docs / source dists.
         self.assertIn(depends_on("doctest", "source_dist"), publish)
 
+    def test_release_tags_build_and_publish_nogpl(self):
+        for build_env in ({"BUILDKITE_TAG": "v1.14.0", "BUILDKITE_BRANCH": "v1.14.0"},
+                          {"BUILDKITE_BRANCH": "v1.14.0"}):
+            output = render(BUILDKITE_PIPELINE_SLUG="julia-ci", **build_env)
+            publish = publish_group(output)
+
+            self.assertEqual(output.count('group: "no_GPL"'), 1)
+            self.assertIn('group: "Build"', output)
+            self.assertNotIn('group: "Optimized Build"', output)
+            self.assertEqual(
+                sorted(re.findall(r'PUBLISH_TARGET: "([^"]+)"', publish)),
+                sorted(PUBLISHED_TRIPLETS + NOGPL_TRIPLETS + ["docs"]),
+            )
+            for triplet in NOGPL_TRIPLETS:
+                self.assertIn(depends_on(f"build_{triplet}"), publish)
+            self.assertNotIn("PUBLISH_SCHEDULED", publish)
+
+        # Branch builds, and tag-like branches outside julia-ci, do not.
+        for build_env in ({"BUILDKITE_PIPELINE_SLUG": "julia-ci", "BUILDKITE_BRANCH": "release-1.14"},
+                          {"BUILDKITE_PIPELINE_SLUG": "julia-pr", "BUILDKITE_BRANCH": "v2-feature"}):
+            self.assertNotIn('group: "no_GPL"', render(**build_env))
+
+    def test_nogpl_only(self):
+        output = render(BUILDKITE_PIPELINE_SLUG="julia-ci", BUILDKITE_BRANCH="v1.13.1",
+                        NOGPL_ONLY="true")
+
+        self.assertEqual(re.findall(r'^  - group: "([^"]+)"', output, re.M), ["no_GPL", "Publish"])
+        self.assertEqual(
+            sorted(re.findall(r'PUBLISH_TARGET: "([^"]+)"', output)),
+            sorted(NOGPL_TRIPLETS),
+        )
+
+        # The schedule keeps rendering all scheduled workloads.
+        output = render(source="schedule", NOGPL_ONLY="true")
+        self.assertIn('group: "Optimized Build"', output)
+
     def test_publish_dependencies_exist(self):
-        for source in (None, "schedule"):
-            output = render(source=source)
+        for source, build_env in ((None, {}), ("schedule", {}),
+                                  (None, {"BUILDKITE_PIPELINE_SLUG": "julia-ci",
+                                          "BUILDKITE_TAG": "v1.14.0"}),
+                                  (None, {"NOGPL_ONLY": "true"})):
+            output = render(source=source, **build_env)
             keys = set(re.findall(r'^\s+key:\s*"?([^"\s]+)"?\s*$', output, re.M))
             deps = set(re.findall(r'^          - "([^"]+)"$', publish_group(output), re.M))
             self.assertTrue(deps)

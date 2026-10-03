@@ -35,7 +35,9 @@ current master (1.14) it is a no-op, so the powerpc arches are intentionally
 omitted (see OMITTED_POWERPC below). This matches the runtime behaviour.
 
 Schedule builds emit the scheduled workload groups and publish triggers instead
-of the per-commit groups. Labeled PRs render the same workload groups as a
+of the per-commit groups. Release tag builds add the no-GPL group (and its
+publish triggers) to the per-commit groups, and NOGPL_ONLY=true renders only
+those. Labeled PRs render the same workload groups as a
 supplemental pipeline, without publish triggers. Per-commit results are grouped
 into one `group:` per label: Build, Check, Test, Allow Fail, JuliaSyntax,
 JuliaLowering, JuliaC, TTFX, Publish.
@@ -405,10 +407,13 @@ UPLOAD_ARCHES = [
     "upload_freebsd.arches",
 ]
 
-SCHEDULE_UPLOAD_ARCHES = [
+NOGPL_UPLOAD_ARCHES = [
     "upload_linux.no_gpl.arches",
     "upload_macos.no_gpl.arches",
     "upload_windows.no_gpl.arches",
+]
+
+SCHEDULE_UPLOAD_ARCHES = NOGPL_UPLOAD_ARCHES + [
     "upload_linux.opt.arches",
     "upload_macos.opt.arches",
     "upload_windows.opt.arches",
@@ -440,6 +445,13 @@ TEST_STATIC = [
     "test_revise.yml",
 ]
 
+# Built by the schedule (as nightlies) and by release tags (as releases).
+NOGPL_GROUP = ("no_GPL", "false", [
+    ("build_linux.no_gpl.arches", "build_linux.yml"),
+    ("build_macos.no_gpl.arches", "build_macos.yml"),
+    ("build_windows.no_gpl.arches", "build_windows.yml"),
+])
+
 SCHEDULE_GROUPS = [
     ("Source Build", "false", [
         ("build_linux.schedule.arches", "build_linux.yml"),
@@ -447,11 +459,7 @@ SCHEDULE_GROUPS = [
     ("Source Tests (Allow Fail)", "true", [
         ("test_linux.schedule.arches", "test_linux.yml"),
     ]),
-    ("no_GPL", "false", [
-        ("build_linux.no_gpl.arches", "build_linux.yml"),
-        ("build_macos.no_gpl.arches", "build_macos.yml"),
-        ("build_windows.no_gpl.arches", "build_windows.yml"),
-    ]),
+    NOGPL_GROUP,
     ("Optimized Build", "false", [
         ("build_linux.opt.arches", "build_linux.yml"),
         ("build_macos.opt.arches", "build_macos.yml"),
@@ -600,7 +608,7 @@ def publish_trigger_text(target, depends_on, scheduled):
     return "\n".join(lines)
 
 
-def publish_group_text(scheduled=False):
+def publish_group_text(triplets, scheduled=False, docs=False):
     """The Publish group: one julia-publish trigger per published platform,
     `depends_on` exactly that platform's build + test jobs, so it is signed
     and promoted as soon as those are green regardless of the rest of the
@@ -609,11 +617,6 @@ def publish_group_text(scheduled=False):
     the steps that stage the docs / source dists (source_dist is `if`-gated
     to tags; Buildkite ignores a dependency on an `if`-excluded step). All
     triggers are `if`-gated to the julia-ci slug."""
-    if scheduled:
-        triplets = upload_triplets(SCHEDULE_UPLOAD_ARCHES, SCHEDULED_PLATFORMS)
-    else:
-        triplets = upload_triplets(UPLOAD_ARCHES, PLATFORMS)
-
     triggers = []
     for triplet in triplets:
         assert triplet in BUILD_KEYS, (
@@ -621,7 +624,7 @@ def publish_group_text(scheduled=False):
         depends_on = [BUILD_KEYS[triplet]] + TEST_KEYS.get(triplet, [])
         triggers.append(publish_trigger_text(triplet, depends_on, scheduled))
 
-    if not scheduled:
+    if docs:
         depends_on = []
         for rel in DOCS_STAGING_FILES:
             _, inner = load_group_text(os.path.join(MISC, rel))
@@ -641,6 +644,19 @@ def parse_args():
     return parser.parse_args()
 
 
+def is_release_tag_build():
+    """Whether this julia-ci build is a release tag build: the tag build
+    itself, or a build created with branch=v<version> (RELEASE_TAG_FLOW in
+    utilities/build_envs.sh)."""
+    return os.environ.get("BUILDKITE_PIPELINE_SLUG") == "julia-ci" and any(
+        re.match(r"v[0-9]", os.environ.get(var, ""))
+        for var in ("BUILDKITE_TAG", "BUILDKITE_BRANCH"))
+
+
+def nogpl_triplets():
+    return upload_triplets(NOGPL_UPLOAD_ARCHES, SCHEDULED_PLATFORMS)
+
+
 def main():
     args = parse_args()
     is_schedule = os.environ.get("BUILDKITE_SOURCE") == "schedule"
@@ -648,7 +664,22 @@ def main():
         blocks = [schedule_group_text(label, arches, allow_fail)
                   for label, allow_fail, arches in SCHEDULE_GROUPS]
         if is_schedule and not args.scheduled_workloads:
-            blocks.append(publish_group_text(scheduled=True))
+            triplets = upload_triplets(SCHEDULE_UPLOAD_ARCHES, SCHEDULED_PLATFORMS)
+            blocks.append(publish_group_text(triplets, scheduled=True))
+        sys.stdout.write("steps:\n")
+        sys.stdout.write("\n".join(blocks))
+        sys.stdout.write("\n")
+        return
+
+    # NOGPL_ONLY=true (set when creating the build) builds and publishes only
+    # the no-GPL binaries, e.g. to add them to an already published release
+    # (branch=v<version>) without rebuilding everything else.
+    if os.environ.get("NOGPL_ONLY") == "true":
+        label, allow_fail, arches = NOGPL_GROUP
+        blocks = [
+            schedule_group_text(label, arches, allow_fail),
+            publish_group_text(nogpl_triplets()),
+        ]
         sys.stdout.write("steps:\n")
         sys.stdout.write("\n".join(blocks))
         sys.stdout.write("\n")
@@ -692,7 +723,13 @@ def main():
     # own group -- include verbatim.
     blocks.append(verbatim_group_text(os.path.join(MISC, "ttfx", "ttfx.yml")))
 
-    blocks.append(publish_group_text())
+    # Releases also come as no-GPL builds, published to julialang-nogpl.
+    triplets = upload_triplets(UPLOAD_ARCHES, PLATFORMS)
+    if is_release_tag_build():
+        label, allow_fail, arches = NOGPL_GROUP
+        blocks.append(schedule_group_text(label, arches, allow_fail))
+        triplets += nogpl_triplets()
+    blocks.append(publish_group_text(triplets, docs=True))
 
     sys.stdout.write("steps:\n")
     sys.stdout.write("\n".join(blocks))
