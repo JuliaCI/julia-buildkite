@@ -51,12 +51,17 @@ upload_results() {
 }
 trap upload_results EXIT
 
-# Extract a tarball to ${TTFX_DIR}/<name>, re-sign it and repair the stdlib pkgimage
+# Keep both arms in one directory, so their paths sort the same way against the shared
+# depot. Next to it, only `head` sorted after `depot`, and each head process compiled
+# an extra method for the `unique!` of a JLL's library paths.
+ARMS_DIR="${TTFX_DIR}/arms"
+
+# Extract a tarball to ${ARMS_DIR}/<name>, re-sign it and repair the stdlib pkgimage
 # checksums the signing invalidated, exactly as test_julia.sh does for the build under
 # test; both arms go through this so neither carries the cost of stale stdlib caches.
 install_julia() {
     local tarball="$1" name="$2"
-    local dir="${TTFX_DIR}/${name}"
+    local dir="${ARMS_DIR}/${name}"
     mkdir -p "${dir}"
     tar -C "${dir}" --strip-components=1 -zxf "${tarball}"
     .buildkite/utilities/macos/codesign.sh "${dir}"
@@ -110,10 +115,10 @@ TTFX_GITHUB_REPO="${TTFX_GITHUB_REPO:-$(github_repo)}"
 echo "--- Download the julia build under test (${SHORT_COMMIT})"
 buildkite-agent artifact download --step "build_${TRIPLET}" "${UPLOAD_FILENAME}.tar.gz" .
 install_julia "${UPLOAD_FILENAME}.tar.gz" head
-HEAD_JULIA="${TTFX_DIR}/head/bin/julia"
+HEAD_JULIA="${ARMS_DIR}/head/bin/julia"
 
 MODE="standalone"
-ARMS=( "head=${TTFX_DIR}/head" )
+ARMS=( "head=${ARMS_DIR}/head" )
 BASE_NOTE=""
 # Only julia-pr builds a pull request of julia itself. The self-test pipeline's builds are
 # pull requests of this repository measuring a julia master commit; there the parent
@@ -176,7 +181,7 @@ if [[ -n "${MERGE_BASE}" ]]; then
     done
     BASE_NOTE="the ${BASE_BRANCH} build of the merge-base"
     install_julia "${TTFX_DIR}/base.tar.gz" base
-    ARMS=( "base=${TTFX_DIR}/base" "head=${TTFX_DIR}/head" )
+    ARMS=( "base=${ARMS_DIR}/base" "head=${ARMS_DIR}/head" )
 fi
 
 echo "--- Check out the TTFX snippets (${TTFX_SNIPPETS_REPO} @ ${TTFX_SNIPPETS_REF})"
