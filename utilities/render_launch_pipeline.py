@@ -61,6 +61,8 @@ ARCHES_ENV_SH = os.path.join(UTIL_DIR, "arches_env.sh")
 PLATFORMS = os.path.join(ROOT, "pipelines", "main", "platforms")
 MISC = os.path.join(ROOT, "pipelines", "main", "misc")
 SCHEDULED_PLATFORMS = os.path.join(ROOT, "pipelines", "scheduled", "platforms")
+PR_PATHS_DIR = os.path.join(UTIL_DIR, "pr_paths")
+FULL_CI_LABEL = "needs full CI"
 
 
 # --------------------------------------------------------------------------
@@ -300,6 +302,69 @@ def load_group_text(path):
 
 
 # --------------------------------------------------------------------------
+# pull-request path filters (the PR_PATHS column of the .arches files)
+# --------------------------------------------------------------------------
+# A platform row may name a file of git pathspecs, utilities/pr_paths/<name>.txt,
+# in its PR_PATHS column. On a julia-pr build whose changes since the merge-base
+# with the target branch touch none of those paths, the row is rendered with
+# SKIP_PR=yes, which the platform YAML's `if:` turns into a skipped job. Other
+# pipelines, pull requests with the `needs full CI` label, and builds where the
+# diff cannot be computed (a shallow checkout, a network error) run the job.
+
+_PR_PATHS_SKIP = {}
+
+
+def read_pathspecs(name):
+    with open(os.path.join(PR_PATHS_DIR, name + ".txt")) as f:
+        lines = (line.split("#", 1)[0].strip() for line in f)
+        return [line for line in lines if line]
+
+
+def pr_paths_skip(name):
+    """Whether the jobs with `PR_PATHS <name>` should be skipped on this build."""
+    if name not in _PR_PATHS_SKIP:
+        _PR_PATHS_SKIP[name] = _pr_paths_skip(name)
+    return _PR_PATHS_SKIP[name]
+
+
+def _pr_paths_skip(name):
+    # Read the file on every build, so that a bad PR_PATHS value fails all of them.
+    paths = read_pathspecs(name)
+    if (os.environ.get("BUILDKITE_PIPELINE_SLUG") != "julia-pr"
+            or os.environ.get("BUILDKITE_PULL_REQUEST", "false") == "false"):
+        return False
+
+    def log(msg):
+        sys.stderr.write(f"PR_PATHS {name}: {msg}\n")
+
+    labels = os.environ.get("BUILDKITE_PULL_REQUEST_LABELS", "").split(",")
+    if FULL_CI_LABEL in labels:
+        log(f"the pull request has the '{FULL_CI_LABEL}' label; running its jobs")
+        return False
+    base = os.environ.get("BUILDKITE_PULL_REQUEST_BASE_BRANCH") or "master"
+
+    def git(*args):
+        return subprocess.run(["git", *args], check=True,
+                              capture_output=True, text=True).stdout
+
+    try:
+        git("fetch", "--no-tags", "--quiet", os.environ["BUILDKITE_REPO"],
+            f"refs/heads/{base}")
+        merge_base = git("merge-base", "HEAD", "FETCH_HEAD").strip()
+        changed = git("diff", "--name-only", merge_base, "HEAD", "--", *paths).split()
+    except (KeyError, OSError, subprocess.CalledProcessError) as e:
+        log(f"could not diff against {base} ({e}); running its jobs")
+        return False
+    if changed:
+        log(f"the pull request changes {', '.join(changed[:10])}"
+            f"{' ...' if len(changed) > 10 else ''}; running its jobs")
+        return False
+    log(f"the pull request touches none of {' '.join(paths)} since the merge-base "
+        f"{merge_base[:10]} with {base}; skipping its jobs")
+    return True
+
+
+# --------------------------------------------------------------------------
 # per-platform job keys (what each platform's publish trigger waits for)
 # --------------------------------------------------------------------------
 # Recorded as the arches-templated platform jobs are rendered: the build step
@@ -352,6 +417,8 @@ def render_arches_group_text(arches_file, yaml_file, group, allow_fail,
         env["ALLOW_FAIL"] = allow_fail
         if extra_env:
             env.update(extra_env)
+        if env.get("PR_PATHS") and pr_paths_skip(env["PR_PATHS"]):
+            env["SKIP_PR"] = "yes"
         where = f"{yaml_file} [{arch_env.get('TRIPLET', '?')}]"
         rendered = interpolate(template_text, env, where)
         step_text = extract_inner_steps_text(rendered, where)
