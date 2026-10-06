@@ -27,17 +27,19 @@ PUBLISHED_TRIPLETS = [
 ]
 
 
-def render(*args, source=None, **build_env):
+def render(*args, source=None, cwd=ROOT, **build_env):
     env = os.environ.copy()
     for var in ("BUILDKITE_SOURCE", "BUILDKITE_PIPELINE_SLUG", "BUILDKITE_TAG",
-                "BUILDKITE_BRANCH", "NOGPL_ONLY"):
+                "BUILDKITE_BRANCH", "NOGPL_ONLY", "BUILDKITE_PULL_REQUEST",
+                "BUILDKITE_PULL_REQUEST_LABELS", "BUILDKITE_PULL_REQUEST_BASE_BRANCH",
+                "BUILDKITE_REPO"):
         env.pop(var, None)
     if source is not None:
         env["BUILDKITE_SOURCE"] = source
     env.update(build_env)
     return subprocess.run(
         [sys.executable, RENDERER, *args],
-        cwd=ROOT,
+        cwd=cwd,
         env=env,
         check=True,
         capture_output=True,
@@ -168,6 +170,45 @@ class PRPathsSkipTests(ScratchRepo, unittest.TestCase):
         self.renderer._PR_PATHS_SKIP.clear()
         with self.assertRaises(FileNotFoundError):
             self.renderer.pr_paths_skip("no-such-file")
+
+
+def step_if(output, label):
+    """The `if:` condition of the step with this label."""
+    m = re.search(r'^      - label: "%s"\n(?:        .*\n)*?        if: (.*)$'
+                  % re.escape(label), output, re.MULTILINE)
+    assert m is not None, f"no `if:` for {label}"
+    return m.group(1)
+
+
+class MMTkPRPathsTests(ScratchRepo, unittest.TestCase):
+    """The MMTk ConcurrentImmix jobs (`PR_PATHS mmtk`) run on a pull request only
+    when it touches the runtime."""
+
+    JOBS = (":linux: build x86_64-linux-gnummtkconcurrent",
+            ":linux: test x86_64-linux-gnummtkconcurrent")
+
+    def render_pr(self):
+        return render(cwd=self.repo, BUILDKITE_PIPELINE_SLUG="julia-pr",
+                      BUILDKITE_PULL_REQUEST="1",
+                      BUILDKITE_PULL_REQUEST_BASE_BRANCH="master",
+                      BUILDKITE_REPO=self.repo)
+
+    def assert_mmtk(self, output, skipped):
+        for label in self.JOBS:
+            self.assertEqual(step_if(output, label),
+                             'pipeline.slug != "julia-pr" || "%s" != "yes"'
+                             % ("yes" if skipped else ""), label)
+        # the stock GC jobs are unaffected
+        self.assertEqual(step_if(output, ":linux: test x86_64-linux-gnu"),
+                         'pipeline.slug != "julia-pr" || "" != "yes"')
+
+    def test_skipped_when_runtime_untouched(self):
+        self.commit("base/Base.jl", "stdlib/Foo/src/Foo.jl")
+        self.assert_mmtk(self.render_pr(), skipped=True)
+
+    def test_run_when_runtime_touched(self):
+        self.commit("base/Base.jl", "src/gc-mmtk/gc-mmtk.c")
+        self.assert_mmtk(self.render_pr(), skipped=False)
 
 
 class RenderLaunchPipelineTests(unittest.TestCase):

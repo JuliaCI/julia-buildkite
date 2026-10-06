@@ -1,0 +1,10 @@
+# Paths a pull request must touch for the jobs with `PR_PATHS mmtk` (the MMTk
+# ConcurrentImmix build and test) to run on it without the `needs full CI` label,
+# one git pathspec per line (a directory covers everything below it), # comments.
+# Changes elsewhere (base/, stdlib/, Compiler/, ...) are assumed to behave the same
+# under MMTk as under the stock GC, which every pull request still tests.
+# The runtime, including the MMTk binding in src/gc-mmtk/.
+src/
+# The build flags that select and configure the third-party GC.
+Make.inc
+Makefile
