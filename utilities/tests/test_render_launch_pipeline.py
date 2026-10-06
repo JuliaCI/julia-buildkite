@@ -231,7 +231,8 @@ class RenderLaunchPipelineTests(unittest.TestCase):
         # soft-failing ones (Allow Fail), which Buildkite counts as complete.
         self.assertIn(depends_on("build_x86_64-linux-gnu", "test_x86_64-linux-gnu"), publish)
         self.assertIn(depends_on("build_i686-linux-gnu", "test_i686-linux-gnu", "test_i686-linux-gnunet"), publish)
-        self.assertIn(depends_on("build_x86_64-linux-gnuassert", "test_x86_64-linux-gnuassertrr", "test_x86_64-linux-gnuassertrr-net"), publish)
+        self.assertIn(depends_on("build_x86_64-linux-gnuassert", "test_x86_64-linux-gnuassert",
+                                 "test_x86_64-linux-gnuassertrr", "test_x86_64-linux-gnuassertrr-net"), publish)
         self.assertIn(depends_on("build_aarch64-linux-gnu", "test_aarch64-linux-gnu"), publish)
         self.assertIn(depends_on("build_x86_64-unknown-freebsd", "test_x86_64-unknown-freebsd"), publish)
         # The docs trigger waits for the steps that stage the docs / source dists.
@@ -275,6 +276,17 @@ class RenderLaunchPipelineTests(unittest.TestCase):
         # The schedule keeps rendering all scheduled workloads.
         output = render(source="schedule", NOGPL_ONLY="true")
         self.assertIn('group: "Optimized Build"', output)
+
+    def test_rr_only_outside_pull_requests(self):
+        # pull requests test the assertion build without rr; the rr jobs are skipped
+        output = render()
+        for label, skip in [("test x86_64-linux-gnuassert", ""),
+                            ("test x86_64-linux-gnuassertrr", "yes"),
+                            ("test x86_64-linux-gnuassertrr-net", "yes")]:
+            m = re.search(r'^      - label: ":linux: %s"\n(?:        .*\n)*?        if: (.*)$'
+                          % re.escape(label), output, re.MULTILINE)
+            self.assertIsNotNone(m, label)
+            self.assertEqual(m.group(1), f'pipeline.slug != "julia-pr" || "{skip}" != "yes"', label)
 
     def test_publish_dependencies_exist(self):
         for source, build_env in ((None, {}), ("schedule", {}),
