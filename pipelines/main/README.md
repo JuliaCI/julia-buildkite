@@ -29,6 +29,9 @@ on every push without a schedule of its own.
 Pull requests with the `needs full CI` label also run the scheduled workloads.
 Coverage data is collected but not uploaded to Codecov or Coveralls.
 
+The x86-64 Linux assertion build is tested under rr (with the `rr` and
+`rr-net` jobs) only in `julia-ci`; pull requests test it without rr.
+
 Each build step stages its unsigned tarball directly (write-once, no relay
 jobs) to a commit-sha-gated path in its pipeline's own ephemeral staging
 bucket: `julia-pr` builds go to `julialang-ephemeral-pr` (where juliaup
