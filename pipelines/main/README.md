@@ -29,6 +29,13 @@ on every push without a schedule of its own.
 Pull requests with the `needs full CI` label also run the scheduled workloads.
 Coverage data is collected but not uploaded to Codecov or Coveralls.
 
+A platform row can limit its jobs on `julia-pr` with two `.arches` columns.
+`SKIP_PR yes` never runs them on pull requests. `PR_PATHS <name>` runs them
+only when the pull request changes a path listed in
+`utilities/pr_paths/<name>.txt` since its merge-base, or has the
+`needs full CI` label. The MMTk ConcurrentImmix jobs use `PR_PATHS mmtk`
+and so run only for runtime and build-system changes.
+
 Each build step stages its unsigned tarball directly (write-once, no relay
 jobs) to a commit-sha-gated path in its pipeline's own ephemeral staging
 bucket: `julia-pr` builds go to `julialang-ephemeral-pr` (where juliaup

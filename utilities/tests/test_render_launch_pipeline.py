@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 
+import io
 import os
 import re
 import subprocess
 import sys
+import tempfile
 import unittest
+from unittest import mock
 
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -24,17 +27,19 @@ PUBLISHED_TRIPLETS = [
 ]
 
 
-def render(*args, source=None, **build_env):
+def render(*args, source=None, cwd=ROOT, **build_env):
     env = os.environ.copy()
     for var in ("BUILDKITE_SOURCE", "BUILDKITE_PIPELINE_SLUG", "BUILDKITE_TAG",
-                "BUILDKITE_BRANCH", "NOGPL_ONLY"):
+                "BUILDKITE_BRANCH", "NOGPL_ONLY", "BUILDKITE_PULL_REQUEST",
+                "BUILDKITE_PULL_REQUEST_LABELS", "BUILDKITE_PULL_REQUEST_BASE_BRANCH",
+                "BUILDKITE_REPO"):
         env.pop(var, None)
     if source is not None:
         env["BUILDKITE_SOURCE"] = source
     env.update(build_env)
     return subprocess.run(
         [sys.executable, RENDERER, *args],
-        cwd=ROOT,
+        cwd=cwd,
         env=env,
         check=True,
         capture_output=True,
@@ -71,6 +76,139 @@ def depends_on(*keys):
     return ("        depends_on:\n"
             + "".join(f'          - "{key}"\n' for key in keys)
             + "        build:")
+
+
+class ScratchRepo:
+    """A scratch julia repository: `master` with one commit, checked out on a
+    `pr` branch whose changes the tests add with `commit`."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.repo = tmp.name
+        self.git("init", "--quiet", "--initial-branch=master")
+        self.git("config", "user.email", "ci@example.com")
+        self.git("config", "user.name", "CI")
+        self.commit("base/Base.jl", "src/gc.c")
+        self.git("checkout", "--quiet", "-b", "pr")
+
+    def git(self, *args):
+        subprocess.run(["git", *args], cwd=self.repo, check=True, capture_output=True)
+
+    def commit(self, *files):
+        for name in files:
+            path = os.path.join(self.repo, name)
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "a") as f:
+                f.write("change\n")
+        self.git("add", "--all")
+        self.git("commit", "--quiet", "-m", "change")
+
+
+class PRPathsSkipTests(ScratchRepo, unittest.TestCase):
+    """`pr_paths_skip`, for a paths file listing `src/` and `Make.inc`."""
+
+    @classmethod
+    def setUpClass(cls):
+        sys.path.insert(0, os.path.dirname(RENDERER))
+        import render_launch_pipeline
+        cls.renderer = render_launch_pipeline
+
+    def setUp(self):
+        super().setUp()
+        paths_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(paths_dir.cleanup)
+        with open(os.path.join(paths_dir.name, "runtime.txt"), "w") as f:
+            f.write("# the runtime\nsrc/\nMake.inc  # build flags\n")
+        self.enterContext(mock.patch.object(self.renderer, "PR_PATHS_DIR", paths_dir.name))
+        cwd = os.getcwd()
+        os.chdir(self.repo)
+        self.addCleanup(os.chdir, cwd)
+
+    def skip(self, **env):
+        pr_env = {
+            "BUILDKITE_PIPELINE_SLUG": "julia-pr",
+            "BUILDKITE_PULL_REQUEST": "1",
+            "BUILDKITE_PULL_REQUEST_BASE_BRANCH": "master",
+            "BUILDKITE_PULL_REQUEST_LABELS": "",
+            "BUILDKITE_REPO": self.repo,
+        }
+        pr_env.update(env)
+        self.renderer._PR_PATHS_SKIP.clear()
+        with mock.patch.dict(os.environ, pr_env), mock.patch.object(sys, "stderr", io.StringIO()):
+            return self.renderer.pr_paths_skip("runtime")
+
+    def test_reads_pathspecs(self):
+        self.assertEqual(self.renderer.read_pathspecs("runtime"), ["src/", "Make.inc"])
+
+    def test_skip_when_untouched(self):
+        self.commit("base/Base.jl", "stdlib/Foo/src/Foo.jl")
+        self.assertTrue(self.skip())
+
+    def test_run_when_touched(self):
+        self.commit("base/Base.jl")
+        self.commit("src/gc.c")
+        self.assertFalse(self.skip())
+        self.git("reset", "--quiet", "--hard", "HEAD~2")
+        self.commit("Make.inc")
+        self.assertFalse(self.skip())
+
+    def test_run_with_full_ci_label(self):
+        self.commit("base/Base.jl")
+        self.assertFalse(self.skip(BUILDKITE_PULL_REQUEST_LABELS="docs,needs full CI"))
+
+    def test_run_when_diff_fails(self):
+        self.commit("base/Base.jl")
+        self.assertFalse(self.skip(BUILDKITE_PULL_REQUEST_BASE_BRANCH="no-such-branch"))
+
+    def test_run_outside_pull_requests(self):
+        self.commit("base/Base.jl")
+        self.assertFalse(self.skip(BUILDKITE_PIPELINE_SLUG="julia-ci"))
+        self.assertFalse(self.skip(BUILDKITE_PULL_REQUEST="false"))
+
+    def test_unknown_paths_file_fails(self):
+        self.renderer._PR_PATHS_SKIP.clear()
+        with self.assertRaises(FileNotFoundError):
+            self.renderer.pr_paths_skip("no-such-file")
+
+
+def step_if(output, label):
+    """The `if:` condition of the step with this label."""
+    m = re.search(r'^      - label: "%s"\n(?:        .*\n)*?        if: (.*)$'
+                  % re.escape(label), output, re.MULTILINE)
+    assert m is not None, f"no `if:` for {label}"
+    return m.group(1)
+
+
+class MMTkPRPathsTests(ScratchRepo, unittest.TestCase):
+    """The MMTk ConcurrentImmix jobs (`PR_PATHS mmtk`) run on a pull request only
+    when it touches the runtime."""
+
+    JOBS = (":linux: build x86_64-linux-gnummtkconcurrent",
+            ":linux: test x86_64-linux-gnummtkconcurrent")
+
+    def render_pr(self):
+        return render(cwd=self.repo, BUILDKITE_PIPELINE_SLUG="julia-pr",
+                      BUILDKITE_PULL_REQUEST="1",
+                      BUILDKITE_PULL_REQUEST_BASE_BRANCH="master",
+                      BUILDKITE_REPO=self.repo)
+
+    def assert_mmtk(self, output, skipped):
+        for label in self.JOBS:
+            self.assertEqual(step_if(output, label),
+                             'pipeline.slug != "julia-pr" || "%s" != "yes"'
+                             % ("yes" if skipped else ""), label)
+        # the stock GC jobs are unaffected
+        self.assertEqual(step_if(output, ":linux: test x86_64-linux-gnu"),
+                         'pipeline.slug != "julia-pr" || "" != "yes"')
+
+    def test_skipped_when_runtime_untouched(self):
+        self.commit("base/Base.jl", "stdlib/Foo/src/Foo.jl")
+        self.assert_mmtk(self.render_pr(), skipped=True)
+
+    def test_run_when_runtime_touched(self):
+        self.commit("base/Base.jl", "src/gc-mmtk/gc-mmtk.c")
+        self.assert_mmtk(self.render_pr(), skipped=False)
 
 
 class RenderLaunchPipelineTests(unittest.TestCase):
