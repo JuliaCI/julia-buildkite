@@ -28,3 +28,23 @@ jobs:
           exit "${failures}"
       - name: Test pipeline renderer
         run: python3 utilities/tests/test_render_launch_pipeline.py
+      - name: Install buildkite-agent
+        # The same release (and sha256) that JuliaCI/sandboxed-buildkite-agent
+        # deploys to the Linux agents
+        run: |
+          cd "${RUNNER_TEMP}"
+          curl -fsSL -o Artifacts.toml \
+              "https://raw.githubusercontent.com/JuliaCI/sandboxed-buildkite-agent/main/Artifacts.toml"
+          read -r url sha256 < <(python3 -c '
+          import tomllib
+          agents = tomllib.load(open("Artifacts.toml", "rb"))["buildkite-agent"]
+          agent = next(a for a in agents if a["os"] == "linux" and a["arch"] == "x86_64")
+          print(agent["download"][0]["url"], agent["download"][0]["sha256"])
+          ')
+          curl -fsSLO "${url}"
+          echo "${sha256}  $(basename "${url}")" | sha256sum -c -
+          mkdir -p buildkite-agent
+          tar -xzf "$(basename "${url}")" -C buildkite-agent
+          echo "BUILDKITE_AGENT_BIN=${RUNNER_TEMP}/buildkite-agent/buildkite-agent" >> "${GITHUB_ENV}"
+      - name: Dry-run pipeline uploads
+        run: python3 utilities/tests/test_pipeline_dry_run.py

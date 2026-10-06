@@ -25,6 +25,7 @@ steps:
                 - "/cache/repos:/cache/repos"
         timeout_in_minutes: ${TIMEOUT?}
         soft_fail: ${ALLOW_FAIL?}
+        if: pipeline.slug != "julia-pr" || "${SKIP_PR:-}" != "yes"
         commands: "bash .buildkite/utilities/build_julia.sh"
         agents:
           queue: "build"

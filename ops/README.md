@@ -379,7 +379,11 @@ The single publish step signs and packages for every OS on linux:
   versions.json.
 * Re-running a release: use **Rebuild** on the `julia-ci` tag build, or
   create a new `julia-ci` build with the branch set to the tag name
-  (`v<version>`) — both enter the release tag flow. To re-run just the
+  (`v<version>`) — both enter the release tag flow. Add the build
+  environment variable `NOGPL_ONLY=true` to build and publish only the
+  no-GPL binaries, e.g. for a release that was tagged before tag builds
+  included them. This also repoints the no-GPL `julia-latest` objects of
+  its series, so backfill releases oldest first. To re-run just the
   promote, POST a `julia-publish` build with the release commit and
   `branch: v<version>` plus `ignore_pipeline_branch_filters: true`
   (branch webhook builds are disabled on the publish pipeline); a plain

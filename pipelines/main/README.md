@@ -22,6 +22,10 @@ the per-commit groups. `julia-publish` promotes the scheduled artifacts;
 no-GPL builds go to `julialang-nogpl`, while optimized builds use
 `julialangnightlies/bin/linuxopt/`, `.../macosopt/` and `.../windowsopt/`.
 
+Release tag and `release-*` branch builds also build the no-GPL binaries and
+publish them to `julialang-nogpl`, so each release series gets no-GPL nightlies
+on every push without a schedule of its own.
+
 Pull requests with the `needs full CI` label also run the scheduled workloads.
 Coverage data is collected but not uploaded to Codecov or Coveralls.
 
