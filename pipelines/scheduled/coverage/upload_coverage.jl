@@ -30,7 +30,7 @@ function get_external_stdlib_prefixes(stdlib_dir::AbstractString)
     external_stdlib_names = get_external_stdlib_names(stdlib_dir)
     prefixes_1 = joinpath.(Ref(stdlib_dir), external_stdlib_names, Ref(""))
     prefixes_2 = joinpath.(Ref(stdlib_dir), string.(external_stdlib_names, Ref("-")))
-    prefixes = vcat(prefixes_1, prefixes_2)
+    prefixes = replace.(vcat(prefixes_1, prefixes_2), '\\' => '/')
     unique!(prefixes)
     sort!(prefixes)
     # example of what `prefixes` might look like:
@@ -104,6 +104,10 @@ end
 
 # Load coverage data
 fcs = Coverage.LCOV.readfolder("./lcov_files")
+# Use forward slashes for path comparisons on every platform.
+for fc in fcs
+    fc.filename = replace(fc.filename, '\\' => '/')
+end
 
 # Debug: Log what we're starting with
 @info "Initial file count: $(length(fcs))"
@@ -112,81 +116,56 @@ fcs = Coverage.LCOV.readfolder("./lcov_files")
 base_jl_files = Set{String}()
 cd("base") do
     for (root, dirs, files) in walkdir(".")
-        # Strip off the leading `./`
-        if startswith(root, ".")
-            root = root[2:end]
-        end
-        if startswith(root, "/")
-            root = root[2:end]
-        end
         for f in files
             if !endswith(f, ".jl")
                 continue
             end
-            push!(base_jl_files, joinpath(root, f))
+            push!(base_jl_files, replace(relpath(joinpath(root, f)), '\\' => '/'))
         end
     end
+end
+
+# Only report src/ within these vendored trees.
+const vendored_roots = ("Compiler", "JuliaSyntax", "JuliaLowering")
+
+# Installed paths and temporary copies made by tests refer to the same sources.
+function vendored_src_path(path::AbstractString)
+    parts = split(path, '/')
+    for i in 1:(length(parts) - 2)
+        if parts[i] in vendored_roots && parts[i + 1] == "src"
+            return join(parts[i:end], '/')
+        end
+    end
+    return nothing
 end
 
 # Only include source code files. Exclude test files, benchmarking files, etc.
 filter!(fcs) do fc
-    # Normalize path separators for cross-platform compatibility
-    normalized_path = replace(fc.filename, '\\' => '/')
-
     # Base files do not have a directory name, they are all implicitly paths
     # relative to the `base/` folder, so the only way to detect them is to
     # compare them against a list of files that exist within `base`:
     fc.filename ∈ base_jl_files ||
-        occursin("/src/", normalized_path) ||
-        (occursin("/Compiler/", normalized_path) && occursin("/Compiler/src/", normalized_path)) || # Include only Compiler/src files with full paths
-        (startswith(normalized_path, "Compiler/") && occursin("Compiler/src/", normalized_path))   # Include only direct Compiler/src paths
+        occursin("/src/", fc.filename)
 end
 
 @info "After filtering for source files: $(length(fcs))"
 
-# Exclude all stdlib JLLs (stdlibs of the form `stdlib/*_jll/`).
-filter!(fcs) do fc
-    !occursin(r"^stdlib\/[A-Za-z0-9]*?_jll\/", fc.filename)
-end;
+# Report paths relative to the julia checkout.
+fcs = map(fcs) do fc
+    fc.filename ∈ base_jl_files && return Coverage.FileCoverage("base/" * fc.filename, fc.source, fc.coverage)
+    vendored = vendored_src_path(fc.filename)
+    vendored !== nothing && return Coverage.FileCoverage(vendored, fc.source, fc.coverage)
+    if occursin("stdlib/v$(VERSION.major).$(VERSION.minor)/", fc.filename)
+        new_name = "stdlib/" * split(fc.filename, "stdlib/v$(VERSION.major).$(VERSION.minor)/"; limit=2)[2]
+        return Coverage.FileCoverage(new_name, fc.source, fc.coverage)
+    end
+    return fc
+end
+
+# Exclude stdlib JLL wrappers after converting installed paths to checkout paths.
+filter!(fc -> !occursin(r"^stdlib/[^/]+_jll/", fc.filename), fcs)
 
 @info "After excluding JLLs: $(length(fcs))"
-
-# Debug: Check for Compiler files before normalization
-compiler_files_raw = filter(fcs) do fc
-    normalized_path = replace(fc.filename, '\\' => '/')
-    (occursin("/Compiler/", normalized_path) && occursin("/Compiler/src/", normalized_path)) ||
-    (startswith(normalized_path, "Compiler/") && occursin("Compiler/src/", normalized_path))
-end
-@info "Raw Compiler/src files found: $(length(compiler_files_raw))"
-if !isempty(compiler_files_raw)
-    @info "Sample raw Compiler/src paths: $(first(compiler_files_raw, min(3, length(compiler_files_raw))) .|> (fc -> fc.filename))"
-end
-
-fcs = Coverage.merge_coverage_counts(fcs)
-sort!(fcs; by = fc -> fc.filename);
-fcs = map(fcs) do fc
-    fc.filename ∈ base_jl_files && return Coverage.FileCoverage(joinpath("base", fc.filename), fc.source, fc.coverage)
-    if occursin("stdlib", fc.filename)
-        new_name = "stdlib" * String(split(fc.filename, joinpath("stdlib", "v" * string(VERSION.major) * "." * string(VERSION.minor)))[end])
-        return Coverage.FileCoverage(new_name, fc.source, fc.coverage)
-    else
-        # Handle Compiler paths - normalize for cross-platform compatibility, only include src
-        normalized_path = replace(fc.filename, '\\' => '/')
-        if (occursin("/Compiler/", normalized_path) && occursin("/Compiler/src/", normalized_path)) ||
-           (startswith(normalized_path, "Compiler/") && occursin("Compiler/src/", normalized_path))
-            # Extract the Compiler portion using cross-platform approach
-            path_parts = split(normalized_path, '/')
-            compiler_idx = findfirst(x -> x == "Compiler", path_parts)
-            if compiler_idx !== nothing
-                # Reconstruct path from Compiler onwards
-                new_path_parts = path_parts[compiler_idx:end]
-                new_name = join(new_path_parts, "/")
-                return Coverage.FileCoverage(new_name, fc.source, fc.coverage)
-            end
-        end
-        return fc
-    end
-end
 
 # Must occur after truncation performed above
 # Exclude all external stdlibs (stdlibs that live in external repos).
@@ -197,35 +176,32 @@ end;
 
 @info "After excluding external stdlibs: $(length(fcs))"
 
-# Include base, stdlib, and Compiler/src files only
-filter!(fc -> (startswith(fc.filename, "base") ||
-               startswith(fc.filename, "stdlib") ||
-               (startswith(fc.filename, "Compiler") && occursin("Compiler/src/", fc.filename))), fcs)
+# Include base, stdlib, and vendored source files only
+filter!(fcs) do fc
+    startswith(fc.filename, "base/") ||
+        startswith(fc.filename, "stdlib/") ||
+        any(root -> startswith(fc.filename, root * "/src/"), vendored_roots)
+end
 
 @info "After final filtering: $(length(fcs))"
 
-# This must be run to make sure all lines of code are hit.
-# See docstring for `Coverage.amend_coverage_from_src!``
+# Merge after path normalization so aliases of the same source are reported once.
+fcs = Coverage.merge_coverage_counts(fcs)
+sort!(fcs; by = fc -> fc.filename)
+
+@info "After merging: $(length(fcs))"
+
+# Mark uncompiled source lines as uncovered instead of omitting them.
 for fc in fcs
     Coverage.amend_coverage_from_src!(fc.coverage, fc.filename)
 end
 
 # Log detailed statistics about what we're uploading
 @info "Coverage file statistics:"
-base_files = filter(fc -> startswith(fc.filename, "base"), fcs)
-stdlib_files = filter(fc -> startswith(fc.filename, "stdlib"), fcs)
-compiler_src_files = filter(fc -> startswith(fc.filename, "Compiler") && occursin("Compiler/src/", fc.filename), fcs)
-
-@info "  Base files: $(length(base_files))"
-@info "  Stdlib files: $(length(stdlib_files))"
-@info "  Compiler/src files: $(length(compiler_src_files))"
-
-# Show sample files from each category for verification
-if !isempty(base_files)
-    @info "  Sample base files: $(first(base_files, min(3, length(base_files))) .|> (fc -> fc.filename))"
-end
-if !isempty(compiler_src_files)
-    @info "  Sample Compiler/src files: $(first(compiler_src_files, min(3, length(compiler_src_files))) .|> (fc -> fc.filename))"
+@info "  Base files: $(count(fc -> startswith(fc.filename, "base/"), fcs))"
+@info "  Stdlib files: $(count(fc -> startswith(fc.filename, "stdlib/"), fcs))"
+for root in vendored_roots
+    @info "  $(root)/src files: $(count(fc -> startswith(fc.filename, root * "/src/"), fcs))"
 end
 
 print_coverage_summary.(fcs);

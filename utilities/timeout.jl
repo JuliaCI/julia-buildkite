@@ -21,7 +21,10 @@
 #  - JL_TERM_SIGTERM:     Whether to start the escalation with SIGTERM, which asks the
 #                         test driver to core-dump its stuck workers (they run in
 #                         detached sessions, out of reach of our process-group signals;
-#                         see test/runtests.jl in JuliaLang/julia).  Defaults to false.
+#                         see test/runtests.jl in JuliaLang/julia).  This stage signals
+#                         the driver alone rather than its process group, so that the
+#                         children which *are* in reach survive to be dumped.
+#                         Defaults to false.
 #  - JL_TERM_SIGQUIT:     Whether to include the SIGQUIT (coredump) stage.  Defaults to
 #                         true.
 #
@@ -89,6 +92,11 @@ end
 
 kill_proc_or_pgid(sig) = do_detach ? ccall(:kill, Cint, (Cpid_t, Cint), -proc_pid, sig) : kill(proc, sig)
 
+# Signal the wrapped process alone, never its group.  The SIGTERM stage must use
+# this: a group-wide SIGTERM reaches the driver's own children, and they die from
+# it before the driver can dump them.
+kill_proc(sig) = kill(proc, sig)
+
 # Set when the watchdog fires, so we know to wait for the teardown of the
 # wrapped process' children before exiting
 timed_out = Ref(false)
@@ -124,8 +132,8 @@ timer_task = @async begin
         # of the processes that are actually stuck (the workers run in detached
         # sessions out of reach of our signals).
         if pg_alive() && do_term
-            println(stderr, "\n\nProcess group still alive after $(test_timeout)s; sending SIGTERM to $(pid_or_pgid) $(proc_pid) so the test driver can tear down and core-dump its stuck workers.")
-            kill_proc_or_pgid(Base.SIGTERM)
+            println(stderr, "\n\nProcess group still alive after $(test_timeout)s; sending SIGTERM to PID $(proc_pid) so the test driver can tear down and core-dump its stuck workers.")
+            kill_proc(Base.SIGTERM)
             await_group_exit(teardown_timeout)
         end
 

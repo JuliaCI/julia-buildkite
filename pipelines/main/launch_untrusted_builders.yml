@@ -13,8 +13,8 @@
 #
 # Now a SINGLE launch step runs `utilities/render_launch_pipeline.py`, which
 # renders ONE pre-grouped pipeline document (one `group:` per label:
-# Build / Check / Test / Allow Fail / JuliaSyntax / JuliaC, plus the
-# wait + julia-publish trigger), and uploads it with ONE `pipeline upload`.
+# Build / Check / Test / Allow Fail / JuliaSyntax / JuliaLowering / JuliaC / TTFX /
+# Publish), and uploads it with ONE `pipeline upload`.
 #
 # The renderer reproduces the old behaviour EXACTLY:
 #   * The arches-templated platform YAMLs (platforms/{build,test}_*.yml) are
@@ -22,8 +22,8 @@
 #     old per-file `pipeline upload` performed (GROUP / ALLOW_FAIL / arches
 #     columns). Job grouping, keys, depends_on and soft_fail are preserved.
 #   * The static / launcher misc YAMLs (analyzegc, gcext, juliac, juliasyntax,
-#     ...) are emitted VERBATIM -- their double-dollar runtime escapes and their
-#     launch-env vars (e.g. gcext/test_revise, whose soft_fail is keyed off
+#     julialowering, ...) are emitted VERBATIM -- their double-dollar runtime
+#     escapes and launch-env vars (e.g. gcext/test_revise, whose soft_fail is keyed off
 #     ALLOW_FAIL) are left for THIS single `pipeline upload` to interpolate.
 #     That is why we still `export ALLOW_FAIL="false"` below.
 #   * PowerPC is omitted: launch_powerpc.jl only uploaded powerpc arches for
@@ -73,14 +73,10 @@ steps:
       os: "linux"
       arch: "x86_64"
 
-  # The barrier + trigger of the trusted julia-publish pipeline are emitted by
-  # render_launch_pipeline.py at the END of the rendered document, in the SAME
-  # `pipeline upload` as the Build/Check/Test/Allow-Fail groups. That is on
-  # purpose so the `wait` reliably barriers all of those dynamically-uploaded
-  # jobs (a `wait` placed in a separately-uploaded file used to race the build
-  # jobs and fire the trigger before anything was built or staged).
-  #
-  # See render_launch_pipeline.py for the wait + the `julia-publish` trigger
-  # (guarded by `if: pipeline.slug == "julia-ci"`). Coverage is launched by a
-  # separate upload (launch_coverage.yml) and is intentionally NOT behind this
-  # barrier.
+  # The julia-publish triggers are emitted by render_launch_pipeline.py as a
+  # final `Publish` group in the SAME `pipeline upload` as the jobs they
+  # `depends_on` (one trigger per published platform, plus docs), so those
+  # keys exist when Buildkite resolves the dependencies; a separately-uploaded
+  # file used to race the build jobs. Every trigger is guarded by
+  # `if: pipeline.slug == "julia-ci"`. Coverage (launch_coverage.yml) is a
+  # separate upload and never gates publishing.

@@ -92,7 +92,7 @@ UPLOAD_EXTENSIONS=( "tar.gz" )
 # macOS: the build_ step staged an assembled (unsigned) Julia.app. Unpack it,
 # codesign everything in it (the launcher + the bundled julia tree), then derive
 # both products from the signed bundle: the .tar.gz (the tree) and the .dmg.
-if [[ "${OS}" == "macos" || "${OS}" == "macosnogpl" ]]; then
+if [[ "${OS}" == macos* ]]; then
     APP_NAME="Julia-${MAJMIN?}.app"
     echo "--- [mac] Download + unpack the staged unsigned .app"
     aws s3 cp "s3://${STAGING_TARGET}.app.tar.gz" "${UPLOAD_FILENAME}.app.tar.gz"
@@ -175,7 +175,7 @@ if [[ "${OS}" == "macos" || "${OS}" == "macosnogpl" ]]; then
     else
         UPLOAD_EXTENSIONS+=( "dmg" )
     fi
-elif [[ "${OS}" == "windows" || "${OS}" == "windowsnogpl" ]]; then
+elif [[ "${OS}" == windows* ]]; then
     echo "--- [windows] Extract pre-built Julia"
     # JULIA_INSTALL_DIR is shared across the triplets published sequentially
     # by publish.sh; clear out the previous triplet's tree (e.g. the signed

@@ -1,0 +1,37 @@
+steps:
+  - group: "JuliaLowering"
+    notify:
+      - github_commit_status:
+          context: "JuliaLowering"
+    steps:
+      - label: "julialowering load/precompile linux/x86_64/{{matrix.julia_version}}"
+        timeout_in_minutes: 15
+        agents:
+          queue: "test"
+          os: "linux"
+          arch: "x86_64"
+        matrix:
+          setup:
+            julia_version:
+              - "1.12"
+              - "1.13"
+        plugins:
+          - JuliaCI/external-buildkite#v1:
+              version: "./.buildkite-external-version"
+              repo_url: "https://github.com/JuliaCI/julia-buildkite"
+          - JuliaCI/julia#v1:
+              isolated_depot: true
+              persist_depot_dirs: packages,artifacts
+              update_registry: false
+              version: "{{matrix.julia_version}}"
+              arch: "x86_64"
+        commands: |
+          echo "--- Julia versioninfo"
+          julia -e 'import InteractiveUtils; InteractiveUtils.versioninfo()'
+
+          echo "--- Loading and precompiling JuliaLowering on Julia {{matrix.julia_version}}"
+          export JULIA_LOWERING_PRECOMPILE=true
+          julia --startup-file=no --project=@stdlib -e '
+              pushfirst!(LOAD_PATH, pwd())
+              using JuliaLowering
+          '

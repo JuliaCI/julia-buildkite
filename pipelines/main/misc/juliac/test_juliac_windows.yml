@@ -21,6 +21,9 @@ steps:
           else
             JULIA_PKG_PRECOMPILE_AUTO=0 ./usr/bin/julia.exe -e 'using Pkg; Pkg.add(name="JuliaC", rev="main"); ENV["JULIA_PKG_PRECOMPILE_AUTO"]=1; Pkg.test("JuliaC")'
           fi
+
+          echo "--- Test trimming the Julia repo's projects (test/trim)"
+          ./usr/bin/julia.exe test/trim.jl
         timeout_in_minutes: ${TIMEOUT?}
         soft_fail: ${ALLOW_FAIL?}
         agents:

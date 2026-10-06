@@ -59,7 +59,7 @@ case "${ARCH?}" in
         ;;
     aarch64)
         case "${OS?}" in
-            macos)
+            macos*)
                 JULIA_CPU_TARGETS+=(
                     # Absolute base aarch64 feature set
                     "generic"
@@ -100,7 +100,7 @@ esac
 
 # Determine if we need to add `.exe` onto the end of our executables
 EXE=""
-if [[ "${OS}" == "windows" ]]; then
+if [[ "${OS}" == windows* ]]; then
     EXE=".exe"
 fi
 

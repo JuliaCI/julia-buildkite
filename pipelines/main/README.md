@@ -13,11 +13,18 @@ Builds are split across three Buildkite pipelines by trust level (see
 | `julia-publish` | (triggered by `julia-ci`) signs + promotes        | trusted (KMS signing keys)     |
 
 The daily `julia-ci` schedule runs coverage, a from-source assertion build
-with rr tests, no-GPL builds for Linux, macOS, and Windows, and an x86-64
-Linux PGO+LTO+BOLT build with allow-fail tests. It does not repeat the
-per-commit groups. `julia-publish` promotes the scheduled artifacts; no-GPL
-builds go to `julialang-nogpl`, while optimized builds use
-`julialangnightlies/bin/linuxopt/`.
+with rr tests, no-GPL builds for Linux, macOS, and Windows, and optimized
+builds for x86-64, i686 and aarch64 Linux, for x86-64 and aarch64 macOS, and
+for x86-64 Windows. The optimized builds use `JULIA_CI_BUILD_MODE=opt` to run Julia's
+`contrib/optimized` flow: PGO and ThinLTO everywhere, plus BOLT on Linux
+x86-64 and aarch64. They have allow-fail tests. The schedule does not repeat
+the per-commit groups. `julia-publish` promotes the scheduled artifacts;
+no-GPL builds go to `julialang-nogpl`, while optimized builds use
+`julialangnightlies/bin/linuxopt/`, `.../macosopt/` and `.../windowsopt/`.
+
+Release tag and `release-*` branch builds also build the no-GPL binaries and
+publish them to `julialang-nogpl`, so each release series gets no-GPL nightlies
+on every push without a schedule of its own.
 
 Pull requests with the `needs full CI` label also run the scheduled workloads.
 Coverage data is collected but not uploaded to Codecov or Coveralls.
@@ -25,8 +32,10 @@ Coverage data is collected but not uploaded to Codecov or Coveralls.
 Each build step stages its unsigned tarball directly (write-once, no relay
 jobs) to a commit-sha-gated path in its pipeline's own ephemeral staging
 bucket: `julia-pr` builds go to `julialang-ephemeral-pr` (where juliaup
-finds PR binaries) and stop there. Trusted-ref builds run in `julia-ci`,
-stage to `julialang-ephemeral-ci`, and trigger `julia-publish`, which
-signs and promotes — reading only the `julia-ci` bucket. `julia-publish`
-does not build pull requests, so a PR can never reach the signing keys or
-feed artifacts into publishing.
+finds PR binaries) and stop there, so a PR's binaries are available as
+soon as its build job finishes. Trusted-ref builds run in `julia-ci`, stage
+to `julialang-ephemeral-ci`, and trigger `julia-publish` once per platform,
+as soon as that platform's build and test jobs are green (plus once for the
+docs), which signs and promotes — reading only the `julia-ci` bucket.
+`julia-publish` does not build pull requests, so a PR can never reach the
+signing keys or feed artifacts into publishing.

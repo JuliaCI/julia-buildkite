@@ -30,7 +30,7 @@ fi
 
 # If we're on macOS, we need to re-sign the downloaded tarball so it will
 # execute on this machine
-if [[ "${OS}" == "macos" ]]; then
+if [[ "${OS}" == macos* ]]; then
     echo "--- [mac] Codesigning"
     .buildkite/utilities/macos/codesign.sh "${JULIA_INSTALL_DIR}"
     echo "--- [mac] Update checksums for stdlib cachefiles after codesigning"
@@ -53,7 +53,7 @@ unset JULIA_PKG_SERVER
 # precompile workers don't oversubscribe the machine.
 export JULIA_PRECOMPILE_THREADS="${JULIA_CPU_THREADS}"
 
-if [[ "${OS}" != "windows" ]]; then
+if [[ "${OS}" != windows* ]]; then
     # Tell timeout.jl to detach the process group, so we get core dumps from
     # each process.
     export JL_TERM_DETACH="true"
@@ -65,7 +65,7 @@ fi
 
 # Make sure that temp files and temp directories are created in a location that is
 # backed by real storage, and not by a tmpfs, as some tests don't like that on Linux
-if [[ "${OS}" == "linux" ]]; then
+if [[ "${OS}" == linux* ]]; then
     TMPDIR="$(pwd)/tmp"
     export TMPDIR
     mkdir -p "${TMPDIR}"
@@ -127,7 +127,7 @@ elif [[ "${USE_RR-}" == "" ]]; then
     fi
 
     # Disable `Profile` on win32, as our backtraces are extremely slow.
-    if [[ "${OS} ${ARCH}" == "windows i686" ]]; then
+    if [[ "${OS}" == windows* && "${ARCH}" == "i686" ]]; then
         TESTS_TO_SKIP+=( "Profile" )
     fi
 else
@@ -193,7 +193,7 @@ if [[ -z "${USE_RR-}" ]]; then
     ulimit -c unlimited
     if [[ "${OS}" == linux* || "${OS}" == "musl" ]]; then
         echo "Core dump pattern:         $(cat /proc/sys/kernel/core_pattern)"
-    elif [[ "${OS}" == "macos" || "${OS}" == "freebsd" ]]; then
+    elif [[ "${OS}" == macos* || "${OS}" == "freebsd" ]]; then
         echo "Core dump pattern:         $(sysctl -n kern.corefile)"
     fi
     echo "Core dump size limit:      $(ulimit -c)"

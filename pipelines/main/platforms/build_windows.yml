@@ -20,6 +20,7 @@ steps:
                 # include environment-hook-set variables in a way that the docker
                 # plugin finds.  It's annoying, but at least we have a workaround.
                 - "JULIA_CPU_THREADS"
+                - "JULIA_CI_BUILD_MODE"
                 # Have to include this for `buildkite-agent` to work:
                 - "BUILDKITE_AGENT_ACCESS_TOKEN"
         timeout_in_minutes: ${TIMEOUT?}
@@ -32,3 +33,4 @@ steps:
           # Receive some environment mappings from our templating engine
           TRIPLET: "${TRIPLET?}"
           MAKE_FLAGS: "${MAKE_FLAGS?}"
+          JULIA_CI_BUILD_MODE: "${JULIA_CI_BUILD_MODE-}"

@@ -28,7 +28,12 @@ ld -v
 echo
 buildkite-agent --version
 
-if [[ "${ROOTFS_IMAGE_NAME-}" == "llvm_passes" ]]; then
+# Builds that compile LLVM from source (optimized and `USE_BINARYBUILDER=0` builds) may
+# need a newer CMake than the rootfs has, and the macOS agents have none.
+# Upstream publishes no 32-bit x86 CMake binaries, so i686 keeps the rootfs' own, and
+# download_cmake.sh has no Windows binaries, so Windows uses the image's.
+if [[ "${ARCH?}" != "i686" && "${OS?}" != windows* ]] &&
+   [[ ",${MAKE_FLAGS-}," == *,USE_BINARYBUILDER=0,* || -n "${JULIA_CI_BUILD_MODE-}" ]]; then
     echo "--- Update CMake"
     contrib/download_cmake.sh
 fi
@@ -85,29 +90,25 @@ filter_buildroot() {
     fi
 }
 
-if [[ "${JULIA_CI_BUILD_MODE-}" == "pgo-lto-bolt" ]]; then
-    echo "--- Build Julia (optimized: PGO+LTO+BOLT)"
+if [[ "${JULIA_CI_BUILD_MODE-}" == "opt" ]]; then
+    echo "--- Build Julia (optimized: PGO+LTO, plus BOLT where supported)"
     echo "Note: The log stream is filtered. [buildroot] replaces pwd $(pwd)"
-    BOLT_MAKE=( "${MAKE}" -C contrib/pgo-lto-bolt "${MFLAGS[@]}" "STAGE2_BUILD=$(pwd)" )
+    # Let Julia choose the platform's optimizations and build into the checkout
+    # for the version checks and packaging below.
+    OPT_MAKE=( "${MAKE}" -C contrib/optimized "${MFLAGS[@]}" "STAGE2_BUILD=$(pwd)" )
+    # Keep packaging from replacing the source-built LLVM tools with BinaryBuilder's.
+    export USE_BINARYBUILDER_LLVM=0
+    "${OPT_MAKE[@]}" all 2>&1 | filter_buildroot
 
-    # stage1 only collects compiler profiles. Avoid building its sysimage for
-    # every CPU target; stage2 still uses the release target list from MFLAGS.
-    echo "--- [pgo-lto-bolt] make stage1"
-    "${BOLT_MAKE[@]}" "JULIA_CPU_TARGET=generic" stage1 2>&1 | filter_buildroot
-
-    # These must be separate make invocations. FILES_TO_OPTIMIZE is derived
-    # from stage1's library symlinks when each invocation starts.
-    for STAGE in stage2 copy_originals bolt_instrument finish_stage2 merge_data bolt; do
-        echo "--- [pgo-lto-bolt] make ${STAGE}"
-        "${BOLT_MAKE[@]}" "${STAGE}" 2>&1 | filter_buildroot
+    echo "--- [opt] Upload profile data to buildkite"
+    PROFILE_ARTIFACTS=$("${OPT_MAKE[@]}" --no-print-directory print-profile-artifacts)
+    # The makefile returns whitespace-separated paths/globs relative to the checkout.
+    for ARTIFACT in ${PROFILE_ARTIFACTS}; do
+        buildkite-agent artifact upload "${ARTIFACT}"
     done
 
-    echo "--- [pgo-lto-bolt] Upload profile data to buildkite"
-    buildkite-agent artifact upload "contrib/pgo-lto-bolt/profiles/merged.prof"
-    buildkite-agent artifact upload "contrib/pgo-lto-bolt/profiles-bolt/*.merged.fdata"
-
-    echo "--- [pgo-lto-bolt] Delete pre-BOLT library originals"
-    "${BOLT_MAKE[@]}" delete_originals
+    echo "--- [opt] Delete pre-BOLT library originals"
+    "${OPT_MAKE[@]}" delete-originals
 elif [[ -n "${JULIA_CI_BUILD_MODE-}" ]]; then
     echo "ERROR: unknown JULIA_CI_BUILD_MODE '${JULIA_CI_BUILD_MODE}'" >&2
     exit 1
@@ -170,7 +171,7 @@ UPLOAD_TO_S3_ACL=none upload_to_s3 "${UPLOAD_FILENAME}.tar.gz" "${STAGING_TARGET
 # .dmg -- it needs no app-building tools and no Mac. The .app is staged
 # UNSIGNED (MACOS_CODESIGN_IDENTITY is unset) under a separate key; the tree
 # tarball above is unchanged (test jobs still consume it).
-if [[ "${OS}" == "macos" || "${OS}" == "macosnogpl" ]]; then
+if [[ "${OS}" == macos* ]]; then
     echo "--- [mac] Assemble the unsigned Julia.app"
     # Pass the same MFLAGS as the main build (esp. TAGGED_RELEASE_BANNER): the
     # contrib/mac/app rule re-runs binary-dist, and without the matching flags
