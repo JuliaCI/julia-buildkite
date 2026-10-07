@@ -18,8 +18,7 @@ It reproduces, exactly, what `launch_untrusted_builders.yml` used to upload:
     relevant.)
 
   * The static / nested misc YAMLs (misc/analyzegc.yml, misc/gcext.yml, the
-    juliac / juliasyntax launchers, the julialowering smoke job, ...) are
-    emitted VERBATIM. We do NOT
+    juliac / juliasyntax launchers, ...) are emitted VERBATIM. We do NOT
     pre-resolve their variables: they contain only `$$`-runtime escapes and/or
     launch-agent-env vars (e.g. `${ALLOW_FAIL?}` on gcext/test_revise). The
     final single `buildkite-agent pipeline upload` of this combined document
@@ -40,7 +39,7 @@ of the per-commit groups. Release branch and tag builds add the no-GPL group
 renders only those. Labeled PRs render the same workload groups as a
 supplemental pipeline, without publish triggers. Per-commit results are grouped
 into one `group:` per label: Build, Check, Test, Allow Fail, JuliaSyntax,
-JuliaLowering, JuliaC, TTFX, Publish.
+JuliaC, TTFX, Publish.
 
 The Publish group's triggers each `depends_on` only their own platform's
 build + test jobs (see publish_group_text).
@@ -704,16 +703,6 @@ def main():
     else:
         sys.stderr.write(
             "./JuliaSyntax/Project.toml does NOT exist; omitting JuliaSyntax group\n"
-        )
-
-    # JuliaLowering: run its Julia 1.12 load/precompile smoke test when present.
-    julialowering_project = os.path.join(os.getcwd(), "JuliaLowering", "Project.toml")
-    if os.path.exists(julialowering_project):
-        blocks.append(verbatim_group_text(os.path.join(MISC, "julialowering.yml")))
-    else:
-        sys.stderr.write(
-            "./JuliaLowering/Project.toml does NOT exist; "
-            "omitting JuliaLowering group\n"
         )
 
     # JuliaC: itself a launcher with its own group + notify -- include verbatim.
