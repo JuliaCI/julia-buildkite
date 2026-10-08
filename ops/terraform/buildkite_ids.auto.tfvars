@@ -39,3 +39,10 @@ buildkite_cluster_ids = {
 # Secure cluster as julia-publish.
 buildkite_test_pipeline_id = "019ec73b-f8df-428a-a256-745eff852687"
 buildkite_test_cluster_id  = "fd6c2af4-60c1-40ee-bdd5-88ecb6698fbc"
+
+# julia-test-engine uploads test results to Buildkite Test Engine on behalf
+# of julia-pr / julia-ci (ops/terraform/test_engine.tf), on its own agents
+# (pipelines/test-engine/0_webui.yml). Set both to the real UUIDs once the
+# pipeline exists; until then its role is not created.
+# buildkite_test_engine_pipeline_id = "00000000-0000-0000-0000-000000000000"
+# buildkite_test_engine_cluster_id  = "00000000-0000-0000-0000-000000000000"
