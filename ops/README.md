@@ -52,7 +52,22 @@ only trust the publish pipeline's slug. There are three pipelines:
   `pipelines/promote/0_webui.yml` and
   `utilities/promote_release.sh`.
 
-A fourth, untrusted pipeline, **`julia-buildkite-ci`**, is the
+A fifth pipeline, **`julia-test-engine`**, uploads the build pipelines'
+test results to Buildkite Test Engine. `julia-pr` and `julia-ci` trigger
+one build here per test job (the "Test Engine" group rendered by
+`utilities/render_launch_pipeline.py`), as soon as that job has finished;
+the triggered job downloads the test job's `results.tar.gz` artifact and
+posts it with the suite token, attributed to the test job (see
+`utilities/upload_test_results.sh`). It is the only holder of that token
+(role `julia-oidc-test-engine`, `ops/terraform/test_engine.tf`). Pull
+requests trigger it, so the trigger-settable branch, commit, message, env
+and meta-data of its builds are untrusted: it runs on its own agents, which
+skip the checkout and allowlist the job environment, and clones the upload
+script from julia-buildkite `main` itself. See
+`pipelines/test-engine/0_webui.yml` for the agent settings and why each is
+needed.
+
+Another untrusted pipeline, **`julia-buildkite-ci`**, is the
 julia-buildkite repository's own self-test CI (see `.buildkite/README.md`):
 it builds julia with *proposed* pipeline code, staging write-once to its own
 bucket (`julialang-ephemeral-buildkite`, role `julia-oidc-stage-buildkite`)
@@ -157,7 +172,11 @@ and which carry AWS session tags (`step_key`, `build_commit`, `pipeline_slug`, .
   no `-pr` counterpart: a pull request executes attacker-controlled code
   inside the job, which could exfiltrate any bearer token the job can
   read — so PR builds hold **no tokens at all** (and consequently no
-  coverage/analytics uploads happen on PRs).
+  coverage uploads happen on PRs). Test results are the exception that
+  proves the rule: the test job only stores them as a build artifact, and
+  the `julia-test-engine` pipeline uploads them (role
+  `julia-oidc-test-engine`: that one SSM parameter, from the
+  `upload_test_results` step of that one pipeline).
 * **No overwrites**: all roles must use S3 conditional writes
   (`If-None-Match: *`, enforced via the `s3:if-none-match` policy condition);
   uploads of already-existing objects fail. The only exception is the
@@ -196,6 +215,22 @@ are Terraform variables with the production defaults):
      (incl. forks), branch builds limited to `main`; WebUI =
      `pipelines/main/0_webui.yml` again (the repository hook
      `.buildkite/hooks/post-checkout` does the julia checkout swap).
+   - `julia-test-engine` — repository `JuliaLang/julia` (never checked
+     out), pushes OFF, PRs OFF, triggered by `julia-pr` and `julia-ci`;
+     WebUI = `pipelines/test-engine/0_webui.yml`. It needs its own agents
+     on queue `test-engine`, started with the flags listed in that file
+     (`--skip-checkout`, `--no-local-hooks`, the environment variable
+     allowlist): pull requests author its triggers, so the agent must give
+     the triggered build's commit and env no way to run code. The Julia
+     cluster is the simplest home (no cross-cluster rules; same cluster
+     as the `tokens-ci` role). In another cluster, Buildkite rules must
+     let `julia-pr` and `julia-ci` trigger builds in it
+     (`pipeline.trigger_build.pipeline`) and let it read their artifacts
+     (`pipeline.artifacts_read.pipeline`). Then set
+     `buildkite_test_engine_pipeline_id` and
+     `buildkite_test_engine_cluster_id` in `buildkite_ids.auto.tfvars` and
+     re-apply. The triggers are soft-failing, so the build pipelines stay
+     green while the pipeline does not exist yet.
    All are plain `buildkite-agent pipeline upload` (no cryptic plugin, no
    `cryptic_capable` agent targeting).
 2. Record the organization / pipeline / cluster UUIDs that the IAM trust
@@ -326,9 +361,12 @@ macOS `.dmg` is still built and codesigned. All of it lives in
   `aws s3api put-object --if-none-match` (conditional writes). For linux
   builds that means inside the build rootfs images (`package_*`); also the
   macOS / Windows / FreeBSD build agents.
-* AWS CLI on test agents/rootfs images too (the test step fetches the
-  Test Analytics token from SSM itself). This one is soft: test_julia.sh
-  skips the analytics upload with a warning when `aws` is missing.
+* The test agents need no AWS CLI: the test step only stores its results
+  as a build artifact, and `julia-test-engine` uploads them. Its agents
+  need only git, curl 7.86+ (`--aws-sigv4` signing every header; Ubuntu
+  22.04's 7.81 is too old, Debian 12 and Ubuntu 24.04 are fine) and tar
+  besides the agent: the job assumes its role and reads the token with
+  curl alone.
 * `aws_kms_pkcs11.so` in the `aws_uploader` rootfs (docs deploy).
 
 ### Publish image prerequisites (linux, `queue: publish`)

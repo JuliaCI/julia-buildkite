@@ -24,6 +24,10 @@
 #                     PR builds get no tokens whatsoever: a malicious pull
 #                     request executes code inside the job and could read
 #                     and exfiltrate any bearer token available to it.
+#   julia-oidc-test-engine  The Test Engine suite token only, from the
+#                     upload step of the julia-test-engine pipeline, which
+#                     uploads the build pipelines' test results on their
+#                     behalf (test_engine.tf).
 #   julia-oidc-publish  TRUSTED. kms:Sign with the signing keys, read the
 #                     julia-ci staging bucket, and write the final release
 #                     locations. Assumable ONLY from the `julia-publish`
@@ -469,6 +473,8 @@ resource "aws_iam_role_policy" "docs_deploy" {
 # this role. Nothing secret is stored in the repository or this state.
 # julia-ci ONLY -- pull request builds run attacker-controlled code and
 # therefore get no bearer tokens at all (there is no tokens-pr role).
+# The Test Engine token is read by the julia-test-engine pipeline's role
+# instead (test_engine.tf), so it is not granted here.
 
 resource "aws_iam_role" "tokens" {
   name                 = "julia-oidc-tokens-ci"
@@ -479,9 +485,12 @@ resource "aws_iam_role" "tokens" {
 
 data "aws_iam_policy_document" "tokens" {
   statement {
-    sid       = "ReadTelemetryTokens"
-    actions   = ["ssm:GetParameter"]
-    resources = ["arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter${var.ssm_token_prefix}/*"]
+    sid     = "ReadTelemetryTokens"
+    actions = ["ssm:GetParameter"]
+    resources = [
+      "arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter${var.ssm_token_prefix}/codecov_token",
+      "arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter${var.ssm_token_prefix}/coveralls_token",
+    ]
   }
 }
 

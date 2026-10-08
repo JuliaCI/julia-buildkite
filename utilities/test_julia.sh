@@ -210,56 +210,12 @@ fi
 
 echo "--- Upload results.json report"
 if compgen -G "${JULIA_INSTALL_DIR}/share/julia/test/results*.json"; then
-    # Keep the raw results around as a buildkite artifact (for humans).
+    # The Test Engine upload is done by the julia-test-engine pipeline, which
+    # the build pipeline triggers once this job has finished: it downloads
+    # this artifact and attributes the results to this job. A pull request
+    # runs attacker-controlled code in this very job, so no bearer token is
+    # ever available here (see ops/README.md).
     (cd "${JULIA_INSTALL_DIR}/share/julia/test"; tar -czf results.tar.gz results*.json && buildkite-agent artifact upload "results.tar.gz")
-
-    # Push the results to Buildkite Test Analytics directly from this job
-    # (no relay job, no artifact handoff). The bearer token is fetched from
-    # SSM Parameter Store with this job's OIDC identity; no static secrets
-    # exist in CI config. Best-effort: never fail the test job over it.
-    # Only julia-ci holds bearer tokens: PR builds and the julia-buildkite
-    # self-test run attacker-controlled code in this very job, so skip there.
-    if [[ "${BUILDKITE_PIPELINE_SLUG:-}" != "julia-ci" ]]; then
-        echo "No analytics token available to this pipeline, skipping Test Analytics upload"
-    elif command -v aws >/dev/null 2>&1; then
-        (
-            # Subshell so the OIDC credential env doesn't outlive the upload.
-            # shellcheck source=SCRIPTDIR/aws_oidc.sh
-            source .buildkite/utilities/aws_oidc.sh tokens
-            export AWS_EC2_METADATA_DISABLED=true
-            BUILDKITE_ANALYTICS_TOKEN="$(MSYS2_ARG_CONV_EXCL='*' MSYS_NO_PATHCONV=1 \
-                aws ssm get-parameter --with-decryption \
-                --name /julia-ci/tokens/buildkite_analytics_token \
-                --query Parameter.Value --output text)"
-
-            shopt -s nullglob
-            for file in "${JULIA_INSTALL_DIR}"/share/julia/test/results*.json; do
-                echo "Uploading ${file} to Test Analytics..."
-                # We can't use the test-collector plugin because it doesn't
-                # let us attach more than one results file to a job.
-                curl \
-                  -X POST \
-                  --silent \
-                  --show-error \
-                  --max-time 300 \
-                  -H "Authorization: Token token=\"${BUILDKITE_ANALYTICS_TOKEN}\"" \
-                  -F "data=@\"${file}\"" \
-                  -F "format=json" \
-                  -F "run_env[CI]=buildkite" \
-                  -F "run_env[key]=\"${BUILDKITE_BUILD_ID}\"" \
-                  -F "run_env[url]=\"${BUILDKITE_BUILD_URL}\"" \
-                  -F "run_env[branch]=\"${BUILDKITE_BRANCH}\"" \
-                  -F "run_env[commit_sha]=\"${BUILDKITE_COMMIT}\"" \
-                  -F "run_env[number]=\"${BUILDKITE_BUILD_NUMBER}\"" \
-                  -F "run_env[job_id]=\"${BUILDKITE_JOB_ID}\"" \
-                  -F "run_env[message]=\"${BUILDKITE_MESSAGE}\"" \
-                  https://analytics-api.buildkite.com/v1/uploads
-                echo ""
-            done
-        ) || echo "WARNING: Test Analytics upload failed (non-fatal)"
-    else
-        echo "aws CLI not available; skipping Test Analytics upload"
-    fi
 else
     echo "no JSON results files found"
 fi
