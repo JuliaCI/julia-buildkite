@@ -39,10 +39,12 @@ of the per-commit groups. Release branch and tag builds add the no-GPL group
 renders only those. Labeled PRs render the same workload groups as a
 supplemental pipeline, without publish triggers. Per-commit results are grouped
 into one `group:` per label: Build, Check, Test, Allow Fail, JuliaSyntax,
-JuliaC, TTFX, Publish.
+JuliaC, TTFX, Test Engine, Publish.
 
 The Publish group's triggers each `depends_on` only their own platform's
-build + test jobs (see publish_group_text).
+build + test jobs (see publish_group_text). The Test Engine group's triggers
+each `depends_on` one test job and hand its results to the julia-test-engine
+pipeline (see test_engine_group_text).
 """
 
 import argparse
@@ -310,11 +312,14 @@ def load_group_text(path):
 
 BUILD_KEYS = {}   # TRIPLET -> "build_..." key
 TEST_KEYS = {}    # TRIPLET -> ["test_...", ...]
+TEST_IFS = {}     # "test_..." key -> its `if:` condition, if any
 
 # A step's own attributes sit two spaces inside its `- ` at STEP_INDENT;
 # matching that exact column skips any `key:` nested in plugin config.
 _STEP_KEY_RE = re.compile(
     r'^ {%d}key:\s*"?([^"\s]+)"?\s*$' % (STEP_INDENT + 2), re.MULTILINE)
+_STEP_IF_RE = re.compile(
+    r'^ {%d}if:\s*(\S.*?)\s*$' % (STEP_INDENT + 2), re.MULTILINE)
 
 
 def step_keys(steps_text):
@@ -330,6 +335,9 @@ def record_platform_job(yaml_file, triplet, step_text, where):
         BUILD_KEYS[triplet] = keys[0]
     elif yaml_file.startswith("test_"):
         TEST_KEYS.setdefault(triplet, []).append(keys[0])
+        conditions = _STEP_IF_RE.findall(step_text)
+        if conditions:
+            TEST_IFS[keys[0]] = conditions[0]
     else:
         raise AssertionError(f"{where}: not a build_/test_ platform YAML")
 
@@ -491,6 +499,7 @@ GROUP_NOTIFY = {
     "Check": "Check",
     "Test": "Test",
     "Allow Fail": None,
+    "Test Engine": None,
     "Publish": None,
 }
 
@@ -633,6 +642,53 @@ def publish_group_text(triplets, scheduled=False, docs=False):
     return emit_group("Publish", "\n".join(triggers))
 
 
+def test_engine_trigger_text(key):
+    """One `trigger: julia-test-engine` step for the test job `key`: it runs
+    once that job has finished, passing or not, and the triggered build
+    uploads the job's results.tar.gz artifact to Buildkite Test Engine
+    (utilities/upload_test_results.sh). Async and soft-failing: this
+    build neither waits for the upload nor fails with it, nor with the
+    trigger itself. The trigger fires once, so a manually retried test
+    job is not re-uploaded. A test job that is `if`-excluded from the
+    build has no results, so its trigger carries the same condition."""
+    condition = 'pipeline.slug == "julia-pr" || pipeline.slug == "julia-ci"'
+    if key in TEST_IFS:
+        condition = f"({condition}) && ({TEST_IFS[key]})"
+    return "\n".join((
+        '      - trigger: "julia-test-engine"',
+        f'        label: ":bar_chart: test results {key}"',
+        f"        if: {condition}",
+        # Neither the wait for the upload nor its outcome belongs to this
+        # build; soft_fail also covers the trigger itself failing (no such
+        # pipeline, trigger not permitted).
+        "        async: true",
+        "        soft_fail: true",
+        "        depends_on:",
+        f'          - step: "{key}"',
+        "            allow_failure: true",
+        "        build:",
+        f'          message: "test results {key}: ${{BUILDKITE_MESSAGE}}"',
+        "          env:",
+        f'            TEST_STEP_KEY: "{key}"',
+        '            TEST_BRANCH: "${BUILDKITE_BRANCH}"',
+        '            TEST_COMMIT: "${BUILDKITE_COMMIT}"',
+        '            TEST_MESSAGE: "${BUILDKITE_MESSAGE}"',
+    ))
+
+
+def test_engine_group_text():
+    """The Test Engine group: one julia-test-engine trigger per platform test
+    job rendered so far (every job that runs test_julia.sh), or None when
+    there are none. The test job holds no bearer token (a pull request runs
+    attacker-controlled code in it), so the upload happens in the triggered
+    pipeline, attributed to the test job by its job id."""
+    keys = [key for triplet_keys in TEST_KEYS.values() for key in triplet_keys]
+    if not keys:
+        return None
+    triggers = [test_engine_trigger_text(key) for key in keys]
+    return emit_group("Test Engine", "\n".join(triggers))
+
+
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -665,11 +721,12 @@ def main():
     if is_schedule or args.scheduled_workloads:
         blocks = [schedule_group_text(label, arches, allow_fail)
                   for label, allow_fail, arches in SCHEDULE_GROUPS]
+        blocks.append(test_engine_group_text())
         if is_schedule and not args.scheduled_workloads:
             triplets = upload_triplets(SCHEDULE_UPLOAD_ARCHES, SCHEDULED_PLATFORMS)
             blocks.append(publish_group_text(triplets, scheduled=True))
         sys.stdout.write("steps:\n")
-        sys.stdout.write("\n".join(blocks))
+        sys.stdout.write("\n".join(b for b in blocks if b))
         sys.stdout.write("\n")
         return
 
@@ -722,6 +779,7 @@ def main():
         label, allow_fail, arches = NOGPL_GROUP
         blocks.append(schedule_group_text(label, arches, allow_fail))
         triplets += nogpl_triplets()
+    blocks.append(test_engine_group_text())
     blocks.append(publish_group_text(triplets, docs=True))
 
     sys.stdout.write("steps:\n")

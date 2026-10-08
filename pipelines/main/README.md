@@ -42,3 +42,15 @@ as soon as that platform's build and test jobs are green (plus once for the
 docs), which signs and promotes — reading only the `julia-ci` bucket.
 `julia-publish` does not build pull requests, so a PR can never reach the
 signing keys or feed artifacts into publishing.
+
+Each platform test job stores its `results*.json` files as the
+`results.tar.gz` artifact, and a trigger step (the "Test Engine" group)
+starts one `julia-test-engine` build per test job once it has finished,
+passed or failed. That build downloads the artifact and uploads it to
+Buildkite Test Engine, attributed to the test job. The test job itself
+never holds the suite token, so pull requests are covered too. The trigger
+fires once per test job, so a manually retried job's results are not
+re-uploaded. Pull request runs are uploaded with the branch prefixed `pr/`
+and a `pipeline` tag, so a Test Engine monitor filtered on `master` (the
+default) scores flakiness from trusted builds only. See
+`pipelines/test-engine/` and `utilities/upload_test_results.sh`.

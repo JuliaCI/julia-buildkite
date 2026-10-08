@@ -5,7 +5,10 @@
 # symmetric secrets and cannot be turned into KMS signing operations, so
 # they live in the AWS secrets store and are fetched at job runtime by
 # the julia-oidc-tokens-ci role (julia-ci only; PR builds get no
-# tokens). Nothing secret is stored in the repository.
+# tokens), and the buildkite analytics one by the julia-oidc-test-engine
+# role (the julia-test-engine pipeline, which uploads test results on
+# behalf of julia-pr and julia-ci). Nothing secret is stored in the
+# repository.
 #
 # Usage:
 #   23_put_tokens.sh codecov_token             # prompts for the value
