@@ -50,12 +50,14 @@ SOURCE_BUILD_LABEL adds only the source builds, their tests and those benchmark
 jobs, and the COVERAGE_CI_LABEL only coverage. A
 julia-pr pull request skips the jobs whose paths it does not change (PR_GATED_FILES, PR_GATED_TRIPLETS). Per-commit results are grouped
 into one `group:` per label: Build, Check, Test, Allow Fail, JuliaSyntax,
-JuliaC, TTFX, Runtime benchmarks, Publish.
+JuliaC, TTFX, Runtime benchmarks, Test Engine, Publish.
 
 The Publish group's triggers each `depends_on` only their own platform's
 build + test jobs, except on release tags, where every trigger waits for the
 whole build (see publish_group_text and release_gate); soft-failing builds
-upload their trigger themselves (see publish_group_text).
+upload their trigger themselves (see publish_group_text). The Test Engine group's
+triggers each `depends_on` one test job and hand its results to the
+julia-test-engine pipeline (see test_engine_group_text).
 """
 
 import base64
@@ -328,6 +330,7 @@ def load_group_text(path):
 BUILD_KEYS = {}   # TRIPLET -> "build_..." key
 TEST_KEYS = {}    # TRIPLET -> ["test_...", ...]
 SOFT_FAIL_BUILDS = set()  # TRIPLETs whose build step is soft_fail
+TEST_IFS = {}     # "test_..." key -> its `if:` condition, if any
 
 # ONLY_TRIPLETS: the platforms to render jobs for (None renders all of them),
 # and every platform that had a job to render, to report misspelled ones.
@@ -338,6 +341,8 @@ SEEN_TRIPLETS = set()
 # matching that exact column skips any `key:` nested in plugin config.
 _STEP_KEY_RE = re.compile(
     r'^ {%d}key:\s*"?([^"\s]+)"?\s*$' % (STEP_INDENT + 2), re.MULTILINE)
+_STEP_IF_RE = re.compile(
+    r'^ {%d}if:\s*(\S.*?)\s*$' % (STEP_INDENT + 2), re.MULTILINE)
 
 
 def step_keys(steps_text):
@@ -355,6 +360,9 @@ def record_platform_job(yaml_file, triplet, step_text, allow_fail, where):
             SOFT_FAIL_BUILDS.add(triplet)
     elif yaml_file.startswith("test_"):
         TEST_KEYS.setdefault(triplet, []).append(keys[0])
+        conditions = _STEP_IF_RE.findall(step_text)
+        if conditions:
+            TEST_IFS[keys[0]] = conditions[0]
     else:
         raise AssertionError(f"{where}: not a build_/test_ platform YAML")
 
@@ -603,6 +611,7 @@ GROUP_NOTIFY = {
     "Check": "Check",
     "Test": "Test",
     "Allow Fail": None,
+    "Test Engine": None,
     "Publish": None,
 }
 
@@ -875,6 +884,53 @@ def publish_group_text(triplets, scheduled=False, docs=False, gate=None):
     return emit_group("Publish", "\n".join(triggers))
 
 
+def test_engine_trigger_text(key):
+    """One `trigger: julia-test-engine` step for the test job `key`: it runs
+    once that job has finished, passing or not, and the triggered build
+    uploads the job's results.tar.gz artifact to Buildkite Test Engine
+    (utilities/upload_test_results.sh). Async and soft-failing: this
+    build neither waits for the upload nor fails with it, nor with the
+    trigger itself. The trigger fires once, so a manually retried test
+    job is not re-uploaded. A test job that is `if`-excluded from the
+    build has no results, so its trigger carries the same condition."""
+    condition = 'pipeline.slug == "julia-pr" || pipeline.slug == "julia-ci"'
+    if key in TEST_IFS:
+        condition = f"({condition}) && ({TEST_IFS[key]})"
+    return "\n".join((
+        '      - trigger: "julia-test-engine"',
+        f'        label: ":bar_chart: test results {key}"',
+        f"        if: {condition}",
+        # Neither the wait for the upload nor its outcome belongs to this
+        # build; soft_fail also covers the trigger itself failing (no such
+        # pipeline, trigger not permitted).
+        "        async: true",
+        "        soft_fail: true",
+        "        depends_on:",
+        f'          - step: "{key}"',
+        "            allow_failure: true",
+        "        build:",
+        f'          message: "test results {key}: ${{BUILDKITE_MESSAGE}}"',
+        "          env:",
+        f'            TEST_STEP_KEY: "{key}"',
+        '            TEST_BRANCH: "${BUILDKITE_BRANCH}"',
+        '            TEST_COMMIT: "${BUILDKITE_COMMIT}"',
+        '            TEST_MESSAGE: "${BUILDKITE_MESSAGE}"',
+    ))
+
+
+def test_engine_group_text():
+    """The Test Engine group: one julia-test-engine trigger per platform test
+    job rendered so far (every job that runs test_julia.sh), or None when
+    there are none. The test job holds no bearer token (a pull request runs
+    attacker-controlled code in it), so the upload happens in the triggered
+    pipeline, attributed to the test job by its job id."""
+    keys = [key for triplet_keys in TEST_KEYS.values() for key in triplet_keys]
+    if not keys:
+        return None
+    triggers = [test_engine_trigger_text(key) for key in keys]
+    return emit_group("Test Engine", "\n".join(triggers))
+
+
 # build step key -> the publish trigger that build uploads when it passes
 DEFERRED_TRIGGERS = {}
 
@@ -900,7 +956,7 @@ def deferred_trigger_env(text):
 
 def pipeline_text(blocks):
     """The rendered pipeline of these groups."""
-    return pipeline_header() + deferred_trigger_env("\n".join(blocks)) + "\n"
+    return pipeline_header() + deferred_trigger_env("\n".join(b for b in blocks if b)) + "\n"
 
 
 def release_gate(blocks):
@@ -1022,10 +1078,12 @@ def only_triplets_text(only):
         sys.exit(f"ONLY_TRIPLETS: no jobs for {', '.join(sorted(unknown))} in this build; "
                  f"it has {', '.join(sorted(SEEN_TRIPLETS))}")
     selected = [t for t in triplets if t in ONLY_TRIPLETS]
+    gate = release_gate(blocks)
+    blocks.append(test_engine_group_text())
     if selected:
-        blocks.append(publish_group_text(selected, gate=release_gate(blocks)))
+        blocks.append(publish_group_text(selected, gate=gate))
     # drop the groups that have none of the selected platforms
-    blocks = [b for b in blocks if not b.endswith("    steps:")]
+    blocks = [b for b in blocks if b and not b.endswith("    steps:")]
     return pipeline_text(blocks)
 
 
@@ -1087,6 +1145,7 @@ def main():
         return
     if os.environ.get("BUILDKITE_SOURCE") == "schedule":
         blocks = scheduled_workload_blocks()
+        blocks.append(test_engine_group_text())
         # TTFX of the optimized build against the regular build of the same
         # commit, for julia-ci-timing; not on labeled pull requests, which
         # would hold a macOS agent for hours (utilities/ttfx/README.md)
@@ -1115,7 +1174,9 @@ def main():
         groups = release_opt_groups() if is_release_build() else OPT_GROUPS
         blocks = [schedule_group_text(label, arches, allow_fail)
                   for label, allow_fail, arches in groups]
-        blocks.append(publish_group_text(opt_triplets(), gate=release_gate(blocks)))
+        gate = release_gate(blocks)
+        blocks.append(test_engine_group_text())
+        blocks.append(publish_group_text(opt_triplets(), gate=gate))
         sys.stdout.write(pipeline_text(blocks))
         return
 
@@ -1214,6 +1275,7 @@ def main():
         if pr_has_label(COVERAGE_CI_LABEL):
             log(f"The pull request has the '{COVERAGE_CI_LABEL}' label; adding coverage")
             blocks.append(verbatim_group_text(COVERAGE))
+    blocks.append(test_engine_group_text())
     blocks.append(publish_group_text(triplets, docs=True, gate=release_gate(gated)))
 
     sys.stdout.write(pipeline_text(blocks))

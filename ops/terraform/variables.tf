@@ -157,7 +157,7 @@ variable "ssm_token_prefix" {
 }
 
 # Deliberately a SEPARATE prefix from ssm_token_prefix: the tokens-ci role
-# reads that whole prefix by wildcard from any julia-ci job, and promote's
+# reads from that prefix in any julia-ci job, and promote's
 # secrets must not widen to that audience. The parameter values are not
 # managed here (they would end up in the Terraform state); store them with
 #   aws ssm put-parameter --name <prefix>/<name> --type SecureString ...

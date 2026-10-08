@@ -98,6 +98,13 @@ def job_keys(output, *groups):
             for key in re.findall(r'(?m)^        key: "?([^"\s]+)"?\s*$', block)]
 
 
+def test_engine_group(output):
+    """The text of the Test Engine group, up to the next group."""
+    start = output.index('  - group: "Test Engine"')
+    end = output.find("\n  - group:", start)
+    return output[start:end + 1 if end >= 0 else len(output)]
+
+
 def depends_on(*keys):
     """A publish trigger's exact `depends_on:` block for the given keys."""
     return ("        depends_on:\n"
@@ -135,8 +142,9 @@ class RenderLaunchPipelineTests(unittest.TestCase):
         self.assertEqual(output.count('key: "build_'), 14)
         self.assertEqual(output.count('key: "test_'), 9)
         self.assertEqual(output.count("soft_fail: false"), 12)
-        # the tests, riscv64, TTFX opt, and the source build's TTFX and runtime benchmarks
-        self.assertEqual(output.count("soft_fail: true"), 14)
+        # the tests, riscv64, TTFX opt, the source build's TTFX and runtime
+        # benchmarks, and the 9 test results triggers
+        self.assertEqual(output.count("soft_fail: true"), 14 + 9)
         self.assertEqual(
             output.count('depends_on:\n          - "build_x86_64-linux-gnusrcassert"'),
             2,
@@ -250,7 +258,8 @@ class RenderLaunchPipelineTests(unittest.TestCase):
     def test_normal_mode_excludes_schedule_groups(self):
         output = render()
 
-        for group in ("Build", "Check", "Test", "Allow Fail", "JuliaC", "TTFX", "Runtime benchmarks", "Publish"):
+        for group in ("Build", "Check", "Test", "Allow Fail", "JuliaC", "TTFX",
+                      "Runtime benchmarks", "Test Engine", "Publish"):
             self.assertIn(f'group: "{group}"', output)
         self.assertNotIn('group: "Source Build"', output)
         self.assertNotIn("PUBLISH_SCHEDULED", output)
@@ -497,7 +506,7 @@ class RenderLaunchPipelineTests(unittest.TestCase):
                         OPT_ONLY="true")
 
         self.assertEqual(re.findall(r'^  - group: "([^"]+)"', output, re.M),
-                         ["Optimized Build", "Optimized Tests", "Publish"])
+                         ["Optimized Build", "Optimized Tests", "Test Engine", "Publish"])
         self.assertEqual(
             sorted(re.findall(r'PUBLISH_TARGET: "([^"]+)"', output)),
             ALL_OPT_TRIPLETS,
@@ -517,7 +526,8 @@ class RenderLaunchPipelineTests(unittest.TestCase):
         # and platforms combine across groups.
         output = render(ONLY_TRIPLETS="x86_64-linux-gnuassert, i686-linux-gnuopt", **release)
         self.assertEqual(re.findall(groups, output, re.M),
-                         ["Build", "Test", "Optimized Build", "Optimized Tests", "Publish"])
+                         ["Build", "Test", "Optimized Build", "Optimized Tests", "Test Engine",
+                          "Publish"])
         self.assertEqual(set(re.findall(r'TRIPLET: "([^"]+)"', output)),
                          {"x86_64-linux-gnuassert", "i686-linux-gnuopt"})
         gate = ["build_x86_64-linux-gnuassert", "test_x86_64-linux-gnuassert",
@@ -736,6 +746,62 @@ class RenderLaunchPipelineTests(unittest.TestCase):
                 self.assertIn("soft_fail: true", step)
                 self.assertNotIn("github_commit_status", step)
         self.assertNotIn("darwinsrc", render())
+
+    def test_test_engine_triggers_one_per_test_job(self):
+        for source, build_env in ((None, {}), ("schedule", {}), (None, EXTENDED_PR),
+                                  (None, {"OPT_ONLY": "true"}),
+                                  (None, {"ONLY_TRIPLETS": "x86_64-linux-gnu,i686-linux-gnu"})):
+            output = render(source=source, **build_env)
+            group = test_engine_group(output)
+            keys = set(re.findall(r'^\s+key:\s*"?([^"\s]+)"?\s*$', output, re.M))
+            triggered = re.findall(r'TEST_STEP_KEY: "([^"]+)"', group)
+
+            # Every job that runs test_julia.sh (and so stores results.tar.gz)
+            # gets exactly one trigger, waiting on that job alone, failed or not.
+            self.assertEqual(len(triggered), output.count("utilities/test_julia.sh"))
+            self.assertEqual(len(triggered), len(set(triggered)))
+            self.assertLessEqual(set(triggered), keys)
+            self.assertEqual(group.count('trigger: "julia-test-engine"'), len(triggered))
+            self.assertEqual(group.count("async: true"), len(triggered))
+            self.assertEqual(group.count("soft_fail: true"), len(triggered))
+            for key in triggered:
+                self.assertIn(f'depends_on:\n          - step: "{key}"\n'
+                              "            allow_failure: true\n", group)
+                self.assertIn(f'label: ":bar_chart: test results {key}"', group)
+                self.assertIn(f'message: "test results {key}: ${{BUILDKITE_MESSAGE}}"', group)
+            self.assertNotIn("test-revise", triggered)
+            self.assertNotIn("gcext", triggered)
+            # The triggered build gets the metadata the upload attributes the
+            # results with; the test job's id comes from its artifact.
+            self.assertEqual(group.count('TEST_BRANCH: "${BUILDKITE_BRANCH}"'), len(triggered))
+            self.assertEqual(group.count('TEST_COMMIT: "${BUILDKITE_COMMIT}"'), len(triggered))
+            self.assertEqual(group.count('TEST_MESSAGE: "${BUILDKITE_MESSAGE}"'), len(triggered))
+            self.assertNotIn("BUILDKITE_JOB_ID", group)
+            # Only the two build pipelines trigger uploads.
+            self.assertEqual(
+                group.count('pipeline.slug == "julia-pr" || pipeline.slug == "julia-ci"'),
+                len(triggered))
+
+        output = render()
+        self.assertIn("test_x86_64-linux-gnu", triggered := re.findall(
+            r'TEST_STEP_KEY: "([^"]+)"', test_engine_group(output)))
+        self.assertIn("test_x86_64-apple-darwin", triggered)
+        self.assertIn("test_x86_64-w64-mingw32", triggered)
+        self.assertIn("test_i686-linux-gnunet", triggered)
+        # An `if`-excluded test job has no results: its trigger is excluded
+        # with it (the rr jobs run only outside pull requests).
+        self.assertIn(
+            'if: (pipeline.slug == "julia-pr" || pipeline.slug == "julia-ci")'
+            ' && (pipeline.slug != "julia-pr" || "yes" != "yes")\n'
+            "        async: true\n"
+            "        soft_fail: true\n"
+            "        depends_on:\n"
+            '          - step: "test_x86_64-linux-gnuassertrr"\n',
+            test_engine_group(output))
+
+    def test_test_engine_group_only_with_test_jobs(self):
+        self.assertNotIn('group: "Test Engine"', render(NOGPL_ONLY="true"))
+        self.assertNotIn("julia-test-engine", render(NOGPL_ONLY="true"))
 
     def test_publish_dependencies_exist(self):
         for source, build_env in ((None, {}), ("schedule", {}),
