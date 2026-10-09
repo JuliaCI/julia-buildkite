@@ -199,6 +199,17 @@ if [[ -z "${USE_RR-}" ]]; then
     echo "Core dump size limit:      $(ulimit -c)"
 fi
 
+# The test suite runs with `--check-bounds=yes`, and release builds do not bundle stdlib
+# pkgimages for that (see `JULIA_CHECK_BOUNDS_PKGIMAGES`). Precompile them up front, the
+# same way the build does, rather than inside the test workers. A no-op when bundled.
+echo "--- Precompile stdlibs for \`--check-bounds=yes\`"
+${JULIA_BINARY} --startup-file=no --color=yes -e '
+    if VERSION >= v"1.14.0-"
+        copy!(LOAD_PATH, ["@stdlib", joinpath(pwd(), "stdlib")])
+        Base.Precompilation.precompilepkgs(;
+            configs=[``=>Base.CacheFlags(check_bounds=1, debug_level=2, opt_level=3)], strict=true)
+    end'
+
 # Begin with "+++" => Expand test group by default
 echo "+++ Run the Julia test suite"
 # set -e; requires us using if to check the exit status
