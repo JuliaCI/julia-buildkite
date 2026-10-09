@@ -3,7 +3,9 @@
 # tasks (precompile, load, run). On a pull request the master build of the merge-base is
 # fetched too, the two are measured interleaved (ABBA) and compared, and robust
 # regressions fail the job. On master and release branches the build is measured alone
-# and the data kept as Buildkite artifacts. See README.md alongside this script.
+# and the data kept as Buildkite artifacts. With TTFX_RELEASE set, a published release
+# ("latest": the newest stable one) is measured alone instead of a build: the weekly
+# reference run. See README.md alongside this script.
 set -euo pipefail
 
 # shellcheck source=SCRIPTDIR/../build_envs.sh
@@ -30,6 +32,10 @@ TTFX_BASE_PR_STAGING_BUCKET="${TTFX_BASE_PR_STAGING_BUCKET:-julialang-ephemeral-
 TTFX_NIGHTLIES_URL="${TTFX_NIGHTLIES_URL:-https://julialangnightlies-s3.julialang.org}"
 # How long to wait for the merge-base's build; a macOS aarch64 build takes about 18 minutes
 TTFX_BASE_WAIT_MINUTES="${TTFX_BASE_WAIT_MINUTES:-20}"
+# Where the published releases are, and what names the newest stable one
+TTFX_RELEASE="${TTFX_RELEASE:-}"
+TTFX_RELEASES_URL="${TTFX_RELEASES_URL:-https://julialang-s3.julialang.org/bin}"
+TTFX_LATEST_RELEASE_API="${TTFX_LATEST_RELEASE_API:-https://api.github.com/repos/JuliaLang/julia/releases/latest}"
 
 rm -rf "${TTFX_DIR}"
 mkdir -p "${TTFX_DIR}"
@@ -112,9 +118,38 @@ github_repo() {
 }
 TTFX_GITHUB_REPO="${TTFX_GITHUB_REPO:-$(github_repo)}"
 
-echo "--- Download the julia build under test (${SHORT_COMMIT})"
-buildkite-agent artifact download --step "build_${TRIPLET}" "${UPLOAD_FILENAME}.tar.gz" .
-install_julia "${UPLOAD_FILENAME}.tar.gz" head
+# The newest stable release: GitHub's "latest" release of JuliaLang/julia, which is
+# never a prerelease. The release tarballs are named by version below bin/<os>/<arch>/<majmin>/.
+latest_release() {
+    curl -fsSL --retry 3 -H "Accept: application/vnd.github+json" "${TTFX_LATEST_RELEASE_API}" \
+        | sed -n 's/^ *"tag_name": *"v\([0-9][0-9.]*\)".*/\1/p' | head -n1
+}
+
+if [[ -n "${TTFX_RELEASE}" ]]; then
+    if [[ "${TTFX_RELEASE}" == "latest" ]]; then
+        echo "--- Find the latest release"
+        TTFX_RELEASE="$(latest_release)"
+        [[ -n "${TTFX_RELEASE}" ]] || { echo "Could not find the latest release from ${TTFX_LATEST_RELEASE_API}" >&2; exit 1; }
+    fi
+    echo "--- Download julia ${TTFX_RELEASE}"
+    # The releases bucket names macOS "mac" (the nightlies say "macos")
+    case "${TRIPLET}" in
+        aarch64-apple-darwin) release_path="mac/aarch64" release_name="macaarch64" ;;
+        x86_64-apple-darwin)  release_path="mac/x64"     release_name="mac64" ;;
+        *) echo "No release download path known for ${TRIPLET}" >&2; exit 1 ;;
+    esac
+    release_majmin="$(cut -d. -f1-2 <<<"${TTFX_RELEASE}")"
+    release_url="${TTFX_RELEASES_URL}/${release_path}/${release_majmin}/julia-${TTFX_RELEASE}-${release_name}.tar.gz"
+    curl -fsSL --retry 3 -o "${TTFX_DIR}/release.tar.gz" "${release_url}"
+    echo "downloaded ${release_url}"
+    install_julia "${TTFX_DIR}/release.tar.gz" head
+    HEAD_NOTE="julia ${TTFX_RELEASE}"
+else
+    echo "--- Download the julia build under test (${SHORT_COMMIT})"
+    buildkite-agent artifact download --step "build_${TRIPLET}" "${UPLOAD_FILENAME}.tar.gz" .
+    install_julia "${UPLOAD_FILENAME}.tar.gz" head
+    HEAD_NOTE="${TRIPLET}"
+fi
 HEAD_JULIA="${ARMS_DIR}/head/bin/julia"
 
 MODE="standalone"
@@ -125,7 +160,9 @@ BASE_NOTE=""
 # commit stands in for the merge-base, so the comparison path is exercised too. Either
 # way, a base that is a [ci skip] commit gives way to its nearest ancestor that was built.
 MERGE_BASE=""
-if [[ "${BUILDKITE_PIPELINE_SLUG:-}" == "julia-pr" && "${BUILDKITE_PULL_REQUEST:-false}" != "false" ]]; then
+if [[ -n "${TTFX_RELEASE}" ]]; then
+    : # a release stands alone
+elif [[ "${BUILDKITE_PIPELINE_SLUG:-}" == "julia-pr" && "${BUILDKITE_PULL_REQUEST:-false}" != "false" ]]; then
     BASE_BRANCH="${BUILDKITE_PULL_REQUEST_BASE_BRANCH:-master}"
     echo "--- Find the merge-base with ${BASE_BRANCH}"
     git fetch --no-tags --quiet "${BUILDKITE_REPO}" "refs/heads/${BASE_BRANCH}"
@@ -205,7 +242,7 @@ fi
 echo "+++ Report"
 compare_args=( --results "${TTFX_DIR}/results.json" --meta "${TTFX_DIR}/results-meta.json"
                --head head --report "${TTFX_DIR}/report.md" --json "${TTFX_DIR}/compare.json"
-               --title "TTFX benchmarks: ${TRIPLET}" --url "${BUILDKITE_BUILD_URL:-}#${BUILDKITE_JOB_ID:-}" )
+               --title "TTFX benchmarks: ${HEAD_NOTE}" --url "${BUILDKITE_BUILD_URL:-}#${BUILDKITE_JOB_ID:-}" )
 if [[ "${MODE}" == "compare" ]]; then
     compare_args+=( --base base --base-note "${BASE_NOTE}" )
 fi

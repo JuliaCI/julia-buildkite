@@ -26,6 +26,10 @@ Release tag and `release-*` branch builds also build the no-GPL binaries and
 publish them to `julialang-nogpl`, so each release series gets no-GPL nightlies
 on every push without a schedule of its own.
 
+A second `julia-ci` schedule, Saturday nights with `TTFX_RELEASE=latest`, builds
+nothing and measures the newest stable release on the TTFX tasks instead, as a
+reference for the master series (see `utilities/ttfx/README.md`).
+
 Pull requests with the `needs full CI` label also run the scheduled workloads.
 Coverage data is collected but not uploaded to Codecov or Coveralls.
 

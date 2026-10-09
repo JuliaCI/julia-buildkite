@@ -34,7 +34,8 @@ current master (1.14) it is a no-op, so the powerpc arches are intentionally
 omitted (see OMITTED_POWERPC below). This matches the runtime behaviour.
 
 Schedule builds emit the scheduled workload groups and publish triggers instead
-of the per-commit groups. Release branch and tag builds add the no-GPL group
+of the per-commit groups; the weekly TTFX_RELEASE build (a second julia-ci
+schedule) emits the release TTFX job alone. Release branch and tag builds add the no-GPL group
 (and its publish triggers) to the per-commit groups, and NOGPL_ONLY=true
 renders only those. Labeled PRs render the same workload groups as a
 supplemental pipeline, without publish triggers. Per-commit results are grouped
@@ -661,6 +662,13 @@ def nogpl_triplets():
 
 def main():
     args = parse_args()
+    # TTFX_RELEASE (set by the weekly julia-ci schedule, or on a build created
+    # by hand) measures a published release on the TTFX tasks; nothing is built.
+    if os.environ.get("TTFX_RELEASE"):
+        sys.stdout.write("steps:\n")
+        sys.stdout.write(verbatim_group_text(os.path.join(MISC, "ttfx", "ttfx_release.yml")))
+        sys.stdout.write("\n")
+        return
     is_schedule = os.environ.get("BUILDKITE_SOURCE") == "schedule"
     if is_schedule or args.scheduled_workloads:
         blocks = [schedule_group_text(label, arches, allow_fail)

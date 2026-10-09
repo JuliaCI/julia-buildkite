@@ -14,6 +14,9 @@
 #                  * Build pull requests: OFF
 #                  * nightly schedule: master at `0 8 * * *`; see
 #                    pipelines/main/README.md
+#                  * weekly TTFX release schedule: master at `0 4 * * 0`
+#                    (Saturday night in the US) with the environment
+#                    variable TTFX_RELEASE=latest; see utilities/ttfx/README.md
 #
 # Keeping the two configurations identical is deliberate: the only
 # difference in behavior is downstream, where the rendered julia-publish

@@ -27,7 +27,7 @@ PUBLISHED_TRIPLETS = [
 def render(*args, source=None, **build_env):
     env = os.environ.copy()
     for var in ("BUILDKITE_SOURCE", "BUILDKITE_PIPELINE_SLUG", "BUILDKITE_TAG",
-                "BUILDKITE_BRANCH", "NOGPL_ONLY"):
+                "BUILDKITE_BRANCH", "NOGPL_ONLY", "TTFX_RELEASE"):
         env.pop(var, None)
     if source is not None:
         env["BUILDKITE_SOURCE"] = source
@@ -287,6 +287,18 @@ class RenderLaunchPipelineTests(unittest.TestCase):
                           % re.escape(label), output, re.MULTILINE)
             self.assertIsNotNone(m, label)
             self.assertEqual(m.group(1), f'pipeline.slug != "julia-pr" || "{skip}" != "yes"', label)
+
+    def test_ttfx_release_build_renders_only_the_release_job(self):
+        for env in ({"TTFX_RELEASE": "latest"}, {"TTFX_RELEASE": "1.13.1"}):
+            output = render(source="schedule", BUILDKITE_PIPELINE_SLUG="julia-ci", **env)
+            self.assertEqual(re.findall(r'^  - group: "([^"]+)"', output, re.M), ["TTFX release"])
+            self.assertEqual(output.count("- label:"), 1)
+            self.assertIn('key: "ttfx_release_aarch64-apple-darwin"', output)
+            self.assertIn("utilities/ttfx/ttfx_ci.sh", output)
+            self.assertNotIn("build_", output)
+            self.assertNotIn("trigger:", output)
+        # The variable is left for the launch agent's `pipeline upload` to resolve
+        self.assertIn('TTFX_RELEASE: "${TTFX_RELEASE:-latest}"', output)
 
     def test_publish_dependencies_exist(self):
         for source, build_env in ((None, {}), ("schedule", {}),
