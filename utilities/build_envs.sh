@@ -21,6 +21,14 @@ if buildkite-agent meta-data exists BUILDKITE_JULIA_BRANCH; then
     export BUILDKITE_BRANCH
 fi
 
+# Older Julia trees bundle these caches and have no companion archive target.
+# Detect the capability instead of assuming it from the Julia version.
+HAS_CHECKBOUNDS_PKGIMAGES=false
+if grep -q '^checkbounds-pkgimages:' Makefile; then
+    HAS_CHECKBOUNDS_PKGIMAGES=true
+fi
+export HAS_CHECKBOUNDS_PKGIMAGES
+
 # Determine JULIA_CPU_TARGETS for different architectures
 JULIA_CPU_TARGETS=()
 case "${ARCH?}" in
