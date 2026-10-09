@@ -4,7 +4,8 @@ steps:
     # julia-ci holds the codecov / coveralls bearer tokens; PR builds run
     # the same coverage collection but skip the uploads (the lcov tarball
     # is still available as a buildkite artifact).
-    if: (build.source == "schedule") || (build.pull_request.labels includes "needs full CI")
+    # Not on the weekly TTFX release schedule, which measures a release and builds nothing
+    if: ((build.source == "schedule") && (build.env("TTFX_RELEASE") == null)) || (build.pull_request.labels includes "needs full CI")
     notify:
       - github_commit_status:
           context: "Coverage"

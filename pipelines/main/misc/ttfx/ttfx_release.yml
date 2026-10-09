@@ -1,0 +1,29 @@
+# The weekly reference measurement of the latest Julia release on the TTFX tasks:
+# the same job as ttfx_macos.yml, run on the newest stable release instead of a
+# build of this commit, so the master series on perf.julialang.org has the
+# release next to it, measured on the same machines and the same task set week
+# after week (packages resolve differently over time). Rendered alone by
+# render_launch_pipeline.py when the julia-ci build carries TTFX_RELEASE, which
+# the weekly schedule sets (utilities/ttfx/README.md). The job's own label and
+# key keep it apart from the master job for julia-ci-timing.
+steps:
+  - group: "TTFX release"
+    steps:
+      - label: ":macos: TTFX release aarch64-apple-darwin"
+        key: "ttfx_release_aarch64-apple-darwin"
+        plugins:
+          - JuliaCI/external-buildkite#v1:
+              version: "./.buildkite-external-version"
+              repo_url: "https://github.com/JuliaCI/julia-buildkite"
+        commands: "bash .buildkite/utilities/ttfx/ttfx_ci.sh"
+        # One arm, two blocks: about half the pull request job's budget
+        timeout_in_minutes: 120
+        agents:
+          queue: "test"
+          os: "macos"
+          arch: "aarch64"
+        env:
+          TRIPLET: "aarch64-apple-darwin"
+          # "latest" resolves to the newest stable release at job time; a
+          # version such as "1.13.1" measures that release instead
+          TTFX_RELEASE: "${TTFX_RELEASE:-latest}"

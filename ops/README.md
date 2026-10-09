@@ -269,7 +269,9 @@ are Terraform variables with the production defaults):
     `julia_ci_aws_account_id` Terraform output).
 11. Create the nightly `julia-ci` schedule on `master` at `0 8 * * *`, then
     disable and archive the legacy `julia-master-scheduled` pipeline. See
-    `pipelines/main/README.md` for the scheduled workloads.
+    `pipelines/main/README.md` for the scheduled workloads. Create the weekly
+    TTFX release schedule too: `master` at `0 4 * * 0` with the environment
+    variable `TTFX_RELEASE=latest` (`utilities/ttfx/README.md`).
 12. Once green: revoke the legacy static AWS IAM user, delete the cryptic
     agent keys from the agents, decommission `cryptic_capable` queues,
     turn off webhook builds on the legacy `julia-buildkite` /

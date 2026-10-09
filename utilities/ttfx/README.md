@@ -23,6 +23,7 @@ repository's `main` branch at job time; everything that runs them lives here.
 |---|---|---|
 | `julia-pr` (pull requests) | only when the pull request touches a path in `paths.txt` (`src/`, `Compiler/`, `base/loading.jl`, `base/precompilation.jl`), or has the `needs TTFX check` label | comparison: the pull request's build against the build of its merge-base (master's, or the base pull request's when stacked) |
 | `julia-ci` (master, release branches, the nightly schedule) | every build | absolute: the build alone |
+| `julia-ci` (the weekly `TTFX_RELEASE` schedule) | the newest stable release | absolute: the release alone, as a reference |
 | `julia-buildkite-ci` (this repository's self-test) | every build | comparison: the julia master commit under test against its parent |
 
 The group's launch step, `ttfx_launch.sh`, decides. On a pull request without the label it
@@ -123,11 +124,31 @@ do not affect `status`; if one fails (a task that allocates
 too much to run without collection, say) the message is kept in `error_gcoff` and the
 normal numbers stand.
 
+## Release reference: the weekly schedule (julia-ci)
+
+A second `julia-ci` schedule runs on Saturday nights (`0 4 * * 0` UTC) with
+`TTFX_RELEASE=latest` in its environment. The renderer then emits nothing but the
+`TTFX release` group (`pipelines/main/misc/ttfx/ttfx_release.yml`), and the job
+measures the newest stable release of Julia instead of a build: it asks GitHub for the
+latest release of JuliaLang/julia (never a prerelease), downloads that version's macOS
+aarch64 tarball from the releases bucket, and runs the absolute mode on it. The result
+is one more `results.json` and `results-meta.json` per week, on the same machines and
+task set as the master runs, with the release's version in `arms.head.version`; it
+goes next to the master series on perf.julialang.org, labelled with the version. Weekly
+rather than once per release because the machines, the task set and the packages a task
+resolves all move, so last month's number would not be comparable to this week's master.
+
+The job's label and key (`:macos: TTFX release <triplet>`, `ttfx_release_<triplet>`)
+differ from the master job's, which is how julia-ci-timing tells them apart. To measure
+a specific release, create a julia-ci build on `master` with `TTFX_RELEASE=1.13.1`
+(say) in its environment.
+
 ## Knobs
 
 Environment variables on the job: `TTFX_EXCLUDE` (default `exclude.txt`, or `none`),
 `TTFX_BLOCKS` (2), `TTFX_REPEATS` (3), `TTFX_BASE_WAIT_MINUTES` (20),
-`TTFX_SNIPPETS_REPO` and `TTFX_SNIPPETS_REF`; on the launch step, `TTFX_PATHS` (default
-`paths.txt`). The job's budget is the sum of the tasks' precompile times, times two arms,
+`TTFX_SNIPPETS_REPO` and `TTFX_SNIPPETS_REF`, `TTFX_RELEASE` (`latest` or a version;
+unset measures the build), `TTFX_RELEASES_URL` and `TTFX_LATEST_RELEASE_API`; on the
+launch step, `TTFX_PATHS` (default `paths.txt`). The job's budget is the sum of the tasks' precompile times, times two arms,
 times the blocks, plus one untimed run of every task script per arm, plus package
 downloads: exclude tasks before raising the timeout.
