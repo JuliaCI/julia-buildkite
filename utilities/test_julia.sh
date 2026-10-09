@@ -28,6 +28,16 @@ if [[ ! -d "${JULIA_INSTALL_DIR}/bin" ]]; then
     tar xzf "${UPLOAD_FILENAME}.tar.gz" "${JULIA_INSTALL_DIR}/"
 fi
 
+# Use caches from this exact build, before signing and repairing checksums.
+# A pre-unpacked bughunt tree may already have them; that path can run offline.
+INSTALLED_CHECKBOUNDS_PKGIMAGES=false
+if [[ "${HAS_CHECKBOUNDS_PKGIMAGES}" == "true" && -n "${BUILDKITE_JOB_ID:-}" ]]; then
+    echo "--- Install bounds-checked stdlib companion archive"
+    buildkite-agent artifact download --step "build_${TRIPLET}" "${UPLOAD_FILENAME}.checkbounds.tar.gz" .
+    tar xzf "${UPLOAD_FILENAME}.checkbounds.tar.gz" -C "${JULIA_INSTALL_DIR}"
+    INSTALLED_CHECKBOUNDS_PKGIMAGES=true
+fi
+
 # If we're on macOS, we need to re-sign the downloaded tarball so it will
 # execute on this machine
 if [[ "${OS}" == macos* ]]; then
@@ -37,6 +47,15 @@ if [[ "${OS}" == macos* ]]; then
     JULIA_DEBUG=all "${JULIA_INSTALL_DIR}/bin/julia" .buildkite/utilities/update_stdlib_pkgimage_checksums.jl
 fi
 
+
+# Fail if the companion cannot be reused, instead of silently recompiling in
+# every test worker. Limit lookup to this installation so user caches cannot mask it.
+if [[ "${INSTALLED_CHECKBOUNDS_PKGIMAGES}" == "true" ]]; then
+    echo "--- Verify bounds-checked stdlib images load without recompiling"
+    JULIA_DEPOT_PATH="${JULIA_INSTALL_DIR}/share/julia" JULIA_LOAD_PATH="@stdlib" \
+        ${JULIA_BINARY} --startup-file=no --check-bounds=yes --compiled-modules=strict \
+        -e 'using Test, Pkg, REPL, SparseArrays'
+fi
 
 echo "--- Print Julia version info"
 ${JULIA_BINARY} -e 'using InteractiveUtils; InteractiveUtils.versioninfo()'

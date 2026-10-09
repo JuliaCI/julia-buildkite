@@ -61,6 +61,17 @@ MAPPINGS=(
     "julia-${VERSION}-freebsd-x86_64.tar.gz  freebsd/x86_64/${MAJMIN} freebsd/x64/${MAJMIN}"
 )
 
+# Every binary tarball has a companion on Julia trees supporting the target.
+# Include it in release promotion, provenance checks and checksum manifests.
+if grep -q '^checkbounds-pkgimages:' Makefile; then
+    for mapping in "${MAPPINGS[@]}"; do
+        read -r base srcdir destdir <<<"${mapping}"
+        if [[ "${base}" == *.tar.gz ]]; then
+            MAPPINGS+=( "${base%.tar.gz}.checkbounds.tar.gz ${srcdir} ${destdir}" )
+        fi
+    done
+fi
+
 # Source dists (KMS-signed by publish_srcdist.sh) live at bin/src/ in both
 # buckets. Releases published before the source_dist step existed have
 # none; promote what there is rather than failing.

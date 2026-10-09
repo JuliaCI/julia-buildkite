@@ -71,6 +71,10 @@ MFLAGS+=( "JULIA_CPU_TARGET=${JULIA_CPU_TARGET}" )
 IFS=',' read -ra ARCHES_FLAGS <<<"${MAKE_FLAGS}"
 MFLAGS+=( "${ARCHES_FLAGS[@]}" )
 
+# Official distributions, including releases, provide these in a companion archive.
+# Keep this after ARCHES_FLAGS so a build cannot accidentally bundle them as well.
+MFLAGS+=( "JULIA_CHECK_BOUNDS_PKGIMAGES=0" )
+
 echo "Make Options:"
 for FLAG in "${MFLAGS[@]}"; do
     echo " -> ${FLAG}"
@@ -182,4 +186,16 @@ if [[ "${OS}" == macos* ]]; then
     tar zcf "${UPLOAD_FILENAME}.app.tar.gz" -C contrib/mac/app/dmg "${MAC_APP_NAME}"
     echo "--- [mac] Stage the unsigned .app to s3://${STAGING_TARGET}.app.tar.gz"
     UPLOAD_TO_S3_ACL=none upload_to_s3 "${UPLOAD_FILENAME}.app.tar.gz" "${STAGING_TARGET}.app.tar.gz"
+fi
+
+# Do this after all binary-dist invocations (including the macOS .app build):
+# binary-dist removes existing julia-*.tar.gz files.
+if [[ "${HAS_CHECKBOUNDS_PKGIMAGES}" == "true" ]]; then
+    echo "--- Build bounds-checked stdlib companion archive"
+    ${MAKE} "${MFLAGS[@]}" checkbounds-pkgimages
+    if [[ "${JULIA_BINARYDIST_FILENAME}" != "${UPLOAD_FILENAME}" ]]; then
+        mv "${JULIA_BINARYDIST_FILENAME}.checkbounds.tar.gz" "${UPLOAD_FILENAME}.checkbounds.tar.gz"
+    fi
+    buildkite-agent artifact upload "${UPLOAD_FILENAME}.checkbounds.tar.gz"
+    UPLOAD_TO_S3_ACL=none upload_to_s3 "${UPLOAD_FILENAME}.checkbounds.tar.gz" "${STAGING_TARGET}.checkbounds.tar.gz"
 fi

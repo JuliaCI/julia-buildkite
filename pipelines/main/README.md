@@ -59,3 +59,26 @@ as soon as that platform's build and test jobs are green (plus once for the
 docs), which signs and promotes — reading only the `julia-ci` bucket.
 `julia-publish` does not build pull requests, so a PR can never reach the
 signing keys or feed artifacts into publishing.
+
+## Bounds-checked stdlib package images
+
+For Julia trees with `make checkbounds-pkgimages`, each build produces a normal
+Julia tarball and a `.checkbounds.tar.gz` companion. Test jobs install the
+companion from the same build before running the suite. Older Julia trees retain
+their bundled images and need no extra download. Coverage jobs continue to build
+and use their own instrumented images.
+
+The publish pipeline signs and publishes both archives for nightlies and releases;
+release promotion also carries the companion and its signature into the release
+bucket and checksum manifests. The companion contains `share/julia/compiled/...`
+and can be extracted into the root of the matching Julia installation:
+
+```sh
+tar -xzf julia-VERSION-PLATFORM.checkbounds.tar.gz -C /path/to/julia
+```
+
+Use the companion from the same build, platform and variant as the Julia binary.
+Its URL is the matching Julia tarball URL with `.tar.gz` replaced by
+`.checkbounds.tar.gz`. For nightlies, resolve the installed build's commit rather
+than independently downloading two `latest` objects, which can race a new build.
+No companion files are included in ordinary tarballs or installers.
