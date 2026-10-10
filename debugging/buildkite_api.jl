@@ -12,11 +12,18 @@ end
 const buildkite_token = strip(String(read(buildkite_token_path)))
 const buildkite_api = "https://api.buildkite.com/v2"
 
+# Buildkite (and the artifact storage it redirects to) is frequently slow to
+# answer, and our artifacts are often hundreds of megabytes, so HTTP's default
+# 30 second timeouts are far too aggressive here.
+const buildkite_timeout = 10*60
+
 function buildkite_headers()
     return ["Authorization" => "Bearer $(buildkite_token)"]
 end
 function buildkite_get(path::String; kwargs...)
-    return HTTP.get("$(path)"; headers=buildkite_headers(), kwargs...)
+    return HTTP.get("$(path)"; headers=buildkite_headers(),
+                    connect_timeout=buildkite_timeout, readtimeout=buildkite_timeout,
+                    kwargs...)
 end
 
 struct BuildkiteJob
@@ -58,7 +65,8 @@ end
 function download(ba::BuildkiteArtifact, prefix::String; downloads_dir::String = @get_scratch!("artifact-downloads"), update_period=Inf)
     cache_path = joinpath(downloads_dir, bytes2hex(ba.hash.bytes))
     if !isfile(cache_path)
-        HTTP.download(ba.url, cache_path; headers=buildkite_headers(), update_period)
+        HTTP.download(ba.url, cache_path; headers=buildkite_headers(), update_period,
+                      connect_timeout=buildkite_timeout, readtimeout=buildkite_timeout)
     end
     final_path = joinpath(prefix, ba.path)
     cp(cache_path, final_path)
