@@ -66,6 +66,18 @@ else
     MFLAGS+=( "TAGGED_RELEASE_BANNER=Official https://julialang.org/ release" )
 fi
 MFLAGS+=( "JULIA_CPU_TARGET=${JULIA_CPU_TARGET}" )
+# Bundle the `--check-bounds=yes` stdlib pkgimages (JuliaLang/julia#60054) in everything
+# but releases: users can't usefully cache them across ever-changing nightlies, and our own
+# test jobs run with `--check-bounds=yes`. Set JULIA_CHECK_BOUNDS_PKGIMAGES to override.
+# Ignored by Julia versions that always bundle them.
+if [[ -z "${JULIA_CHECK_BOUNDS_PKGIMAGES-}" ]]; then
+    if [[ "${RELEASE_TAG_FLOW}" == "true" ]]; then
+        JULIA_CHECK_BOUNDS_PKGIMAGES=0
+    else
+        JULIA_CHECK_BOUNDS_PKGIMAGES=1
+    fi
+fi
+MFLAGS+=( "JULIA_CHECK_BOUNDS_PKGIMAGES=${JULIA_CHECK_BOUNDS_PKGIMAGES}" )
 
 # Finish off with any extra make flags from the `.arches` file
 IFS=',' read -ra ARCHES_FLAGS <<<"${MAKE_FLAGS}"

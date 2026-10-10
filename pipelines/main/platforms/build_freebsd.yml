@@ -21,4 +21,5 @@ steps:
           # Receive some environment mappings from our templating engine
           TRIPLET: "${TRIPLET?}"
           MAKE_FLAGS: "${MAKE_FLAGS?}"
+          JULIA_CHECK_BOUNDS_PKGIMAGES: "${JULIA_CHECK_BOUNDS_PKGIMAGES-}"
           BUILDKITE_CANCEL_SIGNAL: "SIGQUIT"
