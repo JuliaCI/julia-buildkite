@@ -64,11 +64,14 @@ AppCopyright=Copyright 2009-{#CurrentYear}; Julia Language
 VersionInfoDescription=Julia Installer
 PrivilegesRequiredOverridesAllowed=commandline
 WizardStyle=modern
-Compression=lzma2/ultra
+; lzma2/max (8 MB dictionary) rather than ultra (32 MB): the installer
+; compiles under Wine on the single Secure publish agent, and ultra spent
+; ~11 minutes per build there for a ~6% smaller .exe. max halves that.
+Compression=lzma2/max
 SolidCompression=yes
 ; Parallel lzma2 block compression (slightly worse ratio, much faster); the
 ; separate 64-bit compressor process avoids the 32-bit compiler's memory
-; ceiling on multiple ultra-dictionary block threads.
+; ceiling on multiple block threads.
 LZMAUseSeparateProcess=yes
 LZMANumBlockThreads=4
 DefaultDirName={autopf}\{#DirName}
