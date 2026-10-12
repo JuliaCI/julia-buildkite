@@ -12,7 +12,8 @@ repository's `main` branch at job time; everything that runs them lives here.
 | `ttfx_launch.sh` | the launch step: decides whether this build is measured, uploads the job |
 | `paths.txt` | the paths a pull request must touch to be measured without the label |
 | `ttfx_ci.sh` | the job: fetch the builds, check out the snippets, benchmark, compare, report |
-| `ttfx_bench.jl` | the driver: interleaved ABBA measurement, one record per task, arm and block, and the trace-compile runs |
+| `ttfx_bench.jl` | the driver: interleaved ABBA measurement, one record per task, arm and block, and the trace-compile and invalidation runs |
+| `ttfx_invalidations.jl` | loaded by a task script in the invalidation run: summarizes the invalidations of its load and run phases |
 | `ttfx_compare.jl` | the verdict and the markdown report |
 | `ttfx_build_state.jl` | whether a commit's julia-ci build is pending, done, failed or absent |
 | `exclude.txt` | tasks not measured; every other task in the checkout is |
@@ -93,7 +94,7 @@ else:
 
 | artifact | content |
 |---|---|
-| `ttfx/results.json` | records: `arm, package, task, block, order, status, error, precompile_time, load_times, run_times, total_times, load_stats, run_stats, load_times_gcoff, run_times_gcoff, total_times_gcoff, load_stats_gcoff, run_stats_gcoff, gc_after_load, error_gcoff, packages_hash` |
+| `ttfx/results.json` | records: `arm, package, task, block, order, status, error, precompile_time, load_times, run_times, total_times, load_stats, run_stats, load_times_gcoff, run_times_gcoff, total_times_gcoff, load_stats_gcoff, run_stats_gcoff, gc_after_load, error_gcoff, invalidations, packages_hash` |
 | `ttfx/results-meta.json` | the builds (`arms.<label>`: version, commit, date, CPU threads seen), machine, settings, task list, snippets commit, Buildkite build |
 | `ttfx/report.md`, `ttfx/compare.json` | the report and, on pull requests, the per-task and suite verdicts |
 | `ttfx/benchmark.log` | the driver's log |
@@ -124,6 +125,18 @@ do not affect `status`; if one fails (a task that allocates
 too much to run without collection, say) the message is kept in `error_gcoff` and the
 normal numbers stand.
 
+After the trace run each task script runs once more per arm, also untimed, logging
+invalidations from the script's first marker to its last (the logs
+`SnoopCompileCore.@snoop_invalidations` reads, without the package). `invalidations` in
+the block 1 record holds, for the `load` and `run` phases: `invalidated`, the
+MethodInstances whose compiled code was dropped; `by_definition`, those invalidated by a
+method definition, and `definitions`, how many definitions invalidated anything;
+`rejected_at_load`, package-image code not reinstated on load because an edge no longer
+holds; and `top_definitions` and `top_rejected`, the five causes with the most, as
+`[method, count]`. Logging slows loading by up to a sixth, so it is kept out of the timed
+runs, and out of the trace run so the summary's own compilation stays out of the trace. The
+counts are deterministic for a given build and set of package versions.
+
 ## Release reference: the weekly schedule (julia-ci)
 
 A second `julia-ci` schedule runs on Saturday nights (`0 4 * * 0` UTC) with
@@ -150,5 +163,5 @@ Environment variables on the job: `TTFX_EXCLUDE` (default `exclude.txt`, or `non
 `TTFX_SNIPPETS_REPO` and `TTFX_SNIPPETS_REF`, `TTFX_RELEASE` (`latest` or a version;
 unset measures the build), `TTFX_RELEASES_URL` and `TTFX_LATEST_RELEASE_API`; on the
 launch step, `TTFX_PATHS` (default `paths.txt`). The job's budget is the sum of the tasks' precompile times, times two arms,
-times the blocks, plus one untimed run of every task script per arm, plus package
+times the blocks, plus two untimed runs of every task script per arm, plus package
 downloads: exclude tasks before raising the timeout.

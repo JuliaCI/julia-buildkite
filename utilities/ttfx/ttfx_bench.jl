@@ -26,7 +26,7 @@
 # Records: {arm, package, task, block, order, status, error, precompile_time, load_times,
 # run_times, total_times, load_stats, run_stats, load_times_gcoff, run_times_gcoff,
 # total_times_gcoff, load_stats_gcoff, run_stats_gcoff, gc_after_load, error_gcoff,
-# packages_hash}. `order` is the arm's position within the block.
+# invalidations, packages_hash}. `order` is the arm's position within the block.
 # A task that fails on any arm finishes the current block, so every arm gets its one try,
 # and skips the remaining blocks: a broken package does not cost the whole ABBA.
 # The task script prints "load, run, total seconds"; the `*_times` arrays keep every
@@ -35,9 +35,10 @@
 # `*_gcoff` fields are a second set of repeats with the GC disabled for both phases and
 # one forced collection between them (`gc_after_load`, seconds, excluded from both), so
 # load and run can be read without GC pauses landing in them; a failure there is kept in
-# `error_gcoff` and does not affect `status`. `packages_hash` identifies the resolved
-# package versions so a comparison can tell a build difference from a resolution
-# difference.
+# `error_gcoff` and does not affect `status`. `invalidations` summarizes, in block 1 with
+# --tracedir, an untimed run that logs invalidations (ttfx_invalidations.jl).
+# `packages_hash` identifies the resolved package versions so a comparison can tell a
+# build difference from a resolution difference.
 
 using Dates, Printf, SHA, TOML
 include(joinpath(@__DIR__, "ttfx_json.jl"))
@@ -263,10 +264,16 @@ end
 # remains is the second marker's block being lowered inside the load window, about a
 # quarter of a millisecond against loads of tens of milliseconds and up.
 #
+# With `TTFX_INVALIDATIONS=on` (the untimed invalidations run) the script also logs
+# invalidations from the first marker to the third and prints a summary of the load and
+# run phases (ttfx_invalidations.jl). In every other run this adds two branches not
+# taken, one before the first marker and one in the second marker's block.
+#
 # The original `task.jl` is left alone, and a script without exactly these markers runs
 # as it is.
 const PHASE_MARKERS = ("__t1 = time()", "__t2 = time()", "__t3 = time()")
 const STATS_PREFIX = "__TTFX_STATS__:"
+const INV_PREFIX = "__TTFX_INV__:"
 
 function instrument_task(proj::String)
     script = joinpath(proj, "task.jl")
@@ -277,6 +284,7 @@ function instrument_task(proj::String)
         PHASE_MARKERS[1] => "begin " * snapshot("__ttfx_s1") * "; " * PHASE_MARKERS[1] * " end",
         PHASE_MARKERS[2] => """
         begin
+            __ttfx_inv && (__ttfx_inv_n2 = (length(__ttfx_invlogs[1]), length(__ttfx_invlogs[2])))
             $(snapshot("__ttfx_s2"))
             __ttfx_gc_after_load = 0.0
             __ttfx_s2r = __ttfx_s2
@@ -291,6 +299,9 @@ function instrument_task(proj::String)
         end""",
         PHASE_MARKERS[3] => PHASE_MARKERS[3] * "\n" * snapshot("__ttfx_s3"))
     src = "const __ttfx_gc_off = get(ENV, \"TTFX_GC\", \"\") == \"off\"\n" *
+          "const __ttfx_inv = get(ENV, \"TTFX_INVALIDATIONS\", \"\") == \"on\"\n" *
+          "__ttfx_inv && include($(repr(joinpath(@__DIR__, "ttfx_invalidations.jl"))))\n" *
+          "__ttfx_inv && (__ttfx_invlogs = Main.TTFXInvalidations.start())\n" *
           "Base.cumulative_compile_timing(true)\n__ttfx_gc_off && GC.enable(false)\n" * src * "\n" * """
     __ttfx_gc_off && GC.enable(true)
     let stats(a, b) = (d = Base.GC_Diff(b[1], a[1]);
@@ -299,6 +310,8 @@ function instrument_task(proj::String)
         println(stdout, "$STATS_PREFIX{\\"gc_off\\":\$__ttfx_gc_off,\\"gc_after_load\\":\$__ttfx_gc_after_load,\\"load\\":",
                 stats(__ttfx_s1, __ttfx_s2), ",\\"run\\":", stats(__ttfx_s2r, __ttfx_s3), "}")
     end
+    __ttfx_inv && Main.TTFXInvalidations.stop()
+    __ttfx_inv && Main.TTFXInvalidations.report(__ttfx_invlogs, __ttfx_inv_n2)
     """
     instrumented = joinpath(proj, "task_ttfx.jl")
     write(instrumented, src)
@@ -319,9 +332,21 @@ function trace_compile(arm::Arm, env, proj::String, script::String, timeout::Flo
     return (; file = tracefile, statements, ok)
 end
 
+# The instrumented task script once more, untimed, logging invalidations
+# (instrument_task): the summary ttfx_invalidations.jl prints, or nothing when the run
+# failed or the script is not instrumented. Kept out of the trace run so the summary's
+# own compilation does not land in the trace.
+function invalidations(arm::Arm, env, proj::String, script::String, timeout::Float64)
+    script == joinpath(proj, "task.jl") && return nothing
+    cmd = addenv(`$(arm.julia) --startup-file=no --project=$proj $script`, env..., "TTFX_INVALIDATIONS" => "on")
+    out, _, ok, _ = run_timed(cmd, timeout)
+    m = match(Regex("^" * INV_PREFIX * raw"(\{.*\})$", "m"), out)
+    return ok && m !== nothing ? json_parse(m.captures[1]) : nothing
+end
+
 # One sample: clear the caches, precompile the project, then run the task script
-# `repeats` times in fresh processes. With `tracefile`, the script runs once more after
-# them, untimed and instrumented (trace_compile).
+# `repeats` times in fresh processes. With `tracefile`, the script runs twice more after
+# them, untimed: once traced (trace_compile), once logging invalidations.
 function measure(arm::Arm, depot::String, proj::String, script::String, repeats::Int, timeout::Float64, logname::String;
                  tracefile::Union{Nothing,String} = nothing)
     clear_compiled!(depot)
@@ -349,6 +374,7 @@ function measure(arm::Arm, depot::String, proj::String, script::String, repeats:
     end
     trace = tracefile === nothing || isempty(r.load) ? nothing :
         trace_compile(arm, env, proj, script, timeout, tracefile, logname)
+    inv = tracefile === nothing || isempty(r.load) ? nothing : invalidations(arm, env, proj, script, timeout)
     return (; status, error = status == "ok" ? nothing : r.err, precompile_time,
               load_times = r.load, run_times = r.run, total_times = r.total,
               load_stats = r.load_stats, run_stats = r.run_stats,
@@ -359,7 +385,7 @@ function measure(arm::Arm, depot::String, proj::String, script::String, repeats:
               run_stats_gcoff = g === nothing ? Any[] : g.run_stats,
               gc_after_load = g === nothing ? Float64[] : g.gc_after_load,
               error_gcoff = g === nothing || length(g.load) == repeats ? nothing : g.err,
-              trace)
+              trace, invalidations = inv)
 end
 
 # The task script `repeats` times in fresh processes, stopping at the first failure.
@@ -480,6 +506,7 @@ function main()
                          run_stats_gcoff = get(result, :run_stats_gcoff, Any[]),
                          gc_after_load = get(result, :gc_after_load, Float64[]),
                          error_gcoff = get(result, :error_gcoff, nothing),
+                         invalidations = get(result, :invalidations, nothing),
                          packages_hash = packages_hash(projs[arm.label]))
                 push!(records, rec)
                 write_results()
@@ -507,6 +534,12 @@ function main()
                 if trace !== nothing
                     println("  trace    $(rpad(arm.label, 8)) $(trace.statements) precompile statements in $(basename(trace.file))",
                             trace.ok ? "" : " (the instrumented run failed, see the end of the file)")
+                end
+                inv = get(result, :invalidations, nothing)
+                if inv !== nothing
+                    @printf("  invalid. %-8s load %d (%d by definitions, %d rejected package code)  run %d\n",
+                        arm.label, inv["load"]["invalidated"], inv["load"]["by_definition"],
+                        inv["load"]["rejected_at_load"], inv["run"]["invalidated"])
                 end
                 flush(stdout)
             end
