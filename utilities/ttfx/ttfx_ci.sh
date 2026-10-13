@@ -5,13 +5,15 @@
 # regressions fail the job. On master and release branches the build is measured alone
 # and the data kept as Buildkite artifacts. With TTFX_RELEASE set, a published release
 # ("latest": the newest stable one) is measured alone instead of a build: the weekly
-# reference run. See README.md alongside this script.
+# reference run. With TTFX_BASE=commit the build (the nightly optimized one) is compared
+# with the regular build of the same commit instead. See README.md alongside this script.
 set -euo pipefail
 
 # shellcheck source=SCRIPTDIR/../build_envs.sh
 source .buildkite/utilities/build_envs.sh
 
-if [[ "${OS}" != "macos" ]]; then
+# An optimized build's OS is macosopt
+if [[ "${OS%opt}" != "macos" ]]; then
     echo "The TTFX job only knows how to re-sign and run macOS builds (got ${TRIPLET})" >&2
     exit 1
 fi
@@ -36,6 +38,9 @@ TTFX_BASE_WAIT_MINUTES="${TTFX_BASE_WAIT_MINUTES:-20}"
 TTFX_RELEASE="${TTFX_RELEASE:-}"
 TTFX_RELEASES_URL="${TTFX_RELEASES_URL:-https://julialang-s3.julialang.org/bin}"
 TTFX_LATEST_RELEASE_API="${TTFX_LATEST_RELEASE_API:-https://api.github.com/repos/JuliaLang/julia/releases/latest}"
+# "commit": compare with the regular build of this build's own commit rather than with
+# the merge-base (the nightly optimized build, pipelines/main/misc/ttfx/ttfx_opt.yml)
+TTFX_BASE="${TTFX_BASE:-}"
 
 rm -rf "${TTFX_DIR}"
 mkdir -p "${TTFX_DIR}"
@@ -77,14 +82,16 @@ install_julia() {
 
 # The base tarball of a commit: staged by julia-ci below the commit sha, already promoted
 # to the nightlies, or staged by julia-pr when the commit is on a pull request's branch.
-# All are readable anonymously.
+# All are readable anonymously. The base is always a regular build, also when the head
+# is an optimized one.
+BASE_OS="${OS%opt}"
 fetch_base_build() {
     local commit="$1" out="$2"
     local short="${commit:0:${SHORT_COMMIT_LENGTH}}"
-    local name="julia-${short}-${OS}-${ARCH}.tar.gz"
+    local name="julia-${short}-${BASE_OS}-${ARCH}.tar.gz"
     local url
     for url in "https://${TTFX_BASE_STAGING_BUCKET}.s3.amazonaws.com/${S3_BUCKET_PREFIX}/${commit}/${name}" \
-               "${TTFX_NIGHTLIES_URL}/${S3_BUCKET_PREFIX}/${OS}/${ARCH}/${MAJMIN}/${name}" \
+               "${TTFX_NIGHTLIES_URL}/${S3_BUCKET_PREFIX}/${BASE_OS}/${ARCH}/${MAJMIN}/${name}" \
                "https://${TTFX_BASE_PR_STAGING_BUCKET}.s3.amazonaws.com/${S3_BUCKET_PREFIX}/${commit}/${name}"; do
         if curl -fsSL --retry 3 -o "${out}" "${url}"; then
             echo "downloaded ${url}"
@@ -162,6 +169,10 @@ BASE_NOTE=""
 MERGE_BASE=""
 if [[ -n "${TTFX_RELEASE}" ]]; then
     : # a release stands alone
+elif [[ "${TTFX_BASE}" == "commit" ]]; then
+    BASE_BRANCH="${BUILDKITE_BRANCH:-master}"
+    MERGE_BASE="$(git rev-parse HEAD)"
+    echo "--- Comparing against the regular ${BASE_BRANCH} build of this commit"
 elif [[ "${BUILDKITE_PIPELINE_SLUG:-}" == "julia-pr" && "${BUILDKITE_PULL_REQUEST:-false}" != "false" ]]; then
     BASE_BRANCH="${BUILDKITE_PULL_REQUEST_BASE_BRANCH:-master}"
     echo "--- Find the merge-base with ${BASE_BRANCH}"
@@ -216,7 +227,11 @@ if [[ -n "${MERGE_BASE}" ]]; then
                 ;;
         esac
     done
-    BASE_NOTE="the ${BASE_BRANCH} build of the merge-base"
+    if [[ "${TTFX_BASE}" == "commit" ]]; then
+        BASE_NOTE="the regular ${BASE_BRANCH} build of the same commit"
+    else
+        BASE_NOTE="the ${BASE_BRANCH} build of the merge-base"
+    fi
     install_julia "${TTFX_DIR}/base.tar.gz" base
     ARMS=( "base=${ARMS_DIR}/base" "head=${ARMS_DIR}/head" )
 fi

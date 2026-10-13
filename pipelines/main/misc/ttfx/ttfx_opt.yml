@@ -1,0 +1,31 @@
+# The nightly optimized build (PGO and ThinLTO, JULIA_CI_BUILD_MODE=opt) on the TTFX
+# tasks: the same job as ttfx_macos.yml, comparing the optimized build of this commit
+# (head) with the regular master build of the same commit (base), interleaved in ABBA
+# blocks, so what the optimizations buy is measured on one machine in one job.
+# Rendered by render_launch_pipeline.py on the daily julia-ci schedule only, after the
+# optimized macOS aarch64 build (utilities/ttfx/README.md). The job's own label and key
+# keep it apart from the master job for julia-ci-timing. It posts no commit status (the
+# master job's `TTFX` status is on the same commit) and may fail without failing the
+# nightly: a "regression" here is the optimized build being slower than the regular one.
+steps:
+  - group: "TTFX opt"
+    steps:
+      - label: ":macos: TTFX opt aarch64-apple-darwin"
+        key: "ttfx_opt_aarch64-apple-darwin"
+        depends_on:
+          - "build_aarch64-apple-darwinopt"
+        plugins:
+          - JuliaCI/external-buildkite#v1:
+              version: "./.buildkite-external-version"
+              repo_url: "https://github.com/JuliaCI/julia-buildkite"
+        commands: "bash .buildkite/utilities/ttfx/ttfx_ci.sh"
+        # Two arms, as on a pull request
+        timeout_in_minutes: 240
+        soft_fail: true
+        agents:
+          queue: "test"
+          os: "macos"
+          arch: "aarch64"
+        env:
+          TRIPLET: "aarch64-apple-darwinopt"
+          TTFX_BASE: "commit"

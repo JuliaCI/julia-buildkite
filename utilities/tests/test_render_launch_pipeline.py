@@ -86,7 +86,7 @@ class RenderLaunchPipelineTests(unittest.TestCase):
         self.assertEqual(output.count('key: "build_'), 11)
         self.assertEqual(output.count('key: "test_'), 9)
         self.assertEqual(output.count("soft_fail: false"), 11)
-        self.assertEqual(output.count("soft_fail: true"), 9)
+        self.assertEqual(output.count("soft_fail: true"), 10)  # the tests, and TTFX opt
         self.assertEqual(
             output.count('depends_on:\n          - "build_x86_64-linux-gnusrcassert"'),
             2,
@@ -94,7 +94,8 @@ class RenderLaunchPipelineTests(unittest.TestCase):
         for triplet in OPT_TRIPLETS:
             self.assertEqual(
                 output.count(f'depends_on:\n          - "build_{triplet}"'),
-                2,  # its test job, and its publish trigger
+                # its test job, and its publish trigger; macOS aarch64 its TTFX job too
+                3 if triplet == "aarch64-apple-darwinopt" else 2,
             )
         self.assertEqual(
             output.count('depends_on:\n          - "build_i686-linux-gnuopt"'),
@@ -299,6 +300,25 @@ class RenderLaunchPipelineTests(unittest.TestCase):
             self.assertNotIn("trigger:", output)
         # The variable is left for the launch agent's `pipeline upload` to resolve
         self.assertIn('TTFX_RELEASE: "${TTFX_RELEASE:-latest}"', output)
+
+    def test_schedule_measures_the_optimized_build_on_ttfx(self):
+        output = render(source="schedule", BUILDKITE_PIPELINE_SLUG="julia-ci")
+        self.assertEqual(output.count('group: "TTFX opt"'), 1)
+        step = re.search(
+            r'^      - label: ":macos: TTFX opt aarch64-apple-darwin"\n'
+            r'.*?(?=^      - |^  - group:|\Z)', output, re.M | re.S,
+        ).group()
+        self.assertIn('key: "ttfx_opt_aarch64-apple-darwin"', step)
+        self.assertIn('depends_on:\n          - "build_aarch64-apple-darwinopt"', step)
+        self.assertIn('TRIPLET: "aarch64-apple-darwinopt"', step)
+        self.assertIn('TTFX_BASE: "commit"', step)
+        self.assertIn("soft_fail: true", step)
+        self.assertIn('arch: "aarch64"', step)
+        # The master job's `TTFX` status is on the same commit
+        self.assertNotIn("github_commit_status", step)
+        # Not on labeled pull requests, nor on per-commit builds
+        for args, source in ((("--scheduled-workloads",), None), ((), None)):
+            self.assertNotIn("TTFX opt", render(*args, source=source))
 
     def test_publish_dependencies_exist(self):
         for source, build_env in ((None, {}), ("schedule", {}),

@@ -34,8 +34,9 @@ current master (1.14) it is a no-op, so the powerpc arches are intentionally
 omitted (see OMITTED_POWERPC below). This matches the runtime behaviour.
 
 Schedule builds emit the scheduled workload groups and publish triggers instead
-of the per-commit groups; the weekly TTFX_RELEASE build (a second julia-ci
-schedule) emits the release TTFX job alone. Release branch and tag builds add the no-GPL group
+of the per-commit groups, and the TTFX job of the optimized macOS build; the
+weekly TTFX_RELEASE build (a second julia-ci schedule) emits the release TTFX
+job alone. Release branch and tag builds add the no-GPL group
 (and its publish triggers) to the per-commit groups, and NOGPL_ONLY=true
 renders only those. Labeled PRs render the same workload groups as a
 supplemental pipeline, without publish triggers. Per-commit results are grouped
@@ -674,6 +675,10 @@ def main():
         blocks = [schedule_group_text(label, arches, allow_fail)
                   for label, allow_fail, arches in SCHEDULE_GROUPS]
         if is_schedule and not args.scheduled_workloads:
+            # TTFX of the optimized build against the regular build of the same
+            # commit, for julia-ci-timing; not on labeled pull requests, which
+            # would hold a macOS agent for hours (utilities/ttfx/README.md)
+            blocks.append(verbatim_group_text(os.path.join(MISC, "ttfx", "ttfx_opt.yml")))
             triplets = upload_triplets(SCHEDULE_UPLOAD_ARCHES, SCHEDULED_PLATFORMS)
             blocks.append(publish_group_text(triplets, scheduled=True))
         sys.stdout.write("steps:\n")
