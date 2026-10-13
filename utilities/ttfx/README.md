@@ -8,7 +8,7 @@ repository's `main` branch at job time; everything that runs them lives here.
 
 | file | role |
 |---|---|
-| `pipelines/main/misc/ttfx/` | the group launcher (registered in `render_launch_pipeline.py`) and the macOS job |
+| `pipelines/main/misc/ttfx/` | the group launcher (registered in `render_launch_pipeline.py`), the macOS job, and its release and optimized-build variants |
 | `ttfx_launch.sh` | the launch step: decides whether this build is measured, uploads the job |
 | `paths.txt` | the paths a pull request must touch to be measured without the label |
 | `ttfx_ci.sh` | the job: fetch the builds, check out the snippets, benchmark, compare, report |
@@ -23,7 +23,8 @@ repository's `main` branch at job time; everything that runs them lives here.
 | pipeline | measured | mode |
 |---|---|---|
 | `julia-pr` (pull requests) | only when the pull request touches a path in `paths.txt` (`src/`, `Compiler/`, `base/loading.jl`, `base/precompilation.jl`), or has the `needs TTFX check` label | comparison: the pull request's build against the build of its merge-base (master's, or the base pull request's when stacked) |
-| `julia-ci` (master, release branches, the nightly schedule) | every build | absolute: the build alone |
+| `julia-ci` (master, release branches) | every build | absolute: the build alone |
+| `julia-ci` (the daily schedule) | the optimized macOS aarch64 build | comparison: the optimized build against the regular build of the same commit |
 | `julia-ci` (the weekly `TTFX_RELEASE` schedule) | the newest stable release | absolute: the release alone, as a reference |
 | `julia-buildkite-ci` (this repository's self-test) | every build | comparison: the julia master commit under test against its parent |
 
@@ -156,12 +157,32 @@ differ from the master job's, which is how julia-ci-timing tells them apart. To 
 a specific release, create a julia-ci build on `master` with `TTFX_RELEASE=1.13.1`
 (say) in its environment.
 
+## Optimized builds: the daily schedule (julia-ci)
+
+The daily `julia-ci` schedule builds Julia with `JULIA_CI_BUILD_MODE=opt` (PGO and
+ThinLTO, `contrib/optimized`), which no per-commit build measures. After the
+`build_aarch64-apple-darwinopt` step, the `TTFX opt` group
+(`pipelines/main/misc/ttfx/ttfx_opt.yml`) runs the comparison mode with
+`TTFX_BASE=commit`: `head` is the optimized build and `base` the regular master build
+of the same commit, fetched (and waited for) as a pull request's merge-base is. Both are
+measured interleaved in the same job, so the difference is what the optimizations buy,
+free of the drift between two separate jobs. The renderer emits it on the schedule
+itself only, not for pull requests labelled `needs full CI`.
+
+A "regression" in this job is the optimized build being slower than the regular one;
+the job is `soft_fail`, so it never fails the nightly, and it posts no commit status
+(the master job's `TTFX` status is on the same commit). Its label and key
+(`:macos: TTFX opt <triplet>`, `ttfx_opt_<triplet>`) keep it apart for julia-ci-timing,
+which draws the optimized build next to the master series with the paired difference.
+
 ## Knobs
 
 Environment variables on the job: `TTFX_EXCLUDE` (default `exclude.txt`, or `none`),
 `TTFX_BLOCKS` (2), `TTFX_REPEATS` (3), `TTFX_BASE_WAIT_MINUTES` (20),
 `TTFX_SNIPPETS_REPO` and `TTFX_SNIPPETS_REF`, `TTFX_RELEASE` (`latest` or a version;
-unset measures the build), `TTFX_RELEASES_URL` and `TTFX_LATEST_RELEASE_API`; on the
+unset measures the build), `TTFX_BASE` (`commit` compares with the regular build of the
+same commit; unset uses the merge-base on pull requests), `TTFX_RELEASES_URL` and
+`TTFX_LATEST_RELEASE_API`; on the
 launch step, `TTFX_PATHS` (default `paths.txt`). The job's budget is the sum of the tasks' precompile times, times two arms,
 times the blocks, plus two untimed runs of every task script per arm, plus package
 downloads: exclude tasks before raising the timeout.
