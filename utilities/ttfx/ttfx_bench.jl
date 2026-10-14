@@ -344,8 +344,29 @@ function invalidations(arm::Arm, env, proj::String, script::String, timeout::Flo
     return ok && m !== nothing ? json_parse(m.captures[1]) : nothing
 end
 
-# One sample: clear the caches, precompile the project, then run the task script
-# `repeats` times in fresh processes. With `tracefile`, the script runs twice more after
+# The first process to load freshly written pkgimages pays a one-time cost that no later
+# process does, the GC-off set's first included: on the macOS agents some 55 to 110 ms a
+# task, up to 670 ms, that a user pays once after precompiling rather than on every
+# `using`. One untimed process that loads every direct dependency of the project takes
+# it, so the cold load of both sets of repeats is a load from cold caches and nothing
+# more. A dependency that fails to load here fails in the timed runs, which report it.
+function warmup_load(arm::Arm, env, proj::String, timeout::Float64)
+    code = """
+        using TOML
+        for (name, uuid) in get(TOML.parsefile(Base.active_project()), "deps", Dict())
+            try
+                Base.require(Base.PkgId(Base.UUID(uuid), name))
+            catch
+            end
+        end
+        """
+    run_timed(addenv(`$(arm.julia) --startup-file=no --project=$proj -e $code`, env...,
+                     "JULIA_PKG_PRECOMPILE_AUTO" => "0"), timeout)
+    return nothing
+end
+
+# One sample: clear the caches, precompile the project, load its packages once untimed
+# (warmup_load), then run the task script `repeats` times in fresh processes. With `tracefile`, the script runs twice more after
 # them, untimed: once traced (trace_compile), once logging invalidations.
 function measure(arm::Arm, depot::String, proj::String, script::String, repeats::Int, timeout::Float64, logname::String;
                  tracefile::Union{Nothing,String} = nothing)
@@ -359,6 +380,8 @@ function measure(arm::Arm, depot::String, proj::String, script::String, repeats:
     pm = match(r"__TTFX_T__:([\d.eE+-]+)", out)
     pm === nothing && return (; status = "error", error = "could not parse precompile time from $(repr(out))")
     precompile_time = parse(Float64, pm.captures[1])
+    warmup_load(arm, env, proj, timeout)
+    clear_objcache!(depot)
 
     task_cmd = addenv(`$(arm.julia) --startup-file=no --project=$proj $script`, env...)
     r = run_repeats(task_cmd, repeats, timeout, logname * "-task")
@@ -366,7 +389,8 @@ function measure(arm::Arm, depot::String, proj::String, script::String, repeats:
     # The GC-off repeats only exist for an instrumented script (the env var does nothing
     # to a plain task.jl), and are skipped once the normal ones failed. The object cache
     # the normal repeats filled goes first, so their first repeat is as cold as the
-    # normal first repeat was.
+    # normal first repeat was (warmup_load took the one cost that clearing it does not
+    # bring back from both).
     g = nothing
     if script != joinpath(proj, "task.jl") && status != "error"
         clear_objcache!(depot)
