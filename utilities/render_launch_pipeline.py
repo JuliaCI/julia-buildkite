@@ -35,8 +35,8 @@ omitted (see OMITTED_POWERPC below). This matches the runtime behaviour.
 
 Schedule builds emit the scheduled workload groups and publish triggers instead
 of the per-commit groups, and the TTFX job of the optimized macOS build; the
-weekly TTFX_RELEASE build (a second julia-ci schedule) emits the release TTFX
-job alone. Release branch and tag builds add the no-GPL group
+weekly TTFX_RELEASE build (a second julia-ci schedule) emits the release and LTS
+TTFX jobs alone. Release branch and tag builds add the no-GPL group
 (and its publish triggers) to the per-commit groups, and NOGPL_ONLY=true
 renders only those; they also add the optimized groups (OPT_ONLY=true
 renders only those), whose tests gate their publish triggers on tags unless
