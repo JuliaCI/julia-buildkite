@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import tarfile
 import tempfile
+import textwrap
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -106,7 +107,10 @@ else:
 import os, pathlib, shutil, sys
 if sys.argv[1:3] == ["artifact", "download"]:
     assert sys.argv[3:5] == ["--step", "build_x86_64-fixture"]
-    shutil.copy(pathlib.Path(os.environ["FIXTURE_STAGE"]) / sys.argv[-2], sys.argv[-1])
+    sources = list(pathlib.Path(os.environ["FIXTURE_STAGE"]).glob(sys.argv[-2]))
+    assert sources, sys.argv[-2]
+    for source in sources:
+        shutil.copy(source, sys.argv[-1])
 elif sys.argv[1:3] == ["artifact", "upload"]:
     dest = pathlib.Path(os.environ["FIXTURE_OUTPUT"]) / "artifacts"
     dest.mkdir(exist_ok=True)
@@ -222,6 +226,33 @@ elif "checkbounds-pkgimages" in args:
         (self.stage / "julia-fixture.checkbounds.tar.gz").unlink()
         self.run_script("upload_julia.sh", "publish", success=False)
         self.assertEqual(list(self.output.iterdir()), [])
+
+    def test_juliac_extracts_normal_archive_with_companion_available(self):
+        for platform, arch in (("linux", "x86_64"), ("linux", "aarch64"),
+                               ("macos", "x86_64"), ("macos", "aarch64"),
+                               ("windows", "x86_64")):
+            with self.subTest(platform=platform, arch=arch):
+                with CheckboundsArtifactsTests(methodName="runTest") as case:
+                    case.fixtures(platform)
+                    basename = f"julia-fixture-{platform}-{arch}"
+                    for suffix in ("tar.gz", "checkbounds.tar.gz"):
+                        shutil.copy(case.stage / f"julia-fixture.{suffix}",
+                                    case.stage / f"{basename}.{suffix}")
+                    pipeline = ROOT / f"pipelines/main/misc/juliac/test_juliac_{platform}.yml"
+                    # Execute the actual download/extraction block, stopping before Julia runs.
+                    lines = []
+                    for line in pipeline.read_text().split("commands: |\n", 1)[1].splitlines():
+                        lines.append(line)
+                        if line.strip().startswith("tar -C ./usr "):
+                            break
+                    else:
+                        self.fail(f"No extraction command in {pipeline}")
+                    commands = textwrap.dedent("\n".join(lines)).replace("${ARCH?}", arch)
+                    commands = commands.replace("${TRIPLET}", "x86_64-fixture")
+                    case.write(case.utils / "extract.sh", "set -eu\n" + commands)
+                    case.run_script("extract.sh")
+                    self.assertTrue((case.work / "usr/bin/julia").is_file())
+                    self.assertFalse((case.work / f"{basename}.checkbounds.tar.gz").exists())
 
     def test_legacy_publish(self):
         self.fixtures("linux")

@@ -22,9 +22,9 @@ steps:
                 - "/cache/repos:/cache/repos"
         commands: |
           # Download pre-built julia, extract into `usr/`
-          buildkite-agent artifact download --step "build_${TRIPLET}" 'julia-*-linux-*.tar.gz' .
+          buildkite-agent artifact download --step "build_${TRIPLET}" 'julia-*-linux-${ARCH?}.tar.gz' .
           mkdir -p ./usr
-          tar -C ./usr --strip-components=1 -zxf julia-*-linux-*.tar.gz
+          tar -C ./usr --strip-components=1 -zxf julia-*-linux-${ARCH?}.tar.gz
           ln -s ./usr/bin/julia ./julia
 
           echo "--- Install and test JuliaC"
