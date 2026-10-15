@@ -28,6 +28,10 @@ jobs:
           exit "${failures}"
       - name: Test pipeline renderer
         run: python3 utilities/tests/test_render_launch_pipeline.py
+      - name: Test release signing
+        run: |
+          python3 utilities/tests/test_kms_gpg_sign.py
+          python3 utilities/tests/test_publish_retry_signature.py
       - name: Install buildkite-agent
         # The same release (and sha256) that JuliaCI/sandboxed-buildkite-agent
         # deploys to the Linux agents

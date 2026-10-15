@@ -127,6 +127,7 @@ def main():
         print(f"{name} verify FAILED")
         sys.exit(1)
     print(f"{name} verify OK")
+    assert K.verify_file_detached(loaded, data_path, sig_path), "own verifier rejected a valid signature"
 
     # Negative test: corrupted data must not verify
     bad_path = os.path.join(tmp, "bad.tar.gz")
@@ -136,6 +137,7 @@ def main():
     with open(bad_path, "wb") as f:
         f.write(bad)
     assert not verify(sig_path, bad_path), "corrupted data verified?!"
+    assert not K.verify_file_detached(loaded, bad_path, sig_path), "own verifier accepted corrupted data"
     print("negative test OK (corrupted data rejected)")
 
     print("PASS")

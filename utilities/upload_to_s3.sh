@@ -108,3 +108,56 @@ upload_to_s3() {
     echo "${output}" >&2
     return 1
 }
+
+# Replace a local file with the object an earlier run of this commit already
+# published at one of `<key>...` (in bucket `<bucket>`), if any.
+#
+# upload_to_s3 keeps such an object even when its bytes differ, and repackaging
+# (or re-signing, on macOS and Windows) does not reproduce them. A detached
+# signature is a separate object, so a retry after a partial upload would sign
+# bytes that never get published. Signing the published bytes avoids that.
+reuse_published_object() {
+    local file="$1" bucket="$2"
+    shift 2
+    local key info etag commit
+    for key in "$@"; do
+        info="$(aws s3api head-object --bucket "${bucket}" --key "${key}" \
+            --query '[ETag, Metadata."build-commit"]' --output text 2>/dev/null)" || continue
+        etag="$(cut -f1 <<<"${info}" | tr -d '"')"
+        commit="$(cut -f2 <<<"${info}")"
+        [[ "${BUILDKITE_COMMIT:-}" =~ ^[0-9a-f]{40}$ && "${commit}" == "${BUILDKITE_COMMIT}" ]] || continue
+        if [[ "${etag}" != "$(openssl dgst -md5 -r "${file}" | cut -d' ' -f1)" ]]; then
+            echo "s3://${bucket}/${key} was published by an earlier run of this commit; using it instead of ${file}"
+            aws s3 cp --only-show-errors "s3://${bucket}/${key}" "${file}"
+        fi
+        return 0
+    done
+}
+
+# Fail if any `<bucket/key>.asc` is already published but is not a valid
+# signature of `<file>` by the key in `<pubkey>`.
+#
+# Signature objects are write-once like every other object, and upload_to_s3
+# keeps an existing one of the same commit, so a signature left by an earlier
+# run (whose tarball never got published, or differs) would stay next to a
+# tarball it does not sign. Stop before publishing anything: removing that
+# signature is a manual repair.
+check_published_signatures() {
+    local file="$1" pubkey="$2"
+    shift 2
+    local verifier
+    verifier="$(dirname "${BASH_SOURCE[0]}")/verify_tarball_signatures.py"
+    local tmp target bad=0
+    tmp="$(mktemp -d)"
+    ln -s "$(realpath "${file}")" "${tmp}/published.tar.gz"
+    for target in "$@"; do
+        aws s3api head-object --bucket "${target%%/*}" --key "${target#*/}.asc" >/dev/null 2>&1 || continue
+        aws s3 cp --only-show-errors "s3://${target}.asc" "${tmp}/published.tar.gz.asc"
+        if ! python3 "${verifier}" "${pubkey}" "${tmp}/published.tar.gz" >/dev/null 2>&1; then
+            echo "ERROR: s3://${target}.asc is already published and is not a signature of the tarball being published; remove it by hand and re-run" >&2
+            bad=1
+        fi
+    done
+    rm -rf "${tmp}"
+    return "${bad}"
+}

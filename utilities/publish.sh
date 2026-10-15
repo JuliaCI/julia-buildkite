@@ -160,13 +160,19 @@ if [[ "${#DEFERRED_MACOS[@]}" -gt 0 ]]; then
             continue
         fi
         upload_ok=1
-        PIDS=()
-        for i in "${!files[@]}"; do
-            upload_to_s3 "${files[$i]}" "${targets[$i]}" &
-            PIDS+=( "$!" )
-        done
-        for pid in "${PIDS[@]}"; do
-            wait "${pid}" || upload_ok=0
+        # Signatures last, as in upload_julia.sh.
+        for pass in products signatures; do
+            [[ "${upload_ok}" -eq 1 ]] || break
+            PIDS=()
+            for i in "${!files[@]}"; do
+                if [[ "${files[$i]}" == *.asc ]]; then kind=signatures; else kind=products; fi
+                [[ "${kind}" == "${pass}" ]] || continue
+                upload_to_s3 "${files[$i]}" "${targets[$i]}" &
+                PIDS+=( "$!" )
+            done
+            for pid in ${PIDS[@]+"${PIDS[@]}"}; do
+                wait "${pid}" || upload_ok=0
+            done
         done
         if [[ "${upload_ok}" -ne 1 ]]; then
             echo "ERROR: publishing ${name} failed" >&2

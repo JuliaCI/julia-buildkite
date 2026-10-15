@@ -459,6 +459,42 @@ def sign_file_detached(signer, pubkey, path, output_path=None):
     return output_path
 
 
+# DER DigestInfo prefix for SHA-256 (RFC 8017, section 9.2, note 1)
+SHA256_DIGEST_INFO = bytes.fromhex("3031300d060960864801650304020105000420")
+
+
+def verify_file_detached(pubkey, path, sig_path=None):
+    """Whether sig_path (default path + ".asc") holds a valid v4 binary
+    RSA/SHA-256 signature of path by pubkey, the kind sign_file_detached makes."""
+    if sig_path is None:
+        sig_path = path + ".asc"
+    data = dearmor(open(sig_path, "rb").read())
+    for tag, body in iter_packets(data):
+        if tag != PKT_SIGNATURE:
+            continue
+        if body[:4] != bytes([4, SIG_BINARY, ALGO_RSA, HASH_SHA256]):
+            return False
+        hashed_len = struct.unpack(">H", body[4:6])[0]
+        hashed_portion = body[: 6 + hashed_len]
+        off = 6 + hashed_len
+        unhashed_len = struct.unpack(">H", body[off : off + 2])[0]
+        off += 2 + unhashed_len + 2  # skip the unhashed subpackets and the left 16 bits
+        sig, _ = read_mpi(body, off)
+
+        hasher = hashlib.sha256()
+        with open(path, "rb") as f:
+            for chunk in iter(lambda: f.read(1 << 20), b""):
+                hasher.update(chunk)
+        hasher.update(hashed_portion + b"\x04\xff" + struct.pack(">I", len(hashed_portion)))
+        digest = hasher.digest()
+
+        k = (pubkey.n.bit_length() + 7) // 8
+        expected = SHA256_DIGEST_INFO + digest
+        expected = b"\x00\x01" + b"\xff" * (k - len(expected) - 3) + b"\x00" + expected
+        return pow(sig, pubkey.e, pubkey.n).to_bytes(k, "big") == expected
+    return False
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)

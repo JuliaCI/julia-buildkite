@@ -287,6 +287,20 @@ elif [[ "${OS}" == windows* ]]; then
     UPLOAD_EXTENSIONS+=( "zip" )
 fi
 
+echo "--- Reuse a tarball an earlier publish of this commit already uploaded"
+WRITE_ONCE_TARGETS=()
+PUBLISHED_TARBALL_KEYS=()
+for UPLOAD_TARGET in "${UPLOAD_TARGETS[@]}"; do
+    [[ "$(basename "${UPLOAD_TARGET}")" == julia-latest-* ]] && continue
+    WRITE_ONCE_TARGETS+=( "${UPLOAD_TARGET}" )
+    PUBLISHED_TARBALL_KEYS+=( "${UPLOAD_TARGET#*/}.tar.gz" )
+done
+reuse_published_object "${UPLOAD_FILENAME}.tar.gz" "${UPLOAD_TARGETS[0]%%/*}" "${PUBLISHED_TARBALL_KEYS[@]}"
+if [[ -n "${TARBALL_SIGNING_PUBKEY}" ]]; then
+    check_published_signatures "${UPLOAD_FILENAME}.tar.gz" "${TARBALL_SIGNING_PUBKEY}" \
+        "${WRITE_ONCE_TARGETS[@]/%/.tar.gz}"
+fi
+
 echo "--- GPG-sign the tarball"
 # The OpenPGP signature is assembled locally but the raw RSA signature
 # comes from AWS KMS, where the release signing key was generated and
@@ -336,14 +350,20 @@ fi
 # applies to PutObject). The signed products are NOT also uploaded to buildkite
 # artifacts -- the final S3 locations are the canonical output.
 echo "--- Promote to final S3 locations"
-PIDS=()
-for UPLOAD_TARGET in "${UPLOAD_TARGETS[@]}"; do
-    for EXT in "${UPLOAD_EXTENSIONS[@]}"; do
-        upload_to_s3 "${UPLOAD_FILENAME}.${EXT}" "${UPLOAD_TARGET}.${EXT}" &
-        PIDS+=( "$!" )
+# Signatures last: a run that stops in between leaves tarballs without
+# signatures, which a re-run completes by signing the published tarball.
+for PASS in products signatures; do
+    PIDS=()
+    for UPLOAD_TARGET in "${UPLOAD_TARGETS[@]}"; do
+        for EXT in "${UPLOAD_EXTENSIONS[@]}"; do
+            if [[ "${EXT}" == *.asc ]]; then KIND=signatures; else KIND=products; fi
+            [[ "${KIND}" == "${PASS}" ]] || continue
+            upload_to_s3 "${UPLOAD_FILENAME}.${EXT}" "${UPLOAD_TARGET}.${EXT}" &
+            PIDS+=( "$!" )
+        done
     done
+    wait_pids ${PIDS[@]+"${PIDS[@]}"}
 done
-wait_pids "${PIDS[@]}"
 
 echo "+++ Published to targets"
 for UPLOAD_TARGET in "${UPLOAD_TARGETS[@]}"; do

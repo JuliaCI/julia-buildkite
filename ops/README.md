@@ -170,7 +170,12 @@ and which carry AWS session tags (`step_key`, `build_commit`, `pipeline_slug`, .
   is what lets a rebuild of an already-staged commit, concurrent sibling
   builds of the same commit sharing a key (the doctest htmldocs archive
   during a release-branch + tag double build), and a re-run publish all
-  succeed idempotently instead of going red. A conflict across
+  succeed idempotently instead of going red. Because the published object
+  wins, a re-run publish signs the tarball an earlier run of the commit
+  already published (if any) rather than its own repackaged one, and uploads
+  signatures only after the tarballs, so a re-run can always complete a
+  partial publish. A signature already published without a matching tarball
+  stops the publish; removing it is a manual repair. A conflict across
   *different* commits (e.g. a repointed release tag at the final
   locations) is still a hard error; replacing published artifacts is a
   deliberate manual operation.

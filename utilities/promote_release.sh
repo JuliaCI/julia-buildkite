@@ -40,6 +40,8 @@ source .buildkite/utilities/upload_to_s3.sh
 SRC_BUCKET="${SRC_BUCKET:-julialangnightlies}"
 DEST_BUCKET="${DEST_BUCKET:-julialang2}"
 CDN_URL="${CDN_URL:-https://julialang-s3.julialang.org}"
+TARBALL_SIGNING_PUBKEY="$(realpath "${TARBALL_SIGNING_PUBKEY:-.buildkite/signing-pubkeys/tarball_signing.pub.asc}")"
+VERIFY_SIGNATURES="$(realpath .buildkite/utilities/verify_tarball_signatures.py)"
 
 # "<file basename> <source dir> <destination dir>", dirs relative to bin/.
 # Sources are what upload_julia.sh published for a v* tag; destinations
@@ -102,6 +104,12 @@ for m in "${MAPPINGS[@]}"; do
         aws s3 cp --only-show-errors "s3://${SRC_BUCKET}/bin/${srcdir}/${f}" "${f}"
     done
 done
+
+echo "--- Verify the tarball signatures"
+# A signature and its tarball are separate objects, published independently.
+# shellcheck disable=SC2046
+python3 "${VERIFY_SIGNATURES}" "${TARBALL_SIGNING_PUBKEY}" \
+    $(printf '%s\n' "${MAPPINGS[@]}" | awk '$1 ~ /\.tar\.gz$/ {print $1}')
 
 echo "--- Generate checksum files"
 # Binaries only (no .asc), sorted by name -- the historical format of
