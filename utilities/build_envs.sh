@@ -121,6 +121,13 @@ MAJMIN="$(cut -d. -f1-2 <<<"${JULIA_VERSION}")"
 MAJMINPAT="$(cut -d- -f1 <<<"${JULIA_VERSION}")"
 export JULIA_VERSION MAJMIN MAJMINPAT
 
+# The macOS app bundle. A build variant (macosnogpl, ...) gets its own name,
+# e.g. Julia-1.14-nogpl.app, so that it can be installed next to the standard build.
+if [[ "${OS}" == macos* ]]; then
+    MAC_APP_VARIANT="${OS#macos}"
+    export MAC_APP_NAME="Julia-${MAJMIN}${MAC_APP_VARIANT:+-${MAC_APP_VARIANT}}.app"
+fi
+
 # Is this job part of the RELEASE flow for a v* tag? True for the tag
 # build itself -- BUILDKITE_TAG is set uniformly on every job of a tag
 # build, and Buildkite reports the tag name as the branch, which also

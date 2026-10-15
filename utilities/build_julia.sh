@@ -177,8 +177,9 @@ if [[ "${OS}" == macos* ]]; then
     # contrib/mac/app rule re-runs binary-dist, and without the matching flags
     # build_h.jl regenerates with a different banner, going stale and forcing a
     # full system-image rebuild. With them it collapses to a fast re-install+re-tar.
-    MACOS_CODESIGN_IDENTITY="" ${MAKE} "${MFLAGS[@]}" -C contrib/mac/app "dmg/Julia-${MAJMIN?}.app"
-    tar zcf "${UPLOAD_FILENAME}.app.tar.gz" -C contrib/mac/app/dmg "Julia-${MAJMIN?}.app"
+    MACOS_CODESIGN_IDENTITY="" ${MAKE} "${MFLAGS[@]}" -C contrib/mac/app \
+        "APP_NAME=${MAC_APP_NAME?}" "dmg/${MAC_APP_NAME}"
+    tar zcf "${UPLOAD_FILENAME}.app.tar.gz" -C contrib/mac/app/dmg "${MAC_APP_NAME}"
     echo "--- [mac] Stage the unsigned .app to s3://${STAGING_TARGET}.app.tar.gz"
     UPLOAD_TO_S3_ACL=none upload_to_s3 "${UPLOAD_FILENAME}.app.tar.gz" "${STAGING_TARGET}.app.tar.gz"
 fi
