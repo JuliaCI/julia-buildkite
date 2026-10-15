@@ -27,7 +27,8 @@ PUBLISHED_TRIPLETS = [
 def render(*args, source=None, **build_env):
     env = os.environ.copy()
     for var in ("BUILDKITE_SOURCE", "BUILDKITE_PIPELINE_SLUG", "BUILDKITE_TAG",
-                "BUILDKITE_BRANCH", "NOGPL_ONLY", "TTFX_RELEASE"):
+                "BUILDKITE_BRANCH", "NOGPL_ONLY", "OPT_ONLY", "OPT_TESTS_ALLOW_FAIL",
+                "TTFX_RELEASE"):
         env.pop(var, None)
     if source is not None:
         env["BUILDKITE_SOURCE"] = source
@@ -59,6 +60,7 @@ OPT_TRIPLETS = (
     "aarch64-apple-darwinopt",
     "x86_64-w64-mingw32opt",
 )
+ALL_OPT_TRIPLETS = sorted(OPT_TRIPLETS + ("i686-linux-gnuopt",))
 
 
 def publish_group(output):
@@ -248,11 +250,19 @@ class RenderLaunchPipelineTests(unittest.TestCase):
 
             self.assertEqual(output.count('group: "no_GPL"'), 1)
             self.assertIn('group: "Build"', output)
-            self.assertNotIn('group: "Optimized Build"', output)
+            self.assertEqual(output.count('group: "Optimized Build"'), 1)
+            # release-* pushes publish nightlies, which do not wait for the tests
+            tests = ("Optimized Tests (Allow Fail)" if build_env["BUILDKITE_BRANCH"].startswith("release-")
+                     else "Optimized Tests")
+            self.assertEqual(re.findall(r'group: "(Optimized Tests[^"]*)"', output), [tests])
             self.assertEqual(
                 sorted(re.findall(r'PUBLISH_TARGET: "([^"]+)"', publish)),
-                sorted(PUBLISHED_TRIPLETS + NOGPL_TRIPLETS + ["docs"]),
+                sorted(PUBLISHED_TRIPLETS + NOGPL_TRIPLETS + ALL_OPT_TRIPLETS + ["docs"]),
             )
+            # Each optimized platform's publish waits for its own tests
+            self.assertIn(depends_on("build_x86_64-linux-gnuopt", "test_x86_64-linux-gnuopt"), publish)
+            self.assertIn(depends_on("build_i686-linux-gnuopt", "test_i686-linux-gnuopt",
+                                     "test_i686-linux-gnuoptnet"), publish)
             for triplet in NOGPL_TRIPLETS:
                 self.assertIn(depends_on(f"build_{triplet}"), publish)
             self.assertNotIn("PUBLISH_SCHEDULED", publish)
@@ -262,7 +272,9 @@ class RenderLaunchPipelineTests(unittest.TestCase):
         for build_env in ({"BUILDKITE_PIPELINE_SLUG": "julia-ci", "BUILDKITE_BRANCH": "master"},
                           {"BUILDKITE_PIPELINE_SLUG": "julia-pr", "BUILDKITE_BRANCH": "release-1.14"},
                           {"BUILDKITE_PIPELINE_SLUG": "julia-pr", "BUILDKITE_BRANCH": "v2-feature"}):
-            self.assertNotIn('group: "no_GPL"', render(**build_env))
+            output = render(**build_env)
+            self.assertNotIn('group: "no_GPL"', output)
+            self.assertNotIn('group: "Optimized Build"', output)
 
     def test_nogpl_only(self):
         output = render(BUILDKITE_PIPELINE_SLUG="julia-ci", BUILDKITE_BRANCH="v1.13.1",
@@ -277,6 +289,34 @@ class RenderLaunchPipelineTests(unittest.TestCase):
         # The schedule keeps rendering all scheduled workloads.
         output = render(source="schedule", NOGPL_ONLY="true")
         self.assertIn('group: "Optimized Build"', output)
+
+    def test_release_opt_tests_gate_their_publish(self):
+        def opt_test_soft_fail(output):
+            return set(re.findall(
+                r'label: ":linux: test x86_64-linux-gnuopt"\n(?:.*\n)*?\s+soft_fail: (\w+)', output))
+
+        release = {"BUILDKITE_PIPELINE_SLUG": "julia-ci", "BUILDKITE_BRANCH": "v1.14.0"}
+        self.assertEqual(opt_test_soft_fail(render(**release)), {"false"})
+        self.assertEqual(opt_test_soft_fail(render(OPT_ONLY="true", **release)), {"false"})
+        allowed = render(OPT_TESTS_ALLOW_FAIL="true", **release)
+        self.assertEqual(opt_test_soft_fail(allowed), {"true"})
+        self.assertIn('group: "Optimized Tests (Allow Fail)"', allowed)
+        # The nightlies keep publishing despite failing optimized tests
+        self.assertEqual(opt_test_soft_fail(render(source="schedule")), {"true"})
+        self.assertEqual(opt_test_soft_fail(render(BUILDKITE_PIPELINE_SLUG="julia-ci",
+                                                   BUILDKITE_BRANCH="release-1.14")), {"true"})
+
+    def test_opt_only(self):
+        output = render(BUILDKITE_PIPELINE_SLUG="julia-ci", BUILDKITE_BRANCH="v1.14.0",
+                        OPT_ONLY="true")
+
+        self.assertEqual(re.findall(r'^  - group: "([^"]+)"', output, re.M),
+                         ["Optimized Build", "Optimized Tests", "Publish"])
+        self.assertEqual(
+            sorted(re.findall(r'PUBLISH_TARGET: "([^"]+)"', output)),
+            ALL_OPT_TRIPLETS,
+        )
+        self.assertNotIn("PUBLISH_SCHEDULED", output)
 
     def test_rr_only_outside_pull_requests(self):
         # pull requests test the assertion build without rr; the rr jobs are skipped
@@ -326,7 +366,8 @@ class RenderLaunchPipelineTests(unittest.TestCase):
                                           "BUILDKITE_TAG": "v1.14.0"}),
                                   (None, {"BUILDKITE_PIPELINE_SLUG": "julia-ci",
                                           "BUILDKITE_BRANCH": "release-1.14"}),
-                                  (None, {"NOGPL_ONLY": "true"})):
+                                  (None, {"NOGPL_ONLY": "true"}),
+                                  (None, {"OPT_ONLY": "true"})):
             output = render(source=source, **build_env)
             keys = set(re.findall(r'^\s+key:\s*"?([^"\s]+)"?\s*$', output, re.M))
             deps = set(re.findall(r'^          - "([^"]+)"$', publish_group(output), re.M))

@@ -61,7 +61,8 @@ class PipelineDryRunTests(unittest.TestCase):
         branch = {"BUILDKITE_PIPELINE_SLUG": "julia-ci", "BUILDKITE_BRANCH": "release-1.14"}
         for args, build_env in (([], {}), (["--scheduled-workloads"], {}),
                                 ([], release), ([], branch),
-                                ([], {**release, "NOGPL_ONLY": "true"})):
+                                ([], {**release, "NOGPL_ONLY": "true"}),
+                                ([], {**release, "OPT_ONLY": "true"})):
             with self.subTest(args=args, env=build_env), tempfile.TemporaryDirectory() as tmp:
                 rendered = os.path.join(tmp, "pipeline.yml")
                 with open(rendered, "w") as f:

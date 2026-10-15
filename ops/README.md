@@ -376,16 +376,20 @@ The single publish step signs and packages for every OS on linux:
   stamped at publish time) that every promoted object was built from the
   build's own commit, so a repointed tag cannot promote stale binaries.
   Re-running is idempotent: version-named objects are write-once and
-  identical/same-commit re-uploads are accepted. Afterwards, dispatch the
-  CI workflow on JuliaLang/VersionsJSONUtil.jl to regenerate
-  versions.json.
+  identical/same-commit re-uploads are accepted. The build variants
+  (`linuxopt/`, `macosopt/`, `windowsopt/`, `linuxassert/`) keep their
+  published layout and are promoted per platform once completely
+  published, so promote again after slow or retried optimized builds land.
+  Afterwards, dispatch the CI workflow on JuliaLang/VersionsJSONUtil.jl to
+  regenerate versions.json.
 * Re-running a release: use **Rebuild** on the `julia-ci` tag build, or
   create a new `julia-ci` build with the branch set to the tag name
   (`v<version>`) — both enter the release tag flow. Add the build
   environment variable `NOGPL_ONLY=true` to build and publish only the
   no-GPL binaries, e.g. for a release that was tagged before tag builds
   included them. This also repoints the no-GPL `julia-latest` objects of
-  its series, so backfill releases oldest first. To re-run just the
+  its series, so backfill releases oldest first. `OPT_ONLY=true` does the same
+  for the optimized binaries. To re-run just the
   promote, POST a `julia-publish` build with the release commit and
   `branch: v<version>` plus `ignore_pipeline_branch_filters: true`
   (branch webhook builds are disabled on the publish pipeline); a plain
