@@ -40,8 +40,8 @@ the standard binaries. Variant installers are named after the variant
 so they install next to the standard build.
 
 A second `julia-ci` schedule, Saturday nights with `TTFX_RELEASE=latest`, builds
-nothing and measures the newest stable release on the TTFX tasks instead, as a
-reference for the master series (see `utilities/ttfx/README.md`).
+nothing and measures the newest stable release and the LTS on the TTFX tasks
+instead, as references for the master series (see `utilities/ttfx/README.md`).
 
 Pull requests with the `needs full CI` label also run the scheduled workloads.
 Coverage data is collected but not uploaded to Codecov or Coveralls.

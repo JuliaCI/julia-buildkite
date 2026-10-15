@@ -4,9 +4,10 @@
 # fetched too, the two are measured interleaved (ABBA) and compared, and robust
 # regressions fail the job. On master and release branches the build is measured alone
 # and the data kept as Buildkite artifacts. With TTFX_RELEASE set, a published release
-# ("latest": the newest stable one) is measured alone instead of a build: the weekly
-# reference run. With TTFX_BASE=commit the build (the nightly optimized one) is compared
-# with the regular build of the same commit instead. See README.md alongside this script.
+# ("latest": the newest stable one; a series such as "1.10": its newest patch release) is
+# measured alone instead of a build: the weekly reference runs. With TTFX_BASE=commit the
+# build (the nightly optimized one) is compared with the regular build of the same commit
+# instead. See README.md alongside this script.
 set -euo pipefail
 
 # shellcheck source=SCRIPTDIR/../build_envs.sh
@@ -38,6 +39,7 @@ TTFX_BASE_WAIT_MINUTES="${TTFX_BASE_WAIT_MINUTES:-20}"
 TTFX_RELEASE="${TTFX_RELEASE:-}"
 TTFX_RELEASES_URL="${TTFX_RELEASES_URL:-https://julialang-s3.julialang.org/bin}"
 TTFX_LATEST_RELEASE_API="${TTFX_LATEST_RELEASE_API:-https://api.github.com/repos/JuliaLang/julia/releases/latest}"
+TTFX_VERSIONS_URL="${TTFX_VERSIONS_URL:-${TTFX_RELEASES_URL}/versions.json}"
 # "commit": compare with the regular build of this build's own commit rather than with
 # the merge-base (the nightly optimized build, pipelines/main/misc/ttfx/ttfx_opt.yml)
 TTFX_BASE="${TTFX_BASE:-}"
@@ -132,11 +134,25 @@ latest_release() {
         | sed -n 's/^ *"tag_name": *"v\([0-9][0-9.]*\)".*/\1/p' | head -n1
 }
 
+# The newest patch release of a series such as 1.10, from the list of published versions.
+# Prereleases carry a suffix (1.10.0-rc1), so the pattern leaves them out.
+newest_patch_release() {
+    local series="${1//./\\.}"
+    curl -fsSL --retry 3 "${TTFX_VERSIONS_URL}" \
+        | sed -n "s/^ *\"\(${series}\.[0-9][0-9]*\)\": *{.*/\1/p" \
+        | sort -t. -k3,3n | tail -n1
+}
+
 if [[ -n "${TTFX_RELEASE}" ]]; then
     if [[ "${TTFX_RELEASE}" == "latest" ]]; then
         echo "--- Find the latest release"
         TTFX_RELEASE="$(latest_release)"
         [[ -n "${TTFX_RELEASE}" ]] || { echo "Could not find the latest release from ${TTFX_LATEST_RELEASE_API}" >&2; exit 1; }
+    elif [[ "${TTFX_RELEASE}" =~ ^[0-9]+\.[0-9]+$ ]]; then
+        echo "--- Find the newest ${TTFX_RELEASE} release"
+        series="${TTFX_RELEASE}"
+        TTFX_RELEASE="$(newest_patch_release "${series}")"
+        [[ -n "${TTFX_RELEASE}" ]] || { echo "Could not find a ${series} release in ${TTFX_VERSIONS_URL}" >&2; exit 1; }
     fi
     echo "--- Download julia ${TTFX_RELEASE}"
     # The releases bucket names macOS "mac" (the nightlies say "macos")
