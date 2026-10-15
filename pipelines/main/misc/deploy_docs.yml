@@ -68,7 +68,10 @@ steps:
           echo "--- clone docs.julialang.org"
           mkdir -p /home/juliaci/.ssh
           ssh-keyscan github.com >> /home/juliaci/.ssh/known_hosts 2>/dev/null
-          git clone git@github.com:JuliaLang/docs.julialang.org -b gh-pages repo
+          # Shallow clone: only the tip tree is needed to build the next
+          # commit, and pushing from a shallow clone works because the new
+          # commit's parent is the remote tip.
+          git clone --depth 1 -b gh-pages git@github.com:JuliaLang/docs.julialang.org repo
           cd repo
 
           echo "--- deploy new docs"
