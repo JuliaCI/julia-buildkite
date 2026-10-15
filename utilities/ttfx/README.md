@@ -56,7 +56,8 @@ way the test jobs do.
 
 Every task is measured `TTFX_BLOCKS` times per arm, the arm order reversed on alternate
 blocks (`base head head base`), so drift over the hour lands on both arms alike. Each
-sample clears compiled code and the JIT object cache, precompiles once, then runs the
+sample clears compiled code and the JIT object cache, precompiles once, loads the
+project's packages once in an untimed process (and clears the object cache again), then runs the
 task script `TTFX_REPEATS` times (three) in fresh processes: the first run is the cold
 measurement, the later ones hit whatever caches the first populated. The script then runs
 `TTFX_REPEATS` more times with the GC disabled (see the artifact table below). After the timed runs
@@ -119,9 +120,10 @@ the first normal repeat: the GC is disabled before the first marker, one full co
 right after the load phase (its time is `gc_after_load` and is excluded from both phases),
 and the GC stays off through the run phase. `load_times_gcoff` and `run_times_gcoff` are
 therefore the phases without any GC pause in them, and the difference to the normal repeats
-is what the GC cost. The first normal repeat alone pays the operating system's first-load
-cost of the freshly written pkgimages (sizeable on macOS), which no later repeat gets back,
-so read the GC-off load against the second normal repeat rather than the first. These runs
+is what the GC cost. The operating system's first-load cost of the freshly written
+pkgimages (sizeable on macOS), which only the first process after precompiling pays and
+clearing the object cache does not bring back, is taken by one untimed process that loads
+the project's packages right after precompiling, so it is in neither set's cold load. These runs
 do not affect `status`; if one fails (a task that allocates
 too much to run without collection, say) the message is kept in `error_gcoff` and the
 normal numbers stand.
