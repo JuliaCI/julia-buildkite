@@ -381,7 +381,13 @@ The single publish step signs and packages for every OS on linux:
   stamped at publish time) that every promoted object was built from the
   build's own commit, so a repointed tag cannot promote stale binaries.
   Re-running is idempotent: version-named objects are write-once and
-  identical/same-commit re-uploads are accepted. Afterwards, dispatch the
+  identical/same-commit re-uploads are accepted, and a `julia-<majmin>-latest`
+  pointer is not moved back to an older release than the one it points to (the
+  `julia-version` metadata promote stamps on it), so an older patch can be
+  promoted again after a newer one. Pointers made before promote stamped them
+  are repointed as before, and promote stops before uploading anything if it
+  cannot read a pointer's state. Promote also checks every tarball against its
+  detached signature. Afterwards, dispatch the
   CI workflow on JuliaLang/VersionsJSONUtil.jl to regenerate
   versions.json.
 * Re-running a release: use **Rebuild** on the `julia-ci` tag build, or

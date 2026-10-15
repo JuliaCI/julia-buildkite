@@ -40,6 +40,7 @@ source .buildkite/utilities/upload_to_s3.sh
 SRC_BUCKET="${SRC_BUCKET:-julialangnightlies}"
 DEST_BUCKET="${DEST_BUCKET:-julialang2}"
 CDN_URL="${CDN_URL:-https://julialang-s3.julialang.org}"
+DEST_S3_URL="${DEST_S3_URL:-https://${DEST_BUCKET}.s3.amazonaws.com}"
 TARBALL_SIGNING_PUBKEY="$(realpath "${TARBALL_SIGNING_PUBKEY:-.buildkite/signing-pubkeys/tarball_signing.pub.asc}")"
 VERIFY_SIGNATURES="$(realpath .buildkite/utilities/verify_tarball_signatures.py)"
 
@@ -83,6 +84,40 @@ with_asc() {
     return 0
 }
 
+# What to do with the julia-<majmin>-latest pointer at bin/<key>: prints
+# "keep" when it points to a newer release than VERSION, going by the
+# julia-version stamp a promotion leaves on it, and "repoint" otherwise: when it
+# is absent, points to this or an older release, or is unstamped (made before
+# promote stamped pointers). Fails when that cannot be determined. Promoting an
+# older patch again, e.g. to add optimized builds that finished late, must not
+# move the pointers back to it.
+#
+# This reads the bucket's own endpoint anonymously (the release bucket is
+# public; the CDN could serve a stale copy). The promote role cannot tell an
+# absent object from a forbidden one, as it has no s3:ListBucket.
+pointer_action() {
+    local headers code pointed
+    headers="$(curl -sS -I --retry 3 "${DEST_S3_URL}/bin/$1" | tr -d '\r')" || return 1
+    code="$(awk 'NR == 1 {print $2}' <<<"${headers}")"
+    case "${code}" in
+        404) echo repoint; return 0 ;;
+        200) ;;
+        *) echo "ERROR: HEAD ${DEST_S3_URL}/bin/$1 returned '${code}'" >&2; return 1 ;;
+    esac
+    pointed="$(awk -F': ' 'tolower($1) == "x-amz-meta-julia-version" {print $2}' <<<"${headers}")"
+    if [[ -z "${pointed}" ]]; then
+        echo repoint
+    elif [[ ! "${pointed}" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
+        echo "ERROR: ${DEST_S3_URL}/bin/$1 has an invalid julia-version stamp '${pointed}'" >&2
+        return 1
+    elif [[ "${pointed}" != "${VERSION}" && "$(printf '%s\n' "${pointed//-/\~}" "${VERSION//-/\~}" | sort -V | tail -n 1)" == "${pointed//-/\~}" ]]; then
+        # (`~` sorts a prerelease before its release)
+        echo keep
+    else
+        echo repoint
+    fi
+}
+
 WORK="$(mktemp -d)"
 trap 'rm -rf "${WORK}"' EXIT
 cd "${WORK}"
@@ -111,6 +146,21 @@ echo "--- Verify the tarball signatures"
 python3 "${VERIFY_SIGNATURES}" "${TARBALL_SIGNING_PUBKEY}" \
     $(printf '%s\n' "${MAPPINGS[@]}" | awk '$1 ~ /\.tar\.gz$/ {print $1}')
 
+echo "--- Check the julia-${MAJMIN}-latest pointers"
+# All decided before anything is uploaded, so an unknown pointer state stops the
+# promotion rather than leaving it half done.
+declare -A POINTER_ACTION=()
+for m in "${MAPPINGS[@]}"; do
+    read -r base _ destdir <<<"${m}"
+    [[ "${destdir}" == src/* ]] && continue
+    key="${destdir}/julia-${MAJMIN}-latest-${base#julia-"${VERSION}"-}"
+    if ! POINTER_ACTION["${key}"]="$(pointer_action "${key}")"; then
+        echo "ERROR: cannot tell which release ${key} points to; not promoting" >&2
+        exit 1
+    fi
+    echo "${key}: ${POINTER_ACTION[${key}]}"
+done
+
 echo "--- Generate checksum files"
 # Binaries only (no .asc), sorted by name -- the historical format of
 # bin/checksums/julia-<version>.{sha256,md5}.
@@ -126,6 +176,13 @@ PURGE_KEYS=()
 for m in "${MAPPINGS[@]}"; do
     read -r base _ destdir <<<"${m}"
     latest="julia-${MAJMIN}-latest-${base#julia-"${VERSION}"-}"
+    repoint=1
+    if [[ "${destdir}" == src/* ]]; then
+        repoint=0
+    elif [[ "${POINTER_ACTION[${destdir}/${latest}]}" == keep ]]; then
+        echo "${destdir}/${latest} points to a newer release; leaving it alone"
+        repoint=0
+    fi
     for f in $(with_asc "${base}"); do
         upload_to_s3 "${f}" "${DEST_BUCKET}/bin/${destdir}/${f}"
         PURGE_KEYS+=( "bin/${destdir}/${f}" )
@@ -133,11 +190,12 @@ for m in "${MAPPINGS[@]}"; do
         # julia-*-latest-* names; write-once applies to everything else).
         # Source dists have no latest-pointer convention (and the promote
         # role's repoint grant covers only the binary layout).
-        if [[ "${destdir}" == src/* ]]; then
+        if [[ "${repoint}" -eq 0 ]]; then
             continue
         fi
         latest_name="${latest}${f#"${base}"}"
-        upload_to_s3 "${f}" "${DEST_BUCKET}/bin/${destdir}/${latest_name}"
+        UPLOAD_TO_S3_METADATA="julia-version=${VERSION}" \
+            upload_to_s3 "${f}" "${DEST_BUCKET}/bin/${destdir}/${latest_name}"
         PURGE_KEYS+=( "bin/${destdir}/${latest_name}" )
     done
 done

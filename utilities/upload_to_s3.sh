@@ -39,9 +39,17 @@ upload_to_s3() {
     # that verify_trusted_commit.sh checks before a publish, so the stamp is
     # trustworthy provenance -- and it is what lets a second build of the
     # SAME commit be treated as idempotent below.
-    local metadata_args=()
+    # UPLOAD_TO_S3_METADATA adds more `key=value[,key=value]` entries.
+    local metadata=()
     if [[ "${BUILDKITE_COMMIT:-}" =~ ^[0-9a-f]{40}$ ]]; then
-        metadata_args=( --metadata "build-commit=${BUILDKITE_COMMIT}" )
+        metadata+=( "build-commit=${BUILDKITE_COMMIT}" )
+    fi
+    if [[ -n "${UPLOAD_TO_S3_METADATA:-}" ]]; then
+        metadata+=( "${UPLOAD_TO_S3_METADATA}" )
+    fi
+    local metadata_args=()
+    if [[ "${#metadata[@]}" -gt 0 ]]; then
+        metadata_args=( --metadata "$(IFS=,; echo "${metadata[*]}")" )
     fi
 
     # Debug/test stacks (UPLOAD_TO_S3_OVERWRITE=1) re-publish the same commit
