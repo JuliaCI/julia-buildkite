@@ -6,7 +6,9 @@
 #define DirName AppName + "-" + AppVersion
 #endif
 
+#ifndef AppNameLong
 #define AppNameLong AppName + " " + AppVersion
+#endif
 #define AppMainExeName "bin\julia.exe"
 #define CurrentYear GetDateTimeString('yyyy', '', '')
 

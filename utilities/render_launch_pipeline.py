@@ -38,7 +38,9 @@ of the per-commit groups, and the TTFX job of the optimized macOS build; the
 weekly TTFX_RELEASE build (a second julia-ci schedule) emits the release TTFX
 job alone. Release branch and tag builds add the no-GPL group
 (and its publish triggers) to the per-commit groups, and NOGPL_ONLY=true
-renders only those. Labeled PRs render the same workload groups as a
+renders only those; they also add the optimized groups (OPT_ONLY=true
+renders only those), whose tests gate their publish triggers on tags unless
+OPT_TESTS_ALLOW_FAIL=true. Labeled PRs render the same workload groups as a
 supplemental pipeline, without publish triggers. Per-commit results are grouped
 into one `group:` per label: Build, Check, Test, Allow Fail, JuliaSyntax,
 JuliaC, TTFX, Publish.
@@ -414,11 +416,13 @@ NOGPL_UPLOAD_ARCHES = [
     "upload_windows.no_gpl.arches",
 ]
 
-SCHEDULE_UPLOAD_ARCHES = NOGPL_UPLOAD_ARCHES + [
+OPT_UPLOAD_ARCHES = [
     "upload_linux.opt.arches",
     "upload_macos.opt.arches",
     "upload_windows.opt.arches",
 ]
+
+SCHEDULE_UPLOAD_ARCHES = NOGPL_UPLOAD_ARCHES + OPT_UPLOAD_ARCHES
 
 # The Check steps that stage the per-commit (platform-independent) products
 # the `docs` publish target consumes: the HTML docs (doctest.yml) and, on
@@ -453,14 +457,8 @@ NOGPL_GROUP = ("no_GPL", "false", [
     ("build_windows.no_gpl.arches", "build_windows.yml"),
 ])
 
-SCHEDULE_GROUPS = [
-    ("Source Build", "false", [
-        ("build_linux.schedule.arches", "build_linux.yml"),
-    ]),
-    ("Source Tests (Allow Fail)", "true", [
-        ("test_linux.schedule.arches", "test_linux.yml"),
-    ]),
-    NOGPL_GROUP,
+# Built by the schedule (as nightlies) and by release tags (as releases).
+OPT_GROUPS = [
     ("Optimized Build", "false", [
         ("build_linux.opt.arches", "build_linux.yml"),
         ("build_macos.opt.arches", "build_macos.yml"),
@@ -473,6 +471,16 @@ SCHEDULE_GROUPS = [
         ("test_windows.opt.arches", "test_windows.yml"),
     ]),
 ]
+
+SCHEDULE_GROUPS = [
+    ("Source Build", "false", [
+        ("build_linux.schedule.arches", "build_linux.yml"),
+    ]),
+    ("Source Tests (Allow Fail)", "true", [
+        ("test_linux.schedule.arches", "test_linux.yml"),
+    ]),
+    NOGPL_GROUP,
+] + OPT_GROUPS
 
 
 # --------------------------------------------------------------------------
@@ -661,6 +669,24 @@ def nogpl_triplets():
     return upload_triplets(NOGPL_UPLOAD_ARCHES, SCHEDULED_PLATFORMS)
 
 
+def opt_triplets():
+    return upload_triplets(OPT_UPLOAD_ARCHES, SCHEDULED_PLATFORMS)
+
+
+def release_opt_groups():
+    """OPT_GROUPS for a release build. For a release (a v* tag), each optimized
+    platform is published only once its tests pass, unless the build was
+    created with OPT_TESTS_ALLOW_FAIL=true (for a failure that is understood).
+    release-* pushes publish nightlies, which publish regardless, like the
+    scheduled master ones."""
+    if (os.environ.get("BUILDKITE_BRANCH", "").startswith("release-")
+            or os.environ.get("OPT_TESTS_ALLOW_FAIL") == "true"):
+        return OPT_GROUPS
+    (build_label, build_allow_fail, build_arches), (_, _, test_arches) = OPT_GROUPS
+    return [(build_label, build_allow_fail, build_arches),
+            ("Optimized Tests", "false", test_arches)]
+
+
 def main():
     args = parse_args()
     # TTFX_RELEASE (set by the weekly julia-ci schedule, or on a build created
@@ -700,6 +726,18 @@ def main():
         sys.stdout.write("\n")
         return
 
+    # OPT_ONLY=true does the same for the optimized binaries, e.g. to retry
+    # them for a release (branch=v<version>) after the regular ones shipped.
+    if os.environ.get("OPT_ONLY") == "true":
+        groups = release_opt_groups() if is_release_build() else OPT_GROUPS
+        blocks = [schedule_group_text(label, arches, allow_fail)
+                  for label, allow_fail, arches in groups]
+        blocks.append(publish_group_text(opt_triplets()))
+        sys.stdout.write("steps:\n")
+        sys.stdout.write("\n".join(blocks))
+        sys.stdout.write("\n")
+        return
+
     blocks = [
         build_group_text(),
         check_group_text(),
@@ -728,13 +766,16 @@ def main():
     # own group -- include verbatim.
     blocks.append(verbatim_group_text(os.path.join(MISC, "ttfx", "ttfx.yml")))
 
-    # Release branches and tags also come as no-GPL builds, published to
-    # julialang-nogpl (master gets them from the schedule instead).
+    # Release branches and tags also come as no-GPL and optimized builds, the
+    # nightlies (x.y-nightly+opt) and releases (x.y+opt) of their series
+    # (master gets them from the schedule instead).
     triplets = upload_triplets(UPLOAD_ARCHES, PLATFORMS)
     if is_release_build():
         label, allow_fail, arches = NOGPL_GROUP
         blocks.append(schedule_group_text(label, arches, allow_fail))
-        triplets += nogpl_triplets()
+        blocks.extend(schedule_group_text(label, arches, allow_fail)
+                      for label, allow_fail, arches in release_opt_groups())
+        triplets += nogpl_triplets() + opt_triplets()
     blocks.append(publish_group_text(triplets, docs=True))
 
     sys.stdout.write("steps:\n")

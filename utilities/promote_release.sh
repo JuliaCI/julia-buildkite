@@ -81,6 +81,41 @@ with_asc() {
     return 0
 }
 
+# The checksum files cover the standard binaries only, as they always have.
+BINARIES="$(printf '%s\n' "${MAPPINGS[@]}" | awk '{print $1}' | sort)"
+
+# Build variants (the optimized and assertion builds, juliaup's `+opt` and
+# `+assert` channels) keep the layout they were published under, as there is
+# no buildbot-era naming to preserve. "<dir> <file>...", dirs relative to
+# bin/. Each platform is promoted once all of its files are published, so a
+# release can be promoted before its slower optimized builds finish, and
+# promoted again later to add them.
+VARIANT_PLATFORMS=(
+    "linuxassert/x86_64/${MAJMIN}  julia-${VERSION}-linuxassert-x86_64.tar.gz"
+    "linuxopt/x86_64/${MAJMIN}     julia-${VERSION}-linuxopt-x86_64.tar.gz"
+    "linuxopt/i686/${MAJMIN}       julia-${VERSION}-linuxopt-i686.tar.gz"
+    "linuxopt/aarch64/${MAJMIN}    julia-${VERSION}-linuxopt-aarch64.tar.gz"
+    "macosopt/x86_64/${MAJMIN}     julia-${VERSION}-macosopt-x86_64.tar.gz julia-${VERSION}-macosopt-x86_64.dmg"
+    "macosopt/aarch64/${MAJMIN}    julia-${VERSION}-macosopt-aarch64.tar.gz julia-${VERSION}-macosopt-aarch64.dmg"
+    "windowsopt/x86_64/${MAJMIN}   julia-${VERSION}-windowsopt-x86_64.tar.gz julia-${VERSION}-windowsopt-x86_64.zip julia-${VERSION}-windowsopt-x86_64.exe"
+)
+for platform in "${VARIANT_PLATFORMS[@]}"; do
+    read -r dir files <<<"${platform}"
+    missing=0
+    for base in ${files}; do
+        for f in $(with_asc "${base}"); do
+            aws s3api head-object --bucket "${SRC_BUCKET}" --key "bin/${dir}/${f}" >/dev/null 2>&1 || missing=1
+        done
+    done
+    if [[ "${missing}" -eq 1 ]]; then
+        echo "WARN: ${dir} is not (completely) published; not promoting it" >&2
+        continue
+    fi
+    for base in ${files}; do
+        MAPPINGS+=( "${base} ${dir} ${dir}" )
+    done
+done
+
 WORK="$(mktemp -d)"
 trap 'rm -rf "${WORK}"' EXIT
 cd "${WORK}"
@@ -106,7 +141,6 @@ done
 echo "--- Generate checksum files"
 # Binaries only (no .asc), sorted by name -- the historical format of
 # bin/checksums/julia-<version>.{sha256,md5}.
-BINARIES="$(printf '%s\n' "${MAPPINGS[@]}" | awk '{print $1}' | sort)"
 # shellcheck disable=SC2086
 sha256sum ${BINARIES} > "julia-${VERSION}.sha256"
 # shellcheck disable=SC2086

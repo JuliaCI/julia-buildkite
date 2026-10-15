@@ -28,6 +28,17 @@ Release tag and `release-*` branch builds also build the no-GPL binaries and
 publish them to `julialang-nogpl`, so each release series gets no-GPL nightlies
 on every push without a schedule of its own.
 
+They build and publish the optimized binaries too, to the same `linuxopt/`,
+`macosopt/` and `windowsopt/` folders: as the release series' nightlies for
+`release-*` pushes, under their version names for tags. On a tag, each
+optimized platform publishes only once its tests pass; create the build with
+`OPT_TESTS_ALLOW_FAIL=true` to publish despite a failure that is understood.
+Nightlies, from `release-*` pushes and the master schedule alike, publish
+regardless. A failing optimized test never holds back
+the standard binaries. Variant installers are named after the variant
+(`Julia-1.14-opt.app`; `Julia-1.14.0-opt` and "Julia 1.14.0 (opt)" on Windows)
+so they install next to the standard build.
+
 A second `julia-ci` schedule, Saturday nights with `TTFX_RELEASE=latest`, builds
 nothing and measures the newest stable release on the TTFX tasks instead, as a
 reference for the master series (see `utilities/ttfx/README.md`).
