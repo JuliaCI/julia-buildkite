@@ -11,9 +11,9 @@ steps:
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
         commands: |
           # Download pre-built julia, extract into `usr/`
-          buildkite-agent artifact download --step "build_${TRIPLET}" 'julia-*-macos-*.tar.gz' .
+          buildkite-agent artifact download --step "build_${TRIPLET}" 'julia-*-macos-${ARCH?}.tar.gz' .
           mkdir -p ./usr
-          tar -C ./usr --strip-components=1 -zxf julia-*-macos-*.tar.gz
+          tar -C ./usr --strip-components=1 -zxf julia-*-macos-${ARCH?}.tar.gz
           ln -s ./usr/bin/julia ./julia
 
           # Re-sign after download
