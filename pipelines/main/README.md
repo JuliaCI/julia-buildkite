@@ -77,14 +77,34 @@ and use their own instrumented images.
 The publish pipeline signs and publishes both archives for nightlies and releases;
 release promotion also carries the companion and its signature into the release
 bucket and checksum manifests. The companion contains `share/julia/compiled/...`
-and can be extracted into the root of the matching Julia installation:
+and can be used as an additional depot, without modifying the Julia installation:
 
 ```sh
-tar -xzf julia-VERSION-PLATFORM.checkbounds.tar.gz -C /path/to/julia
+mkdir -p ~/julia-checkbounds
+tar -xzf julia-VERSION-PLATFORM.checkbounds.tar.gz -C ~/julia-checkbounds
+export JULIA_DEPOT_PATH=":$HOME/julia-checkbounds/share/julia"
 ```
 
+Keep the default depots (the leading `:`); they provide the stdlib sources. For
+installations the user owns, such as an extracted tarball, the companion can
+instead be extracted into the installation root. Test jobs do this, since they
+use the unsigned tarball from the same build. Without a companion, Julia
+precompiles the stdlibs on first use with `--check-bounds=yes`.
+
 Use the companion from the same build, platform and variant as the Julia binary.
-Its URL is the matching Julia tarball URL with `.tar.gz` replaced by
-`.checkbounds.tar.gz`. For nightlies, resolve the installed build's commit rather
-than independently downloading two `latest` objects, which can race a new build.
+It is published next to the matching tarball, with `.tar.gz` replaced by
+`.checkbounds.tar.gz`, together with a `.checkbounds.tar.gz.asc` signature:
+
+- Releases (`julialang-s3.julialang.org`, also listed in
+  `bin/checksums/julia-<version>.sha256`), for example
+  `https://julialang-s3.julialang.org/bin/linux/x64/1.14/julia-1.14.0-linux-x86_64.checkbounds.tar.gz`
+  or `https://julialang-s3.julialang.org/bin/mac/aarch64/1.14/julia-1.14.0-macaarch64.checkbounds.tar.gz`.
+- Nightlies and release-branch builds (`julialangnightlies-s3.julialang.org`), by
+  the first 10 characters of the build's commit, for example
+  `https://julialangnightlies-s3.julialang.org/bin/linux/x86_64/1.14/julia-e05d3ffe66-linux-x86_64.checkbounds.tar.gz`.
+  For an installed nightly, get them with
+  `julia -e 'print(first(Base.GIT_VERSION_INFO.commit, 10))'`. The
+  `julia-latest-*.checkbounds.tar.gz` objects also exist, but downloading them
+  independently of the binary can race a new build.
+
 No companion files are included in ordinary tarballs or installers.
