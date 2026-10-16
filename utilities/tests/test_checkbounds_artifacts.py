@@ -40,7 +40,7 @@ class CheckboundsArtifactsTests(unittest.TestCase):
 export UPLOAD_FILENAME=julia-fixture JULIA_INSTALL_DIR=julia-fixture
 export JULIA_BINARY=julia-fixture/bin/julia STAGING_TARGET=staging/julia-fixture
 export JULIA_CPU_THREADS=1 ARCH=x86_64 TRIPLET=x86_64-fixture MAJMIN=1.14
-export JULIA_VERSION=1.14.0 EXTERNAL_STDLIB_NAMES=""
+export JULIA_VERSION=1.14.0 EXTERNAL_STDLIB_NAMES="" MAC_APP_NAME=Julia-1.14.app
 UPLOAD_TARGETS=(published/julia-fixture published/julia-latest-fixture)
 ''')
         self.write(self.utils / "upload_to_s3.sh", '''
@@ -56,7 +56,7 @@ import os, pathlib, shutil, sys
 args = sys.argv[1:]
 if args[:2] == ["s3api", "head-object"]:
     key = args[args.index("--key") + 1]
-    if key.startswith("bin/src/"):
+    if not (pathlib.Path(os.environ["FIXTURE_STAGE"]) / pathlib.Path(key).name).is_file():
         sys.exit(1)
     print(os.environ["BUILDKITE_COMMIT"])
 elif args[:2] == ["s3", "cp"]:
@@ -277,11 +277,20 @@ elif "checkbounds-pkgimages" in args:
                     self.write(self.stage / f"julia-1.14.0-{platform}.{ext}{signature}", "archive")
             for ext in (("dmg",) if platform.startswith("mac") else ("exe", "zip") if platform.startswith("win") else ()):
                 self.write(self.stage / f"julia-1.14.0-{platform}.{ext}", "installer")
+        # A published variant platform is promoted with its companion, but stays out of
+        # the checksum files.
+        for ext in ("tar.gz", "checkbounds.tar.gz"):
+            for signature in ("", ".asc"):
+                self.write(self.stage / f"julia-1.14.0-linuxopt-x86_64.{ext}{signature}", "archive")
         self.run_script("promote_release.sh")
         manifest = (self.output / "julialang2/bin/checksums/julia-1.14.0.sha256").read_text()
         for platform in platforms:
             self.assertIn(f"julia-1.14.0-{platform}.checkbounds.tar.gz", manifest)
-        self.assertEqual(len(list(self.output.rglob("*.checkbounds.tar.gz.asc"))), 16)
+        self.assertNotIn("linuxopt", manifest)
+        variant = self.output / "julialang2/bin/linuxopt/x86_64/1.14"
+        self.assertTrue((variant / "julia-1.14.0-linuxopt-x86_64.checkbounds.tar.gz").is_file())
+        self.assertTrue((variant / "julia-1.14.0-linuxopt-x86_64.checkbounds.tar.gz.asc").is_file())
+        self.assertEqual(len(list(self.output.rglob("*.checkbounds.tar.gz.asc"))), 18)
 
 
 if __name__ == "__main__":
