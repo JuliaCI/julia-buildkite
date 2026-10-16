@@ -80,15 +80,16 @@ class RenderLaunchPipelineTests(unittest.TestCase):
         output = render(source="schedule")
 
         for group in ("Source Build", "Source Tests (Allow Fail)", "no_GPL",
-                      "Optimized Build", "Optimized Tests (Allow Fail)"):
+                      "Optimized Build", "Optimized Tests (Allow Fail)",
+                      "RISC-V Build (Allow Fail)"):
             self.assertEqual(output.count(f'group: "{group}"'), 1)
         self.assertNotIn('group: "Build"', output)
         self.assertNotIn('group: "Test"', output)
 
-        self.assertEqual(output.count('key: "build_'), 11)
+        self.assertEqual(output.count('key: "build_'), 12)
         self.assertEqual(output.count('key: "test_'), 9)
         self.assertEqual(output.count("soft_fail: false"), 11)
-        self.assertEqual(output.count("soft_fail: true"), 10)  # the tests, and TTFX opt
+        self.assertEqual(output.count("soft_fail: true"), 11)  # the tests, TTFX opt, riscv64
         self.assertEqual(
             output.count('depends_on:\n          - "build_x86_64-linux-gnusrcassert"'),
             2,
@@ -104,6 +105,20 @@ class RenderLaunchPipelineTests(unittest.TestCase):
             3,  # its two test jobs (net / no-net), and its publish trigger
         )
         self.assertEqual(output.count('JULIA_CI_BUILD_MODE: "opt"'), 6)
+
+        # riscv64 is cross-compiled on x86_64 hosts that run riscv64 code with qemu-user
+        match = re.search(
+            r'^      - label: ":linux: build riscv64-linux-gnu"\n'
+            r'.*?(?=^      - |^  - group:|\Z)', output, re.M | re.S,
+        )
+        self.assertIsNotNone(match)
+        step = match.group()
+        self.assertIn('/package_linux_riscv64.x86_64.tar.gz', step)
+        self.assertIn('arch: "x86_64"', step)
+        self.assertIn('binfmt_riscv64: "true"', step)
+        self.assertIn('XC_HOST=riscv64-linux-gnu', step)
+        self.assertIn('timeout_in_minutes: 240\n', step)
+        self.assertIn('soft_fail: true\n', step)
 
         # Check the new platform's rendered jobs, including agent routing and
         # sandbox images: aggregate job counts alone cannot catch a wrong arch.
@@ -135,9 +150,9 @@ class RenderLaunchPipelineTests(unittest.TestCase):
         # One scheduled publish trigger per scheduled upload triplet, each
         # gated on that triplet's own jobs; no docs trigger, no wait barrier.
         publish = publish_group(output)
-        self.assertEqual(publish.count('trigger: "julia-publish"'), 10)
-        self.assertEqual(publish.count('PUBLISH_SCHEDULED: "true"'), 10)
-        self.assertEqual(publish.count('if: pipeline.slug == "julia-ci"'), 10)
+        self.assertEqual(publish.count('trigger: "julia-publish"'), 11)
+        self.assertEqual(publish.count('PUBLISH_SCHEDULED: "true"'), 11)
+        self.assertEqual(publish.count('if: pipeline.slug == "julia-ci"'), 11)
         self.assertNotIn('PUBLISH_TARGET: "docs"', output)
         self.assertNotIn("wait:", output)
         self.assertNotIn("PUBLISH_NOGPL", output)
@@ -148,8 +163,9 @@ class RenderLaunchPipelineTests(unittest.TestCase):
             self.assertIn(depends_on(f"build_{triplet}", f"test_{triplet}"), publish)
         self.assertIn(depends_on("build_i686-linux-gnuopt", "test_i686-linux-gnuopt",
                                  "test_i686-linux-gnuoptnet"), publish)
-        # no-GPL builds have no test jobs: they publish straight after the build
+        # no-GPL and riscv64 builds have no test jobs: they publish straight after the build
         self.assertIn(depends_on("build_x86_64-w64-mingw32nogpl"), publish)
+        self.assertIn(depends_on("build_riscv64-linux-gnu"), publish)
         self.assertIn(depends_on("build_aarch64-apple-darwinnogpl"), publish)
 
     def test_normal_mode_excludes_schedule_groups(self):

@@ -18,6 +18,9 @@ case "${ARCH}" in
     powerpc64le)
         EXPECTED_WORD_SIZE="64"
         ;;
+    riscv64)
+        EXPECTED_WORD_SIZE="64"
+        ;;
     # fallback
     *)
         echo "Unknown arch '${ARCH}'" >&2

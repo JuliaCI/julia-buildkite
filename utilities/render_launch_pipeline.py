@@ -422,7 +422,12 @@ OPT_UPLOAD_ARCHES = [
     "upload_windows.opt.arches",
 ]
 
-SCHEDULE_UPLOAD_ARCHES = NOGPL_UPLOAD_ARCHES + OPT_UPLOAD_ARCHES
+# Cross-compiled on x86_64; only built by the schedule, as nightlies.
+RISCV64_UPLOAD_ARCHES = [
+    "upload_linux.riscv64.arches",
+]
+
+SCHEDULE_UPLOAD_ARCHES = NOGPL_UPLOAD_ARCHES + OPT_UPLOAD_ARCHES + RISCV64_UPLOAD_ARCHES
 
 # The Check steps that stage the per-commit (platform-independent) products
 # the `docs` publish target consumes: the HTML docs (doctest.yml) and, on
@@ -480,7 +485,13 @@ SCHEDULE_GROUPS = [
         ("test_linux.schedule.arches", "test_linux.yml"),
     ]),
     NOGPL_GROUP,
-] + OPT_GROUPS
+] + OPT_GROUPS + [
+    # Built on hosts that run riscv64 code with qemu-user (`binfmt_riscv64`); no
+    # tests, as there is no riscv64 hardware in the fleet
+    ("RISC-V Build (Allow Fail)", "true", [
+        ("build_linux.riscv64.arches", "build_linux.riscv64.yml"),
+    ]),
+]
 
 
 # --------------------------------------------------------------------------
