@@ -1,0 +1,45 @@
+steps:
+  - group: "${GROUP?}"
+    steps:
+      - label: ":linux: build ${TRIPLET?}"
+        key: "build_${TRIPLET?}"
+        plugins:
+          - JuliaCI/coreupload#v2:
+              core_pattern: "**/*.core"
+              compressor: "zstd"
+              create_bundle: "true"
+          - JuliaCI/external-buildkite#v1:
+              version: "./.buildkite-external-version"
+              repo_url: "https://github.com/JuliaCI/julia-buildkite"
+          - JuliaCI/julia#v1:
+              # Drop default "registries" directory, so it is not persisted from execution to execution
+              persist_depot_dirs: packages,artifacts,compiled
+              version: '1.10' # GREP_ME: Keep this updated to LTS. Do not set it to '1' or 'stable' or 'latest'.
+          - JuliaCI/sandbox#v2:
+              rootfs_url: https://github.com/JuliaCI/rootfs-images/releases/download/${ROOTFS_TAG?}/${ROOTFS_IMAGE_NAME?}.${ARCH_ROOTFS?}.tar.gz
+              rootfs_treehash: "${ROOTFS_HASH?}"
+              uid: 1000
+              gid: 1000
+              workspaces:
+                # Include `/cache/repos` so that our `git` version introspection works.
+                - "/cache/repos:/cache/repos"
+        timeout_in_minutes: ${TIMEOUT?}
+        soft_fail: ${ALLOW_FAIL?}
+        if: pipeline.slug != "julia-pr" || "${SKIP_PR:-}" != "yes"
+        commands: "bash .buildkite/utilities/build_julia.sh"
+        agents:
+          queue: "build"
+          # Only run on `sandbox.jl` machines (not `docker`-isolated ones) since we need nestable sandboxing
+          sandbox_capable: "true"
+          os: "linux"
+          arch: "${ARCH?}"
+          # Hosts that run riscv64 binaries through qemu-user (binfmt_misc, flag F)
+          binfmt_riscv64: "true"
+        env:
+          JULIA_SHELL: "/bin/bash"
+          # Receive some environment mappings from our templating engine
+          TRIPLET: "${TRIPLET?}"
+          MAKE_FLAGS: "${MAKE_FLAGS?}"
+          ROOTFS_IMAGE_NAME: "${ROOTFS_IMAGE_NAME?}"
+          JULIA_CI_BUILD_MODE: "${JULIA_CI_BUILD_MODE-}"
+          BUILDKITE_CANCEL_SIGNAL: "SIGQUIT"

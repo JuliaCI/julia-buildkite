@@ -92,6 +92,24 @@ case "${ARCH?}" in
             "pwr8"
         )
         ;;
+    riscv64)
+        JULIA_CPU_TARGETS+=(
+            # rv64gc without `zifencei`, which Linux's hwprobe never reports, so a
+            # system image requiring it would be rejected under `-C native`
+            "generic-rv64,i,m,a,f,d,zicsr,c"
+        )
+        # riscv64 is cross-compiled on x86_64 hosts, and the build steps that run
+        # riscv64 code (flisp, the system image, docs) go through qemu-user, which the
+        # host registers with binfmt_misc. QEMU_CPU=rv64 makes JIT-heavy code ~3x
+        # faster than the default CPU model; without a larger translation cache
+        # (QEMU_TB_SIZE, in MB, qemu >= 10; a reservation that is only touched as
+        # needed) the system image build takes hours, and 4096 was still 30-75%
+        # slower than 6144. The loader and runtime libraries come from the cross
+        # toolchain's sysroot. qemu-user lacks robust futexes, on which the object
+        # cache's LMDB relies.
+        export QEMU_CPU="rv64" QEMU_TB_SIZE="6144" JULIA_OBJCACHE="0"
+        export QEMU_LD_PREFIX="/usr/local/riscv64-linux-gnu/sys-root"
+        ;;
     *)
         echo "Unknown target processor architecture '${ARCH}'" >&2
         exit 1
