@@ -287,6 +287,26 @@ elif [[ "${OS}" == windows* ]]; then
     UPLOAD_EXTENSIONS+=( "zip" )
 fi
 
+# The companion is signed separately so none of its caches enter the ordinary
+# tarball, .app, .dmg, .zip or installer. Signing changes native-library bytes,
+# so repair the paired .ji checksums before archiving them again.
+if [[ "${HAS_CHECKBOUNDS_PKGIMAGES}" == "true" ]]; then
+    echo "--- Download bounds-checked stdlib companion archive"
+    aws s3 cp "s3://${STAGING_TARGET}.checkbounds.tar.gz" "${UPLOAD_FILENAME}.checkbounds.tar.gz"
+    CHECKBOUNDS_ROOT="$(mktemp -d)"
+    tar xzf "${UPLOAD_FILENAME}.checkbounds.tar.gz" -C "${CHECKBOUNDS_ROOT}"
+    if [[ "${OS}" == macos* ]]; then
+        .buildkite/utilities/macos/codesign.sh --kms-key "${MACOS_CODESIGN_KMS_KEY}" "${CHECKBOUNDS_ROOT}"
+        julia .buildkite/utilities/update_stdlib_pkgimage_checksums.jl "${CHECKBOUNDS_ROOT}" dylib
+    elif [[ "${OS}" == windows* ]]; then
+        .buildkite/utilities/windows/codesign.sh "${CHECKBOUNDS_ROOT}"
+        julia .buildkite/utilities/update_stdlib_pkgimage_checksums.jl "${CHECKBOUNDS_ROOT}" dll
+    fi
+    make_targz "${UPLOAD_FILENAME}.checkbounds.tar.gz" -C "${CHECKBOUNDS_ROOT}" share/julia/compiled
+    rm -rf "${CHECKBOUNDS_ROOT}"
+    UPLOAD_EXTENSIONS+=( "checkbounds.tar.gz" )
+fi
+
 echo "--- GPG-sign the tarball"
 # The OpenPGP signature is assembled locally but the raw RSA signature
 # comes from AWS KMS, where the release signing key was generated and
@@ -306,6 +326,13 @@ python3 .buildkite/utilities/kms_gpg_sign.py \
     --kms-key-id "${TARBALL_SIGNING_KMS_KEY}" \
     "${UPLOAD_FILENAME}.tar.gz"
 UPLOAD_EXTENSIONS+=( "tar.gz.asc" )
+if [[ "${HAS_CHECKBOUNDS_PKGIMAGES}" == "true" ]]; then
+    python3 .buildkite/utilities/kms_gpg_sign.py \
+        "${GPG_PUBKEY_ARGS[@]}" \
+        --kms-key-id "${TARBALL_SIGNING_KMS_KEY}" \
+        "${UPLOAD_FILENAME}.checkbounds.tar.gz"
+    UPLOAD_EXTENSIONS+=( "checkbounds.tar.gz.asc" )
+fi
 
 # Deferred notarization: promote NOTHING for this triplet yet. Record the
 # submission ID plus a "<local path>\t<s3 target>" pair for every product;
