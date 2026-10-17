@@ -117,7 +117,7 @@ class RenderLaunchPipelineTests(unittest.TestCase):
         self.assertIn('arch: "x86_64"', step)
         self.assertIn('binfmt_riscv64: "true"', step)
         self.assertIn('XC_HOST=riscv64-linux-gnu', step)
-        self.assertIn('timeout_in_minutes: 240\n', step)
+        self.assertIn('timeout_in_minutes: 300\n', step)
         self.assertIn('soft_fail: true\n', step)
 
         # Check the new platform's rendered jobs, including agent routing and
