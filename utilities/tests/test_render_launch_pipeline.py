@@ -273,8 +273,11 @@ class RenderLaunchPipelineTests(unittest.TestCase):
             self.assertEqual(re.findall(r'group: "(Optimized Tests[^"]*)"', output), [tests])
             self.assertEqual(
                 sorted(re.findall(r'PUBLISH_TARGET: "([^"]+)"', publish)),
-                sorted(PUBLISHED_TRIPLETS + NOGPL_TRIPLETS + ALL_OPT_TRIPLETS + ["docs"]),
+                sorted(PUBLISHED_TRIPLETS + NOGPL_TRIPLETS + ALL_OPT_TRIPLETS
+                       + ["riscv64-linux-gnu", "docs"]),
             )
+            self.assertEqual(output.count('group: "RISC-V Build (Allow Fail)"'), 1)
+            self.assertIn(depends_on("build_riscv64-linux-gnu"), publish)
             # Each optimized platform's publish waits for its own tests
             self.assertIn(depends_on("build_x86_64-linux-gnuopt", "test_x86_64-linux-gnuopt"), publish)
             self.assertIn(depends_on("build_i686-linux-gnuopt", "test_i686-linux-gnuopt",
@@ -291,6 +294,7 @@ class RenderLaunchPipelineTests(unittest.TestCase):
             output = render(**build_env)
             self.assertNotIn('group: "no_GPL"', output)
             self.assertNotIn('group: "Optimized Build"', output)
+            self.assertNotIn('group: "RISC-V Build (Allow Fail)"', output)
 
     def test_nogpl_only(self):
         output = render(BUILDKITE_PIPELINE_SLUG="julia-ci", BUILDKITE_BRANCH="v1.13.1",
