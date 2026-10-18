@@ -85,12 +85,14 @@ with_asc() {
 BINARIES="$(printf '%s\n' "${MAPPINGS[@]}" | awk '{print $1}' | sort)"
 
 # Build variants (the optimized and assertion builds, juliaup's `+opt` and
-# `+assert` channels) keep the layout they were published under, as there is
-# no buildbot-era naming to preserve. "<dir> <file>...", dirs relative to
-# bin/. Each platform is promoted once all of its files are published, so a
-# release can be promoted before its slower optimized builds finish, and
-# promoted again later to add them.
+# `+assert` channels) and the riscv64 build keep the layout they were
+# published under, as there is no buildbot-era naming to preserve.
+# "<dir> <file>...", dirs relative to bin/. Each platform is promoted once all
+# of its files are published, so a release can be promoted before its slower
+# optimized and riscv64 builds finish (or when the riscv64 build, which is
+# allowed to fail, did not), and promoted again later to add them.
 VARIANT_PLATFORMS=(
+    "linux/riscv64/${MAJMIN}       julia-${VERSION}-linux-riscv64.tar.gz"
     "linuxassert/x86_64/${MAJMIN}  julia-${VERSION}-linuxassert-x86_64.tar.gz"
     "linuxopt/x86_64/${MAJMIN}     julia-${VERSION}-linuxopt-x86_64.tar.gz"
     "linuxopt/i686/${MAJMIN}       julia-${VERSION}-linuxopt-i686.tar.gz"

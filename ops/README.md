@@ -377,9 +377,10 @@ The single publish step signs and packages for every OS on linux:
   build's own commit, so a repointed tag cannot promote stale binaries.
   Re-running is idempotent: version-named objects are write-once and
   identical/same-commit re-uploads are accepted. The build variants
-  (`linuxopt/`, `macosopt/`, `windowsopt/`, `linuxassert/`) keep their
-  published layout and are promoted per platform once completely
-  published, so promote again after slow or retried optimized builds land.
+  (`linuxopt/`, `macosopt/`, `windowsopt/`, `linuxassert/`) and riscv64
+  (`linux/riscv64/`) keep their published layout and are promoted per
+  platform once completely published, so promote again after slow or
+  retried optimized or riscv64 builds land.
   Afterwards, dispatch the CI workflow on JuliaLang/VersionsJSONUtil.jl to
   regenerate versions.json.
 * Re-running a release: use **Rebuild** on the `julia-ci` tag build, or
