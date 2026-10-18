@@ -39,6 +39,12 @@ the standard binaries. Variant installers are named after the variant
 (`Julia-1.14-opt.app`; `Julia-1.14.0-opt` and "Julia 1.14.0 (opt)" on Windows)
 so they install next to the standard build.
 
+The schedule, release tags and `release-*` pushes also cross-compile Julia for
+riscv64 Linux on x86-64 hosts that run riscv64 code with qemu-user (agent tag
+`binfmt_riscv64`), and publish it to `julialangnightlies/bin/linux/riscv64/`.
+There is no riscv64 hardware in the fleet, so it has no test job, and the
+build is allowed to fail.
+
 A second `julia-ci` schedule, Saturday nights with `TTFX_RELEASE=latest`, builds
 nothing and measures the newest stable release and the LTS on the TTFX tasks
 instead, as references for the master series (see `utilities/ttfx/README.md`).
