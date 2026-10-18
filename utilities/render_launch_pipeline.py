@@ -422,7 +422,8 @@ OPT_UPLOAD_ARCHES = [
     "upload_windows.opt.arches",
 ]
 
-# Cross-compiled on x86_64; only built by the schedule, as nightlies.
+# Cross-compiled on x86_64; built by the schedule (as nightlies) and by
+# release branches and tags, like no-GPL.
 RISCV64_UPLOAD_ARCHES = [
     "upload_linux.riscv64.arches",
 ]
@@ -477,6 +478,13 @@ OPT_GROUPS = [
     ]),
 ]
 
+# Built by the schedule (as nightlies) and by release tags (as releases), on
+# hosts that run riscv64 code with qemu-user (`binfmt_riscv64`); no tests, as
+# there is no riscv64 hardware in the fleet.
+RISCV64_GROUP = ("RISC-V Build (Allow Fail)", "true", [
+    ("build_linux.riscv64.arches", "build_linux.riscv64.yml"),
+])
+
 SCHEDULE_GROUPS = [
     ("Source Build", "false", [
         ("build_linux.schedule.arches", "build_linux.yml"),
@@ -485,13 +493,7 @@ SCHEDULE_GROUPS = [
         ("test_linux.schedule.arches", "test_linux.yml"),
     ]),
     NOGPL_GROUP,
-] + OPT_GROUPS + [
-    # Built on hosts that run riscv64 code with qemu-user (`binfmt_riscv64`); no
-    # tests, as there is no riscv64 hardware in the fleet
-    ("RISC-V Build (Allow Fail)", "true", [
-        ("build_linux.riscv64.arches", "build_linux.riscv64.yml"),
-    ]),
-]
+] + OPT_GROUPS + [RISCV64_GROUP]
 
 
 # --------------------------------------------------------------------------
@@ -684,6 +686,10 @@ def opt_triplets():
     return upload_triplets(OPT_UPLOAD_ARCHES, SCHEDULED_PLATFORMS)
 
 
+def riscv64_triplets():
+    return upload_triplets(RISCV64_UPLOAD_ARCHES, SCHEDULED_PLATFORMS)
+
+
 def release_opt_groups():
     """OPT_GROUPS for a release build. For a release (a v* tag), each optimized
     platform is published only once its tests pass, unless the build was
@@ -777,16 +783,18 @@ def main():
     # own group -- include verbatim.
     blocks.append(verbatim_group_text(os.path.join(MISC, "ttfx", "ttfx.yml")))
 
-    # Release branches and tags also come as no-GPL and optimized builds, the
-    # nightlies (x.y-nightly+opt) and releases (x.y+opt) of their series
-    # (master gets them from the schedule instead).
+    # Release branches and tags also come as no-GPL, optimized and riscv64
+    # builds, the nightlies (x.y-nightly+opt) and releases (x.y+opt) of their
+    # series (master gets them from the schedule instead).
     triplets = upload_triplets(UPLOAD_ARCHES, PLATFORMS)
     if is_release_build():
         label, allow_fail, arches = NOGPL_GROUP
         blocks.append(schedule_group_text(label, arches, allow_fail))
         blocks.extend(schedule_group_text(label, arches, allow_fail)
                       for label, allow_fail, arches in release_opt_groups())
-        triplets += nogpl_triplets() + opt_triplets()
+        label, allow_fail, arches = RISCV64_GROUP
+        blocks.append(schedule_group_text(label, arches, allow_fail))
+        triplets += nogpl_triplets() + opt_triplets() + riscv64_triplets()
     blocks.append(publish_group_text(triplets, docs=True))
 
     sys.stdout.write("steps:\n")
