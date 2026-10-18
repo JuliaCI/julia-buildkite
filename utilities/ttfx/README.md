@@ -25,7 +25,7 @@ repository's `main` branch at job time; everything that runs them lives here.
 | `julia-pr` (pull requests) | only when the pull request touches a path in `paths.txt` (`src/`, `Compiler/`, `base/loading.jl`, `base/precompilation.jl`), or has the `needs TTFX check` label | comparison: the pull request's build against the build of its merge-base (master's, or the base pull request's when stacked) |
 | `julia-ci` (master, release branches) | every build | absolute: the build alone |
 | `julia-ci` (the daily schedule) | the optimized macOS aarch64 build | comparison: the optimized build against the regular build of the same commit |
-| `julia-ci` (the weekly `TTFX_RELEASE` schedule) | the newest stable release, and the LTS | absolute: each release alone, as a reference |
+| `julia-ci` (the weekly `TTFX_RELEASE` schedule) | the newest stable release, the LTS, and the next release's nightly | absolute: each release alone, as a reference |
 | `julia-buildkite-ci` (this repository's self-test) | every build | comparison: the julia master commit under test against its parent |
 
 The group's launch step, `ttfx_launch.sh`, decides. On a pull request without the label it
@@ -159,11 +159,21 @@ A second job in the same group measures the newest patch release of the LTS seri
 series such as `1.10` resolves through the releases bucket's `versions.json`, leaving out
 prereleases.
 
+A third job measures the newest nightly of the next release's branch
+(`TTFX_RELEASE=branch-nightly`): the oldest `release-x.y` branch of JuliaLang/julia whose
+series has no stable release in `versions.json`. Only later minors of the current major,
+or the next major's `x.0`, count, which keeps out placeholders such as `release-9.999`.
+So it moves from 1.14 to 1.15 once 1.14.0 is out and `release-1.15` is cut. Between the
+two, and in the day or so before a new branch has a nightly, the job measures nothing and
+passes. The nightly is the `julia-latest` tarball below the series in the nightlies
+bucket; `TTFX_RELEASE=1.14-nightly` names a branch directly.
+
 The jobs' labels and keys (`:macos: TTFX release <triplet>`, `ttfx_release_<triplet>`;
-`:macos: TTFX lts <triplet>`, `ttfx_lts_<triplet>`) differ from the master job's, which
-is how julia-ci-timing tells them apart. To measure a specific release, create a
-julia-ci build on `master` with `TTFX_RELEASE=1.13.1` (say) in its environment; the LTS
-job runs only when `TTFX_RELEASE` is `latest`.
+`:macos: TTFX lts <triplet>`, `ttfx_lts_<triplet>`; `:macos: TTFX branch nightly <triplet>`,
+`ttfx_branch_nightly_<triplet>`) differ from the master job's, which is how julia-ci-timing
+tells them apart. To measure a specific release, create a julia-ci build on `master` with
+`TTFX_RELEASE=1.13.1` (say) in its environment; the LTS and nightly jobs run only when
+`TTFX_RELEASE` is `latest`.
 
 ## Optimized builds: the daily schedule (julia-ci)
 
@@ -188,7 +198,7 @@ which draws the optimized build next to the master series with the paired differ
 Environment variables on the job: `TTFX_EXCLUDE` (default `exclude.txt`, or `none`),
 `TTFX_BLOCKS` (2), `TTFX_REPEATS` (3), `TTFX_BASE_WAIT_MINUTES` (20),
 `TTFX_SNIPPETS_REPO` and `TTFX_SNIPPETS_REF`, `TTFX_RELEASE` (`latest`, a series such as
-`1.10`, or a version; unset measures the build), `TTFX_BASE` (`commit` compares with the regular build of the
+`1.10`, a release branch's nightly such as `1.14-nightly`, `branch-nightly`, or a version; unset measures the build), `TTFX_BASE` (`commit` compares with the regular build of the
 same commit; unset uses the merge-base on pull requests), `TTFX_RELEASES_URL` and
 `TTFX_LATEST_RELEASE_API`, `TTFX_VERSIONS_URL`; on the
 launch step, `TTFX_PATHS` (default `paths.txt`). The job's budget is the sum of the tasks' precompile times, times two arms,
