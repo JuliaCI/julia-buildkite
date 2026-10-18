@@ -4,10 +4,10 @@
 # fetched too, the two are measured interleaved (ABBA) and compared, and robust
 # regressions fail the job. On master and release branches the build is measured alone
 # and the data kept as Buildkite artifacts. With TTFX_RELEASE set, a published release
-# ("latest": the newest stable one; a series such as "1.10": its newest patch release) is
-# measured alone instead of a build: the weekly reference runs. With TTFX_BASE=commit the
-# build (the nightly optimized one) is compared with the regular build of the same commit
-# instead. See README.md alongside this script.
+# ("latest": the newest stable one; a series such as "1.10": its newest patch release;
+# "1.14-nightly": the newest nightly of that release branch; "branch-nightly": that of the
+# next release's branch) is measured alone instead of a build: the weekly reference runs. With TTFX_BASE=commit the build (the nightly
+# optimized one) is compared with the regular build of the same commit instead. See README.md alongside this script.
 set -euo pipefail
 
 # shellcheck source=SCRIPTDIR/../build_envs.sh
@@ -143,6 +143,23 @@ newest_patch_release() {
         | sort -t. -k3,3n | tail -n1
 }
 
+# The release branch of the next release: the oldest release-x.y branch whose series has
+# no stable release yet. Empty when no such branch exists, e.g. after a release and before
+# the next branch is cut. Only later minors of the current major, or the next major's
+# x.0, count, which keeps out placeholder branches such as release-9.999.
+upcoming_release_branch() {
+    local stable
+    stable="$(curl -fsSL --retry 3 "${TTFX_VERSIONS_URL}" \
+        | sed -n 's/^ *"\([0-9][0-9]*\.[0-9][0-9]*\)\.[0-9][0-9]*": *{.*/\1/p' \
+        | sort -u -t. -k1,1n -k2,2n | tail -n1)"
+    [[ -n "${stable}" ]] || { echo "Could not find a stable release in ${TTFX_VERSIONS_URL}" >&2; return 1; }
+    git ls-remote --heads "https://github.com/${TTFX_GITHUB_REPO}.git" 'refs/heads/release-*' \
+        | sed -n 's|.*refs/heads/release-\([0-9][0-9]*\.[0-9][0-9]*\)$|\1|p' \
+        | awk -F. -v s="${stable}" 'BEGIN { split(s, v, ".") }
+              ($1 == v[1] && $2 > v[2]) || ($1 == v[1] + 1 && $2 == 0)' \
+        | sort -t. -k1,1n -k2,2n | head -n1
+}
+
 if [[ -n "${TTFX_RELEASE}" ]]; then
     if [[ "${TTFX_RELEASE}" == "latest" ]]; then
         echo "--- Find the latest release"
@@ -153,17 +170,39 @@ if [[ -n "${TTFX_RELEASE}" ]]; then
         series="${TTFX_RELEASE}"
         TTFX_RELEASE="$(newest_patch_release "${series}")"
         [[ -n "${TTFX_RELEASE}" ]] || { echo "Could not find a ${series} release in ${TTFX_VERSIONS_URL}" >&2; exit 1; }
+    elif [[ "${TTFX_RELEASE}" == "branch-nightly" ]]; then
+        echo "--- Find the release branch of the next release"
+        branch="$(upcoming_release_branch)"
+        if [[ -z "${branch}" ]]; then
+            echo "No release branch is ahead of the latest release; nothing to measure"
+            exit 0
+        fi
+        TTFX_RELEASE="${branch}-nightly"
+        skip_missing_nightly=1
     fi
     echo "--- Download julia ${TTFX_RELEASE}"
-    # The releases bucket names macOS "mac" (the nightlies say "macos")
-    case "${TRIPLET}" in
-        aarch64-apple-darwin) release_path="mac/aarch64" release_name="macaarch64" ;;
-        x86_64-apple-darwin)  release_path="mac/x64"     release_name="mac64" ;;
-        *) echo "No release download path known for ${TRIPLET}" >&2; exit 1 ;;
-    esac
-    release_majmin="$(cut -d. -f1-2 <<<"${TTFX_RELEASE}")"
-    release_url="${TTFX_RELEASES_URL}/${release_path}/${release_majmin}/julia-${TTFX_RELEASE}-${release_name}.tar.gz"
-    curl -fsSL --retry 3 -o "${TTFX_DIR}/release.tar.gz" "${release_url}"
+    if [[ "${TTFX_RELEASE}" =~ ^([0-9]+\.[0-9]+)-nightly$ ]]; then
+        # The newest nightly that the release branch has published
+        release_url="${TTFX_NIGHTLIES_URL}/${S3_BUCKET_PREFIX}/${BASE_OS}/${ARCH}/${BASH_REMATCH[1]}/julia-latest-${BASE_OS}-${ARCH}.tar.gz"
+    else
+        # The releases bucket names macOS "mac" (the nightlies say "macos")
+        case "${TRIPLET}" in
+            aarch64-apple-darwin) release_path="mac/aarch64" release_name="macaarch64" ;;
+            x86_64-apple-darwin)  release_path="mac/x64"     release_name="mac64" ;;
+            *) echo "No release download path known for ${TRIPLET}" >&2; exit 1 ;;
+        esac
+        release_majmin="$(cut -d. -f1-2 <<<"${TTFX_RELEASE}")"
+        release_url="${TTFX_RELEASES_URL}/${release_path}/${release_majmin}/julia-${TTFX_RELEASE}-${release_name}.tar.gz"
+    fi
+    status="$(curl -sSL --retry 3 -o "${TTFX_DIR}/release.tar.gz" -w '%{http_code}' "${release_url}")"
+    # A branch cut in the last day may have no nightly yet; next week's run picks it up
+    if [[ "${status}" == "404" && -n "${skip_missing_nightly:-}" ]]; then
+        echo "No nightly at ${release_url} yet; nothing to measure"
+        exit 0
+    elif [[ "${status}" != "200" ]]; then
+        echo "Could not download ${release_url} (HTTP ${status})" >&2
+        exit 1
+    fi
     echo "downloaded ${release_url}"
     install_julia "${TTFX_DIR}/release.tar.gz" head
     HEAD_NOTE="julia ${TTFX_RELEASE}"
