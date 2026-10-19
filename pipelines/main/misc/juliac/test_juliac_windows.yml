@@ -11,9 +11,9 @@ steps:
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
         commands: |
           # Download pre-built julia, extract into `usr/`
-          buildkite-agent artifact download --step "build_${TRIPLET}" 'julia-*-windows-*.tar.gz' .
+          buildkite-agent artifact download --step "build_${TRIPLET}" 'julia-*-windows-${ARCH?}.tar.gz' .
           mkdir -p ./usr
-          tar -C ./usr --strip-components=1 -zxf julia-*-windows-*.tar.gz
+          tar -C ./usr --strip-components=1 -zxf julia-*-windows-${ARCH?}.tar.gz
           echo "--- Install and test JuliaC"
           unset JULIA_DEPOT_PATH
           if [ -f deps/jlutilities/juliac/Manifest.toml ]; then

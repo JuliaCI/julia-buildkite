@@ -61,6 +61,19 @@ MAPPINGS=(
     "julia-${VERSION}-freebsd-x86_64.tar.gz  freebsd/x86_64/${MAJMIN} freebsd/x64/${MAJMIN}"
 )
 
+# Every binary tarball has a companion on Julia trees supporting the target.
+# Include it in release promotion, provenance checks and checksum manifests.
+HAS_CHECKBOUNDS_PKGIMAGES=false
+if grep -q '^checkbounds-pkgimages:' Makefile; then
+    HAS_CHECKBOUNDS_PKGIMAGES=true
+    for mapping in "${MAPPINGS[@]}"; do
+        read -r base srcdir destdir <<<"${mapping}"
+        if [[ "${base}" == *.tar.gz ]]; then
+            MAPPINGS+=( "${base%.tar.gz}.checkbounds.tar.gz ${srcdir} ${destdir}" )
+        fi
+    done
+fi
+
 # Source dists (KMS-signed by publish_srcdist.sh) live at bin/src/ in both
 # buckets. Releases published before the source_dist step existed have
 # none; promote what there is rather than failing.
@@ -85,12 +98,14 @@ with_asc() {
 BINARIES="$(printf '%s\n' "${MAPPINGS[@]}" | awk '{print $1}' | sort)"
 
 # Build variants (the optimized and assertion builds, juliaup's `+opt` and
-# `+assert` channels) keep the layout they were published under, as there is
-# no buildbot-era naming to preserve. "<dir> <file>...", dirs relative to
-# bin/. Each platform is promoted once all of its files are published, so a
-# release can be promoted before its slower optimized builds finish, and
-# promoted again later to add them.
+# `+assert` channels) and the riscv64 build keep the layout they were
+# published under, as there is no buildbot-era naming to preserve.
+# "<dir> <file>...", dirs relative to bin/. Each platform is promoted once all
+# of its files are published, so a release can be promoted before its slower
+# optimized and riscv64 builds finish (or when the riscv64 build, which is
+# allowed to fail, did not), and promoted again later to add them.
 VARIANT_PLATFORMS=(
+    "linux/riscv64/${MAJMIN}       julia-${VERSION}-linux-riscv64.tar.gz"
     "linuxassert/x86_64/${MAJMIN}  julia-${VERSION}-linuxassert-x86_64.tar.gz"
     "linuxopt/x86_64/${MAJMIN}     julia-${VERSION}-linuxopt-x86_64.tar.gz"
     "linuxopt/i686/${MAJMIN}       julia-${VERSION}-linuxopt-i686.tar.gz"
@@ -101,6 +116,12 @@ VARIANT_PLATFORMS=(
 )
 for platform in "${VARIANT_PLATFORMS[@]}"; do
     read -r dir files <<<"${platform}"
+    # Variant tarballs have companions too; they are not in the checksum files.
+    if [[ "${HAS_CHECKBOUNDS_PKGIMAGES}" == "true" ]]; then
+        for base in ${files}; do
+            [[ "${base}" == *.tar.gz ]] && files+=" ${base%.tar.gz}.checkbounds.tar.gz"
+        done
+    fi
     missing=0
     for base in ${files}; do
         for f in $(with_asc "${base}"); do

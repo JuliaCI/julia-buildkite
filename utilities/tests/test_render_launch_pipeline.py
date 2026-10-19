@@ -273,8 +273,11 @@ class RenderLaunchPipelineTests(unittest.TestCase):
             self.assertEqual(re.findall(r'group: "(Optimized Tests[^"]*)"', output), [tests])
             self.assertEqual(
                 sorted(re.findall(r'PUBLISH_TARGET: "([^"]+)"', publish)),
-                sorted(PUBLISHED_TRIPLETS + NOGPL_TRIPLETS + ALL_OPT_TRIPLETS + ["docs"]),
+                sorted(PUBLISHED_TRIPLETS + NOGPL_TRIPLETS + ALL_OPT_TRIPLETS
+                       + ["riscv64-linux-gnu", "docs"]),
             )
+            self.assertEqual(output.count('group: "RISC-V Build (Allow Fail)"'), 1)
+            self.assertIn(depends_on("build_riscv64-linux-gnu"), publish)
             # Each optimized platform's publish waits for its own tests
             self.assertIn(depends_on("build_x86_64-linux-gnuopt", "test_x86_64-linux-gnuopt"), publish)
             self.assertIn(depends_on("build_i686-linux-gnuopt", "test_i686-linux-gnuopt",
@@ -291,6 +294,7 @@ class RenderLaunchPipelineTests(unittest.TestCase):
             output = render(**build_env)
             self.assertNotIn('group: "no_GPL"', output)
             self.assertNotIn('group: "Optimized Build"', output)
+            self.assertNotIn('group: "RISC-V Build (Allow Fail)"', output)
 
     def test_nogpl_only(self):
         output = render(BUILDKITE_PIPELINE_SLUG="julia-ci", BUILDKITE_BRANCH="v1.13.1",
@@ -349,18 +353,22 @@ class RenderLaunchPipelineTests(unittest.TestCase):
         for env in ({"TTFX_RELEASE": "latest"}, {"TTFX_RELEASE": "1.13.1"}):
             output = render(source="schedule", BUILDKITE_PIPELINE_SLUG="julia-ci", **env)
             self.assertEqual(re.findall(r'^  - group: "([^"]+)"', output, re.M), ["TTFX release"])
-            self.assertEqual(output.count("- label:"), 2)
+            self.assertEqual(output.count("- label:"), 3)
             self.assertIn('key: "ttfx_release_aarch64-apple-darwin"', output)
             self.assertIn('key: "ttfx_lts_aarch64-apple-darwin"', output)
+            self.assertIn('key: "ttfx_branch_nightly_aarch64-apple-darwin"', output)
             self.assertIn("utilities/ttfx/ttfx_ci.sh", output)
             self.assertNotIn("build_", output)
             self.assertNotIn("trigger:", output)
         # The variable is left for the launch agent's `pipeline upload` to resolve
         self.assertIn('TTFX_RELEASE: "${TTFX_RELEASE:-latest}"', output)
-        # The LTS job runs on the weekly schedule only, not when one release is measured by hand
-        lts = output[output.index('key: "ttfx_lts_'):]
+        # The LTS and nightly jobs run on the weekly schedule only, not when one release is measured by hand
+        lts = output[output.index('key: "ttfx_lts_'):output.index('key: "ttfx_branch_nightly_')]
         self.assertIn('if: build.env("TTFX_RELEASE") == "latest"', lts)
         self.assertIn('TTFX_RELEASE: "1.10"', lts)
+        nightly = output[output.index('key: "ttfx_branch_nightly_'):]
+        self.assertIn('if: build.env("TTFX_RELEASE") == "latest"', nightly)
+        self.assertIn('TTFX_RELEASE: "branch-nightly"', nightly)
 
     def test_schedule_measures_the_optimized_build_on_ttfx(self):
         output = render(source="schedule", BUILDKITE_PIPELINE_SLUG="julia-ci")
