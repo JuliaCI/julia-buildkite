@@ -25,6 +25,8 @@ TTFX_SNIPPETS_REPO="${TTFX_SNIPPETS_REPO:-https://github.com/tecosaur/Julia-TTFX
 TTFX_SNIPPETS_REF="${TTFX_SNIPPETS_REF:-main}"
 TTFX_BLOCKS="${TTFX_BLOCKS:-2}"
 TTFX_REPEATS="${TTFX_REPEATS:-3}"
+# Also load each task with every stdlib loaded first; "off" skips that run
+TTFX_STDLIBS="${TTFX_STDLIBS:-on}"
 # Tasks not to run; "none" runs every task in the snippets checkout
 TTFX_EXCLUDE="${TTFX_EXCLUDE:-${TTFX_UTILS}/exclude.txt}"
 # The base build comes from where julia-ci stages its tarballs, or from the promoted
@@ -297,12 +299,15 @@ SNIPPETS_COMMIT="$(git -C "${TTFX_DIR}/snippets" rev-parse HEAD)"
 echo "snippets commit: ${SNIPPETS_COMMIT}"
 
 echo "--- Benchmark (${MODE})"
-exclude_args=()
+bench_args=()
 if [[ "${TTFX_EXCLUDE}" != "none" ]]; then
-    exclude_args=( --exclude "${TTFX_EXCLUDE}" )
+    bench_args=( --exclude "${TTFX_EXCLUDE}" )
+fi
+if [[ "${TTFX_STDLIBS}" == "on" ]]; then
+    bench_args+=( --stdlibs )
 fi
 "${HEAD_JULIA}" --startup-file=no "${TTFX_UTILS}/ttfx_bench.jl" \
-    --tasks "${TTFX_DIR}/snippets/tasks" ${exclude_args[@]+"${exclude_args[@]}"} \
+    --tasks "${TTFX_DIR}/snippets/tasks" ${bench_args[@]+"${bench_args[@]}"} \
     --depot "${TTFX_DIR}/depot" --workdir "${TTFX_DIR}/work" --logdir "${TTFX_DIR}/logs" \
     --blocks "${TTFX_BLOCKS}" --repeats "${TTFX_REPEATS}" \
     --results "${TTFX_DIR}/results.json" --meta "${TTFX_DIR}/results-meta.json" \
@@ -310,9 +315,19 @@ fi
     "${ARMS[@]}" 2>&1 | tee "${TTFX_DIR}/benchmark.log"
 
 echo "+++ Report"
+# perf.julialang.org gathers every measurement of a julia pull request or commit on one page
+PERF_REF=""
+if [[ "${BUILDKITE_PIPELINE_SLUG:-}" == "julia-pr" && "${BUILDKITE_PULL_REQUEST:-false}" != "false" ]]; then
+    PERF_REF="${BUILDKITE_PULL_REQUEST}"
+elif [[ "${BUILDKITE_PIPELINE_SLUG:-}" == "julia-ci" && -z "${TTFX_RELEASE}" ]]; then
+    PERF_REF="$(git rev-parse HEAD)"
+fi
 compare_args=( --results "${TTFX_DIR}/results.json" --meta "${TTFX_DIR}/results-meta.json"
                --head head --report "${TTFX_DIR}/report.md" --json "${TTFX_DIR}/compare.json"
                --title "TTFX benchmarks: ${HEAD_NOTE}" --url "${BUILDKITE_BUILD_URL:-}#${BUILDKITE_JOB_ID:-}" )
+if [[ -n "${PERF_REF}" ]]; then
+    compare_args+=( --perf-url "https://perf.julialang.org/?tab=commit&c=${PERF_REF}" )
+fi
 if [[ "${MODE}" == "compare" ]]; then
     compare_args+=( --base base --base-note "${BASE_NOTE}" )
 fi
