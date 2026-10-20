@@ -13,7 +13,17 @@ set -euo pipefail
 # Buildkite users can trigger new builds with these values overridden to
 # test specific julia gitshas
 UPSTREAM_URL="${UPSTREAM_URL:-https://github.com/JuliaLang/julia.git}"
-UPSTREAM_BRANCH="${UPSTREAM_BRANCH:-master}"
+
+# By default, test julia `master`, except that a `release-X.Y` branch of this
+# repository (or a PR targeting one) tests julia's matching `release-X.Y`.
+if [[ -z "${UPSTREAM_BRANCH:-}" ]]; then
+    _branch="${BUILDKITE_PULL_REQUEST_BASE_BRANCH:-${BUILDKITE_BRANCH:-}}"
+    if [[ "${_branch}" =~ ^release-[0-9]+\.[0-9]+$ ]]; then
+        UPSTREAM_BRANCH="${_branch}"
+    else
+        UPSTREAM_BRANCH="master"
+    fi
+fi
 
 # Cache repositories in the worker's julia cache dir (if it provides one),
 # just like buildkite itself would:
