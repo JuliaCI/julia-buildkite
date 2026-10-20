@@ -520,6 +520,77 @@ function run_repeats(task_cmd::Cmd, repeats::Int, timeout::Float64, logname::Str
     return (; load, run, total, load_stats, run_stats, gc_after_load, err = err_msg)
 end
 
+# The log shows one row per sample under a header printed once per task. Columns are
+# (group, name, width, value of a record); a group's label sits above its columns.
+ms(x) = x === nothing ? "–" : string(round(Int, 1000x))
+secs(x) = x === nothing ? "–" : @sprintf("%.2fs", x)
+cold(v) = isempty(v) ? nothing : v[1]
+cold(v, key) = isempty(v) ? nothing : v[1][key]
+
+function log_columns(armwidth::Int, instrumented::Bool, stdlibs::Bool)
+    cols = Any[("", "blk", 3, r -> string(r.block)), ("", "arm", armwidth, r -> r.arm),
+               ("", "precomp", 8, r -> secs(r.precompile_time)),
+               ("cold (ms)", "load", 5, r -> ms(cold(r.load_times))),
+               ("cold (ms)", "run", 5, r -> ms(cold(r.run_times)))]
+    if instrumented
+        append!(cols, [("GC off (ms)", "load", 5, r -> ms(cold(r.load_times_gcoff))),
+                       ("GC off (ms)", "run", 5, r -> ms(cold(r.run_times_gcoff))),
+                       ("GC off (ms)", "gc", 4, r -> ms(cold(r.gc_after_load)))])
+    end
+    if stdlibs
+        append!(cols, [("stdlibs first (ms)", "load", 5, r -> ms(cold(r.load_times_stdlibs))),
+                       ("stdlibs first (ms)", "run", 5, r -> ms(cold(r.run_times_stdlibs))),
+                       ("stdlibs first (ms)", "precomp", 8, r -> secs(r.precompile_time_stdlibs))])
+    end
+    if instrumented
+        append!(cols, [("compile (ms)", "load", 5, r -> ms(cold(r.load_stats, "compile_time"))),
+                       ("compile (ms)", "run", 5, r -> ms(cold(r.run_stats, "compile_time"))),
+                       ("compile (ms)", "recomp", 6, r -> ms(cold(r.run_stats, "recompile_time"))),
+                       ("gc (ms)", "load", 5, r -> ms(cold(r.load_stats, "gc_time"))),
+                       ("gc (ms)", "run", 5, r -> ms(cold(r.run_stats, "gc_time")))])
+    end
+    # Widen a group's last column when its label is longer than its columns.
+    for g in unique(first.(cols))
+        idx = findall(c -> c[1] == g, cols)
+        w = sum(cols[i][3] for i in idx) + 2 * (length(idx) - 1)
+        if length(g) > w
+            c = cols[idx[end]]
+            cols[idx[end]] = (c[1], c[2], c[3] + length(g) - w, c[4])
+        end
+    end
+    return cols
+end
+
+# One line from per-column cells, two spaces apart within a group and a bar between groups.
+function log_line(cols, cells)
+    io = IOBuffer()
+    print(io, "  ")
+    for (i, (c, cell)) in enumerate(zip(cols, cells))
+        i > 1 && print(io, c[1] == cols[i - 1][1] ? "  " : " │ ")
+        print(io, c[2] == "arm" ? rpad(cell, c[3]) : lpad(cell, c[3]))
+    end
+    return String(take!(io))
+end
+
+function log_header(cols)
+    # Each group's label is left-aligned over its first column.
+    labels = String[]
+    i = 1
+    while i <= length(cols)
+        j = i
+        while j < length(cols) && cols[j + 1][1] == cols[i][1]
+            j += 1
+        end
+        w = sum(cols[k][3] for k in i:j) + 2 * (j - i)
+        push!(labels, rpad(cols[i][1], w))
+        i = j + 1
+    end
+    top = "  " * join(labels, " │ ")
+    return rstrip(top), log_line(cols, [c[2] == "arm" ? "arm" : c[2] for c in cols])
+end
+
+log_row(cols, rec) = log_line(cols, [c[4](rec) for c in cols])
+
 function main()
     opts, arms = parse_args(ARGS)
     blocks = parse(Int, opts["blocks"])
@@ -572,6 +643,8 @@ function main()
         scripts = Dict{String,String}()
         failed = Dict{String,String}()
         stdlibs = Dict{String,Any}()  # per arm: (project, script), or why there is none
+        instrumented_task = false
+        summaries = Pair{String,String}[]  # per arm, the trace and invalidations of block 1
         for arm in arms
             proj = joinpath(workdir, "tasks", arm.label, task.package, task.task)
             rm(proj; recursive = true, force = true)
@@ -581,6 +654,7 @@ function main()
             msg = instantiate(arm, depot, proj, timeout, "$(task.package)-$(task.task)-$(arm.label)")
             msg === nothing || (failed[arm.label] = "instantiate: " * msg)
             scripts[arm.label], instrumented = instrument_task(proj)
+            instrumented_task |= instrumented
             instrumented || arm !== first(arms) ||
                 println("  note: task.jl does not use the standard phase markers, so no per-phase gc/compile stats")
             if opts["stdlibs"]
@@ -592,6 +666,8 @@ function main()
                 stdlibs[arm.label] = msg === nothing ? (sproj, first(instrument_task(sproj))) : "instantiate: " * msg
             end
         end
+        cols = log_columns(maximum(a -> length(a.label), arms), instrumented_task, opts["stdlibs"])
+        foreach(println, log_header(cols))
         stop = false
         for block in 1:blocks
             stop && break
@@ -638,44 +714,30 @@ function main()
                 push!(records, rec)
                 write_results()
                 if rec.status == "ok"
-                    @printf("  block %d  %-8s precompile=%7.2fs  load=%6.2fs  run=%6.2fs\n", block, arm.label,
-                            rec.precompile_time, rec.load_times[1], rec.run_times[1])
-                    if !isempty(rec.run_stats)
-                        l, r = rec.load_stats[1], rec.run_stats[1]
-                        @printf("           %-8s load: gc %5.2fs (%d pauses) compile %5.2fs   run: gc %6.3fs (%d) compile %6.3fs recompile %6.3fs\n",
-                                "", l["gc_time"], l["gc_pauses"], l["compile_time"],
-                                r["gc_time"], r["gc_pauses"], r["compile_time"], r["recompile_time"])
-                    end
-                    if !isempty(rec.load_times_gcoff)
-                        @printf("           %-8s gc off: load=%6.2fs  run=%6.2fs  (forced gc after load %5.2fs)\n", "",
-                                rec.load_times_gcoff[1], rec.run_times_gcoff[1], rec.gc_after_load[1])
-                    end
-                    rec.error_gcoff === nothing || println("           gc-off runs failed: $(rec.error_gcoff)")
-                    if !isempty(rec.load_times_stdlibs)
-                        @printf("           %-8s stdlibs first: load=%6.2fs  run=%6.2fs  (added precompile %6.2fs)\n", "",
-                                rec.load_times_stdlibs[1], rec.run_times_stdlibs[1], rec.precompile_time_stdlibs)
-                    end
-                    rec.error_stdlibs === nothing || println("           stdlibs-first run failed: $(rec.error_stdlibs)")
+                    println(log_row(cols, rec))
+                    rec.error_gcoff === nothing || println("      GC-off runs failed: $(rec.error_gcoff)")
+                    rec.error_stdlibs === nothing || println("      stdlibs-first run failed: $(rec.error_stdlibs)")
                 else
                     # Red, and `^^^ +++` makes Buildkite expand this task's log group
-                    println("  block $block  $(rpad(arm.label, 8)) \e[31mFAILED\e[0m ($(rec.status)): $(rec.error)")
+                    println("  ", lpad(block, 3), "  ", rpad(arm.label, cols[2][3]), "  \e[31mFAILED\e[0m ($(rec.status)): $(rec.error)")
                     println("^^^ +++")
                     stop = true
                 end
                 trace = get(result, :trace, nothing)
-                if trace !== nothing
-                    println("  trace    $(rpad(arm.label, 8)) $(trace.statements) precompile statements in $(basename(trace.file))",
-                            trace.ok ? "" : " (see the note in the file)")
-                end
                 inv = get(result, :invalidations, nothing)
-                if inv !== nothing
-                    @printf("  invalid. %-8s load %d (%d by definitions, %d rejected package code)  run %d\n",
-                        arm.label, inv["load"]["invalidated"], inv["load"]["by_definition"],
-                        inv["load"]["rejected_at_load"], inv["run"]["invalidated"])
+                if trace !== nothing || inv !== nothing
+                    parts = String[]
+                    trace === nothing || push!(parts, "trace $(trace.statements) statements" * (trace.ok ? "" : " (see the note in $(basename(trace.file)))"))
+                    inv === nothing || push!(parts, @sprintf("invalidated on load %d (%d by definitions, %d rejected), on run %d",
+                        inv["load"]["invalidated"], inv["load"]["by_definition"], inv["load"]["rejected_at_load"], inv["run"]["invalidated"]))
+                    push!(summaries, arm.label => join(parts, " · "))
                 end
                 flush(stdout)
             end
             stop && block < blocks && println("  skipping the remaining blocks of $label")
+        end
+        for (a, line) in summaries
+            println("  ", rpad(a * ":", cols[2][3] + 1), " ", line)
         end
     end
     println("--- Done: $(length(records)) records in $(opts["results"])")

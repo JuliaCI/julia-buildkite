@@ -315,9 +315,19 @@ fi
     "${ARMS[@]}" 2>&1 | tee "${TTFX_DIR}/benchmark.log"
 
 echo "+++ Report"
+# perf.julialang.org gathers every measurement of a julia pull request or commit on one page
+PERF_REF=""
+if [[ "${BUILDKITE_PIPELINE_SLUG:-}" == "julia-pr" && "${BUILDKITE_PULL_REQUEST:-false}" != "false" ]]; then
+    PERF_REF="${BUILDKITE_PULL_REQUEST}"
+elif [[ "${BUILDKITE_PIPELINE_SLUG:-}" == "julia-ci" && -z "${TTFX_RELEASE}" ]]; then
+    PERF_REF="$(git rev-parse HEAD)"
+fi
 compare_args=( --results "${TTFX_DIR}/results.json" --meta "${TTFX_DIR}/results-meta.json"
                --head head --report "${TTFX_DIR}/report.md" --json "${TTFX_DIR}/compare.json"
                --title "TTFX benchmarks: ${HEAD_NOTE}" --url "${BUILDKITE_BUILD_URL:-}#${BUILDKITE_JOB_ID:-}" )
+if [[ -n "${PERF_REF}" ]]; then
+    compare_args+=( --perf-url "https://perf.julialang.org/?tab=commit&c=${PERF_REF}" )
+fi
 if [[ "${MODE}" == "compare" ]]; then
     compare_args+=( --base base --base-note "${BASE_NOTE}" )
 fi

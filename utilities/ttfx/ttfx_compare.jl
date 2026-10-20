@@ -2,7 +2,8 @@
 # report (the Buildkite annotation) and a JSON summary.
 #
 #   julia --startup-file=no ttfx_compare.jl --results FILE --head LABEL [--base LABEL]
-#         [--meta FILE] [--report FILE] [--json FILE] [--title T] [--url U] [--base-note N]
+#         [--meta FILE] [--report FILE] [--json FILE] [--title T] [--url U] [--perf-url U]
+#         [--base-note N]
 #
 # Exit status: 0 nothing to report, 1 robust regression, 2 unusable data, 3 robust
 # improvements only. The report lists only the differences (and, in summary mode, every
@@ -29,7 +30,7 @@ const METRICS = [
 function parse_args(args)
     opts = Dict{String,Any}("results" => nothing, "meta" => nothing, "head" => nothing, "base" => nothing,
                             "report" => "report.md", "json" => "compare.json", "title" => "TTFX benchmarks",
-                            "url" => "", "base-note" => "")
+                            "url" => "", "perf-url" => "", "base-note" => "")
     i = 1
     while i <= length(args)
         key = args[i][3:end]
@@ -187,12 +188,15 @@ arm_desc(meta, label) = begin
     a === nothing ? code(label) : code(label) * " " * a["version"] * " (" * a["commit_short"] * ")"
 end
 
+links(opts) = (isempty(opts["url"]) ? "" : " · [job](" * opts["url"] * ")") *
+              (isempty(opts["perf-url"]) ? "" : " · [perf.julialang.org](" * opts["perf-url"] * ")")
+
 function write_comparison(io, opts, meta, tasks, suite, nblocks)
     base, head = opts["base"], opts["head"]
     nreg = sum(t -> length(t["regressions"]), tasks; init = 0) + count(s -> s["verdict"] == "regression", values(suite))
     nimp = sum(t -> length(t["improvements"]), tasks; init = 0) + count(s -> s["verdict"] == "improvement", values(suite))
     note = isempty(opts["base-note"]) ? "" : ", " * opts["base-note"]
-    link = isempty(opts["url"]) ? "" : " · [job](" * opts["url"] * ")"
+    link = links(opts)
     header = arm_desc(meta, head) * " vs " * arm_desc(meta, base) * note * " · " * string(length(tasks)) *
              " tasks · " * string(nblocks) * " blocks (ABBA)" * link
     if nreg + nimp == 0
@@ -240,7 +244,7 @@ end
 
 function write_summary(io, opts, meta, grouped, head, nblocks)
     println(io, "## ", opts["title"])
-    link = isempty(opts["url"]) ? "" : " · [job](" * opts["url"] * ")"
+    link = links(opts)
     println(io, arm_desc(meta, head), " · ", length(grouped), " tasks · ", nblocks, " samples", link, "\n")
     println(io, "| task | ", join([m.name * " (s)" for m in METRICS], " | "), " | note |")
     println(io, "|---|", "---|"^length(METRICS), "---|")
