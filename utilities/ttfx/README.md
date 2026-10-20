@@ -13,7 +13,7 @@ repository's `main` branch at job time; everything that runs them lives here.
 | `paths.txt` | the paths a pull request must touch to be measured without the label |
 | `ttfx_ci.sh` | the job: fetch the builds, check out the snippets, benchmark, compare, report |
 | `ttfx_bench.jl` | the driver: interleaved ABBA measurement, one record per task, arm and block, and the untimed trace and invalidation run |
-| `ttfx_invalidations.jl` | loaded by a task script in the invalidation run: summarizes the invalidations of its load and run phases |
+| `ttfx_invalidations.jl` | loaded by a task script in the untimed trace run: summarizes the invalidations of its load and run phases |
 | `ttfx_compare.jl` | the verdict and the markdown report |
 | `ttfx_build_state.jl` | whether a commit's julia-ci build is pending, done, failed or absent |
 | `exclude.txt` | tasks not measured; every other task in the checkout is |
