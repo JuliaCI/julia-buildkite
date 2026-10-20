@@ -60,7 +60,8 @@ sample clears compiled code and the JIT object cache, precompiles once, loads th
 project's packages once in an untimed process (and clears the object cache again), then runs the
 task script `TTFX_REPEATS` times (three) in fresh processes: the first run is the cold
 measurement, the later ones hit whatever caches the first populated. The script then runs
-`TTFX_REPEATS` more times with the GC disabled (see the artifact table below). After the timed runs
+`TTFX_REPEATS` more times with the GC disabled (see the artifact table below), and once
+in a copy of the project that has every stdlib added and loaded first (below). After the timed runs
 of block 1 the script runs once more per arm, not timed, tracing compilation from its
 first marker to its last as `@trace_compile` does (every method compiled, and how long
 it took; Julia 1.12 and later) and logging invalidations over the same span (below);
@@ -98,7 +99,7 @@ else:
 
 | artifact | content |
 |---|---|
-| `ttfx/results.json` | records: `arm, package, task, block, order, status, error, precompile_time, load_times, run_times, total_times, load_stats, run_stats, load_times_gcoff, run_times_gcoff, total_times_gcoff, load_stats_gcoff, run_stats_gcoff, gc_after_load, error_gcoff, invalidations, packages_hash` |
+| `ttfx/results.json` | records: `arm, package, task, block, order, status, error, precompile_time, load_times, run_times, total_times, load_stats, run_stats, load_times_gcoff, run_times_gcoff, total_times_gcoff, load_stats_gcoff, run_stats_gcoff, gc_after_load, error_gcoff, invalidations, packages_hash, load_times_stdlibs, run_times_stdlibs, total_times_stdlibs, load_stats_stdlibs, run_stats_stdlibs, error_stdlibs` |
 | `ttfx/results-meta.json` | the builds (`arms.<label>`: version, commit, date, CPU threads seen), machine, settings, task list, snippets commit, Buildkite build |
 | `ttfx/report.md`, `ttfx/compare.json` | the report and, on pull requests, the per-task and suite verdicts |
 | `ttfx/benchmark.log` | the driver's log |
@@ -140,6 +141,20 @@ holds; and `top_definitions` and `top_rejected`, the five causes with the most, 
 `[method, count]`. Logging slows loading by up to a sixth, so it is kept out of the timed
 runs; the summary is compiled after tracing stops, so it stays out of the trace. The
 counts are deterministic for a given build and set of package versions.
+
+Each task also runs in a second copy of its project, with every stdlib of the build added as
+a dependency and imported before the first marker (`TTFX_STDLIBS`, on by default). Each
+task alone loads few methods from outside its own dependencies, so it rarely takes the
+slower path a package image's edges and activations take when other packages have added
+methods to the functions they use. A user who loads several unrelated packages hits that
+path, and this run reproduces it cheaply: the stdlibs are already precompiled. They are
+added to the project rather than loaded from the stdlib directory, so the extensions they
+trigger are precompiled with everything else and each stdlib loads at its resolved
+version. After the normal and GC-off repeats, the copy is precompiled and loaded once,
+untimed, and the task runs once, cold: `load_times_stdlibs`, `run_times_stdlibs` and
+their stats. Its load is compared as `load (stdlibs first)`. Precompile time is not
+recorded, as the copy's packages are mostly precompiled already. A failure here is kept
+in `error_stdlibs` and does not affect `status`.
 
 ## Release reference: the weekly schedule (julia-ci)
 
@@ -197,11 +212,12 @@ which draws the optimized build next to the master series with the paired differ
 ## Knobs
 
 Environment variables on the job: `TTFX_EXCLUDE` (default `exclude.txt`, or `none`),
-`TTFX_BLOCKS` (2), `TTFX_REPEATS` (3), `TTFX_BASE_WAIT_MINUTES` (20),
+`TTFX_BLOCKS` (2), `TTFX_REPEATS` (3), `TTFX_STDLIBS` (`on`, or `off`), `TTFX_BASE_WAIT_MINUTES` (20),
 `TTFX_SNIPPETS_REPO` and `TTFX_SNIPPETS_REF`, `TTFX_RELEASE` (`latest`, a series such as
 `1.10`, a release branch's nightly such as `1.14-nightly`, `branch-nightly`, or a version; unset measures the build), `TTFX_BASE` (`commit` compares with the regular build of the
 same commit; unset uses the merge-base on pull requests), `TTFX_RELEASES_URL` and
 `TTFX_LATEST_RELEASE_API`, `TTFX_VERSIONS_URL`; on the
 launch step, `TTFX_PATHS` (default `paths.txt`). The job's budget is the sum of the tasks' precompile times, times two arms,
-times the blocks, plus one untimed run of every task script per arm, plus package
+times the blocks, plus one untimed run of every task script per arm, plus the stdlibs-first
+run of every sample, plus package
 downloads: exclude tasks before raising the timeout.

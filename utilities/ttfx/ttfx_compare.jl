@@ -23,6 +23,7 @@ const METRICS = [
     (key = "load",       name = "load (cold)",     threshold = 0.10, suite = 0.02, floor = 0.10),
     (key = "run",        name = "run (cold)",      threshold = 0.15, suite = 0.03, floor = 0.05),
     (key = "warm",       name = "load+run (warm)", threshold = 0.15, suite = 0.03, floor = 0.05),
+    (key = "load_stdlibs", name = "load (stdlibs first)", threshold = 0.10, suite = 0.02, floor = 0.10),
 ]
 
 function parse_args(args)
@@ -52,6 +53,9 @@ function value(r, key)
         return isempty(r["load_times"]) ? nothing : Float64(r["load_times"][1])
     elseif key == "run"
         return isempty(r["run_times"]) ? nothing : Float64(r["run_times"][1])
+    elseif key == "load_stdlibs"
+        t = get(r, "load_times_stdlibs", Any[])
+        return isempty(t) ? nothing : Float64(t[1])
     else
         t = r["total_times"]
         return length(t) >= 2 ? minimum(Float64.(t[2:end])) : nothing

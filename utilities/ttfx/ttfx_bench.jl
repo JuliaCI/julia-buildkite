@@ -11,6 +11,8 @@
 #                        compiled code is cleared before every sample (default: temporary)
 #   --workdir DIR        per-arm copies of the task projects go here (default: temporary)
 #   --logdir DIR         full output of every failed subprocess is kept here
+#   --stdlibs            also run each task once per sample in a copy of its project that has
+#                        every stdlib as a dependency, with all of them loaded before `__t1`
 #   --tracedir DIR       keep the compilation trace (as --trace-compile --trace-compile-timing)
 #                        of one extra, untimed run of each task script per arm, after the
 #                        timed repeats of block 1, as DIR/<Package>-<Task>-<arm>.log; the
@@ -27,7 +29,9 @@
 # Records: {arm, package, task, block, order, status, error, precompile_time, load_times,
 # run_times, total_times, load_stats, run_stats, load_times_gcoff, run_times_gcoff,
 # total_times_gcoff, load_stats_gcoff, run_stats_gcoff, gc_after_load, error_gcoff,
-# invalidations, packages_hash}. `order` is the arm's position within the block.
+# invalidations, packages_hash, load_times_stdlibs, run_times_stdlibs, total_times_stdlibs,
+# load_stats_stdlibs, run_stats_stdlibs, error_stdlibs}. `order` is the arm's position
+# within the block.
 # A task that fails on any arm finishes the current block, so every arm gets its one try,
 # and skips the remaining blocks: a broken package does not cost the whole ABBA.
 # The task script prints "load, run, total seconds"; the `*_times` arrays keep every
@@ -39,7 +43,9 @@
 # `error_gcoff` and does not affect `status`. `invalidations` summarizes, in block 1 with
 # --tracedir, the invalidations the trace run logs (ttfx_invalidations.jl).
 # `packages_hash` identifies the resolved package versions so a comparison can tell a
-# build difference from a resolution difference.
+# build difference from a resolution difference. The `*_stdlibs` fields are one run of the
+# task in the stdlibs copy (--stdlibs); a failure there is kept in `error_stdlibs` and does
+# not affect `status`.
 
 using Dates, Printf, SHA, TOML
 include(joinpath(@__DIR__, "ttfx_json.jl"))
@@ -60,7 +66,7 @@ end
 function parse_args(args)
     opts = Dict{String,Any}(
         "tasks" => nothing, "exclude" => nothing, "depot" => nothing, "workdir" => nothing, "logdir" => nothing,
-        "tracedir" => nothing,
+        "tracedir" => nothing, "stdlibs" => false,
         "blocks" => "2", "repeats" => "3", "timeout" => "1800",
         "results" => "results.json", "meta" => "results-meta.json", "snippets-commit" => "")
     arms = Arm[]
@@ -70,6 +76,11 @@ function parse_args(args)
         if startswith(a, "--")
             key = a[3:end]
             haskey(opts, key) || error("unknown option $a")
+            if opts[key] === false
+                opts[key] = true
+                i += 1
+                continue
+            end
             i += 1
             i <= length(args) || error("$a needs a value")
             opts[key] = args[i]
@@ -233,14 +244,40 @@ end
 
 # Resolve and download the task's packages for one arm, without precompiling. Each arm
 # gets its own copy of the project, so each resolves as a user of that build would.
-function instantiate(arm::Arm, depot::String, proj::String, timeout::Float64, logname::String)
-    code = "using Pkg; Pkg.instantiate()"
+function instantiate(arm::Arm, depot::String, proj::String, timeout::Float64, logname::String; setup::String = "")
+    code = setup * "\nusing Pkg; Pkg.instantiate()"
     cmd = addenv(`$(arm.julia) --startup-file=no --project=$proj -e $code`,
                  arm_env(arm, depot)..., "JULIA_PKG_PRECOMPILE_AUTO" => "0")
     out, err, ok, timed_out = run_timed(cmd, timeout)
     ok || return failure_message("instantiate", out, err, timed_out, timeout; logname = logname * "-instantiate")
     return nothing
 end
+
+# Run in a copy of the task's project before it is instantiated: adds every stdlib of the
+# build as a dependency and imports them all at the top of the script, before `__t1`. The
+# task's packages then load into a session with many methods from outside their own
+# dependencies, as when a user loads several unrelated packages. Package-image edges and
+# activations are slower to restore there, and a task alone rarely shows it. The stdlibs
+# are added to the project so that the extensions they trigger are precompiled with the
+# rest. The imports are one statement because a toplevel loop would be compiled, and
+# nothing may be compiled before the first marker.
+const ADD_STDLIBS = raw"""
+    using TOML
+    project = Base.active_project()
+    d = TOML.parsefile(project)
+    deps = get!(d, "deps", Dict{String,Any}())
+    names = String[]
+    for name in sort!(readdir(Sys.STDLIB))
+        f = joinpath(Sys.STDLIB, name, "Project.toml")
+        isfile(f) || continue
+        deps[name] = TOML.parsefile(f)["uuid"]
+        push!(names, name)
+    end
+    open(io -> TOML.print(io, d), project, "w")
+    script = joinpath(dirname(project), "task.jl")
+    src = read(script, String)
+    write(script, "import " * join(names, ", ") * "\n" * src)
+    """
 
 # The snippets mark their phases with `__t1 = time()` (before `using`), `__t2 = time()`
 # (after it) and `__t3 = time()` (after the work). Write a copy of the script that also
@@ -385,19 +422,14 @@ end
 
 # One sample: clear the caches, precompile the project, load its packages once untimed
 # (warmup_load), then run the task script `repeats` times in fresh processes. With `tracefile`, the script runs once more after
-# them, untimed, traced and logging invalidations (trace_run).
+# them, untimed, traced and logging invalidations (trace_run). With `stdlibs`, a project and
+# script, the task first runs once in that copy of its project (stdlibs_run).
 function measure(arm::Arm, depot::String, proj::String, script::String, repeats::Int, timeout::Float64, logname::String;
-                 tracefile::Union{Nothing,String} = nothing)
+                 tracefile::Union{Nothing,String} = nothing, stdlibs = nothing)
     clear_compiled!(depot)
     env = arm_env(arm, depot)
-    precomp_code = "using Pkg; t = @elapsed Pkg.precompile(); print(\"__TTFX_T__:\", t)"
-    out, err, ok, timed_out = run_timed(
-        addenv(`$(arm.julia) --startup-file=no --project=$proj -e $precomp_code`,
-               env..., "JULIA_PKG_PRECOMPILE_AUTO" => "0"), timeout)
-    ok || return (; status = "error", error = failure_message("precompile", out, err, timed_out, timeout; logname = logname * "-precompile"))
-    pm = match(r"__TTFX_T__:([\d.eE+-]+)", out)
-    pm === nothing && return (; status = "error", error = "could not parse precompile time from $(repr(out))")
-    precompile_time = parse(Float64, pm.captures[1])
+    precompile_time = precompile_project(arm, env, proj, timeout, logname)
+    precompile_time isa String && return (; status = "error", error = precompile_time)
     warmup_load(arm, env, proj, timeout)
     clear_objcache!(depot)
 
@@ -414,6 +446,9 @@ function measure(arm::Arm, depot::String, proj::String, script::String, repeats:
         clear_objcache!(depot)
         g = run_repeats(addenv(task_cmd, "TTFX_GC" => "off"), repeats, timeout, logname * "-gcoff")
     end
+    # Before the trace run, which would warm what this measures. Its packages are mostly
+    # precompiled by now, in the same depot.
+    s = stdlibs === nothing || status == "error" ? nothing : stdlibs_run(arm, depot, env, stdlibs..., timeout, logname)
     trace, inv = tracefile === nothing || isempty(r.load) ? (nothing, nothing) :
         trace_run(arm, env, proj, script, timeout, tracefile, logname)
     return (; status, error = status == "ok" ? nothing : r.err, precompile_time,
@@ -426,7 +461,36 @@ function measure(arm::Arm, depot::String, proj::String, script::String, repeats:
               run_stats_gcoff = g === nothing ? Any[] : g.run_stats,
               gc_after_load = g === nothing ? Float64[] : g.gc_after_load,
               error_gcoff = g === nothing || length(g.load) == repeats ? nothing : g.err,
+              load_times_stdlibs = s isa NamedTuple ? s.load : Float64[],
+              run_times_stdlibs = s isa NamedTuple ? s.run : Float64[],
+              total_times_stdlibs = s isa NamedTuple ? s.total : Float64[],
+              load_stats_stdlibs = s isa NamedTuple ? s.load_stats : Any[],
+              run_stats_stdlibs = s isa NamedTuple ? s.run_stats : Any[],
+              error_stdlibs = s isa String ? s : s isa NamedTuple && isempty(s.load) ? s.err : nothing,
               trace, invalidations = inv)
+end
+
+# `Pkg.precompile()` of the project: its time, or the failure message.
+function precompile_project(arm::Arm, env, proj::String, timeout::Float64, logname::String)
+    code = "using Pkg; t = @elapsed Pkg.precompile(); print(\"__TTFX_T__:\", t)"
+    out, err, ok, timed_out = run_timed(
+        addenv(`$(arm.julia) --startup-file=no --project=$proj -e $code`,
+               env..., "JULIA_PKG_PRECOMPILE_AUTO" => "0"), timeout)
+    ok || return failure_message("precompile", out, err, timed_out, timeout; logname = logname * "-precompile")
+    pm = match(r"__TTFX_T__:([\d.eE+-]+)", out)
+    pm === nothing && return "could not parse precompile time from $(repr(out))"
+    return parse(Float64, pm.captures[1])
+end
+
+# The task once, cold, in the stdlibs copy of its project (ADD_STDLIBS), after an untimed
+# precompile and warmup load of that copy. Only the cold load is compared, so one run.
+# Returns the run's numbers, or the failure message.
+function stdlibs_run(arm::Arm, depot::String, env, proj::String, script::String, timeout::Float64, logname::String)
+    t = precompile_project(arm, env, proj, timeout, logname * "-stdlibs")
+    t isa String && return t
+    warmup_load(arm, env, proj, timeout)
+    clear_objcache!(depot)
+    return run_repeats(addenv(`$(arm.julia) --startup-file=no --project=$proj $script`, env...), 1, timeout, logname * "-stdlibs")
 end
 
 # The task script `repeats` times in fresh processes, stopping at the first failure.
@@ -476,7 +540,7 @@ function main()
               arms = builds,
               arm_order = [arm.label for arm in arms],
               system = system_info(),
-              settings = (; blocks, repeats, timeout_s = timeout, depot, n_tasks = length(tasks),
+              settings = (; blocks, repeats, timeout_s = timeout, depot, stdlibs = opts["stdlibs"], n_tasks = length(tasks),
                             tasks = [t.package * "/" * t.task for t in tasks],
                             excluded = filter(∉(stale), opts["exclude"] === nothing ? String[] :
                                               [strip(first(split(l, '#'))) for l in eachline(opts["exclude"])])),
@@ -504,6 +568,7 @@ function main()
         projs = Dict{String,String}()
         scripts = Dict{String,String}()
         failed = Dict{String,String}()
+        stdlibs = Dict{String,Any}()  # per arm: (project, script), or why there is none
         for arm in arms
             proj = joinpath(workdir, "tasks", arm.label, task.package, task.task)
             rm(proj; recursive = true, force = true)
@@ -515,6 +580,14 @@ function main()
             scripts[arm.label], instrumented = instrument_task(proj)
             instrumented || arm !== first(arms) ||
                 println("  note: task.jl does not use the standard phase markers, so no per-phase gc/compile stats")
+            if opts["stdlibs"]
+                sproj = joinpath(workdir, "tasks-stdlibs", arm.label, task.package, task.task)
+                rm(sproj; recursive = true, force = true)
+                mkpath(dirname(sproj))
+                cp(task.dir, sproj)
+                msg = instantiate(arm, depot, sproj, timeout, "$(task.package)-$(task.task)-$(arm.label)-stdlibs"; setup = ADD_STDLIBS)
+                stdlibs[arm.label] = msg === nothing ? (sproj, first(instrument_task(sproj))) : "instantiate: " * msg
+            end
         end
         stop = false
         for block in 1:blocks
@@ -525,9 +598,12 @@ function main()
                     (; status = "error", error = failed[arm.label])
                 else
                     try
-                        measure(arm, depot, projs[arm.label], scripts[arm.label], repeats, timeout, "$(task.package)-$(task.task)-$(arm.label)-b$block";
-                                tracefile = tracedir === nothing || block != 1 ? nothing :
-                                    joinpath(tracedir, "$(task.package)-$(task.task)-$(arm.label).log"))
+                        sl = get(stdlibs, arm.label, nothing)
+                        res = measure(arm, depot, projs[arm.label], scripts[arm.label], repeats, timeout, "$(task.package)-$(task.task)-$(arm.label)-b$block";
+                                      tracefile = tracedir === nothing || block != 1 ? nothing :
+                                          joinpath(tracedir, "$(task.package)-$(task.task)-$(arm.label).log"),
+                                      stdlibs = sl isa Tuple ? sl : nothing)
+                        sl isa String ? merge(res, (; error_stdlibs = sl)) : res
                     catch e
                         (; status = "error", error = sprint(showerror, e))
                     end
@@ -548,7 +624,13 @@ function main()
                          gc_after_load = get(result, :gc_after_load, Float64[]),
                          error_gcoff = get(result, :error_gcoff, nothing),
                          invalidations = get(result, :invalidations, nothing),
-                         packages_hash = packages_hash(projs[arm.label]))
+                         packages_hash = packages_hash(projs[arm.label]),
+                         load_times_stdlibs = get(result, :load_times_stdlibs, Float64[]),
+                         run_times_stdlibs = get(result, :run_times_stdlibs, Float64[]),
+                         total_times_stdlibs = get(result, :total_times_stdlibs, Float64[]),
+                         load_stats_stdlibs = get(result, :load_stats_stdlibs, Any[]),
+                         run_stats_stdlibs = get(result, :run_stats_stdlibs, Any[]),
+                         error_stdlibs = get(result, :error_stdlibs, nothing))
                 push!(records, rec)
                 write_results()
                 if rec.status == "ok"
@@ -565,6 +647,11 @@ function main()
                                 rec.load_times_gcoff[1], rec.run_times_gcoff[1], rec.gc_after_load[1])
                     end
                     rec.error_gcoff === nothing || println("           gc-off runs failed: $(rec.error_gcoff)")
+                    if !isempty(rec.load_times_stdlibs)
+                        @printf("           %-8s stdlibs first: load=%6.2fs  run=%6.2fs\n", "",
+                                rec.load_times_stdlibs[1], rec.run_times_stdlibs[1])
+                    end
+                    rec.error_stdlibs === nothing || println("           stdlibs-first run failed: $(rec.error_stdlibs)")
                 else
                     # Red, and `^^^ +++` makes Buildkite expand this task's log group
                     println("  block $block  $(rpad(arm.label, 8)) \e[31mFAILED\e[0m ($(rec.status)): $(rec.error)")

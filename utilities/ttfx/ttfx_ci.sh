@@ -25,6 +25,8 @@ TTFX_SNIPPETS_REPO="${TTFX_SNIPPETS_REPO:-https://github.com/tecosaur/Julia-TTFX
 TTFX_SNIPPETS_REF="${TTFX_SNIPPETS_REF:-main}"
 TTFX_BLOCKS="${TTFX_BLOCKS:-2}"
 TTFX_REPEATS="${TTFX_REPEATS:-3}"
+# Also load each task with every stdlib loaded first; "off" skips that run
+TTFX_STDLIBS="${TTFX_STDLIBS:-on}"
 # Tasks not to run; "none" runs every task in the snippets checkout
 TTFX_EXCLUDE="${TTFX_EXCLUDE:-${TTFX_UTILS}/exclude.txt}"
 # The base build comes from where julia-ci stages its tarballs, or from the promoted
@@ -297,12 +299,15 @@ SNIPPETS_COMMIT="$(git -C "${TTFX_DIR}/snippets" rev-parse HEAD)"
 echo "snippets commit: ${SNIPPETS_COMMIT}"
 
 echo "--- Benchmark (${MODE})"
-exclude_args=()
+bench_args=()
 if [[ "${TTFX_EXCLUDE}" != "none" ]]; then
-    exclude_args=( --exclude "${TTFX_EXCLUDE}" )
+    bench_args=( --exclude "${TTFX_EXCLUDE}" )
+fi
+if [[ "${TTFX_STDLIBS}" == "on" ]]; then
+    bench_args+=( --stdlibs )
 fi
 "${HEAD_JULIA}" --startup-file=no "${TTFX_UTILS}/ttfx_bench.jl" \
-    --tasks "${TTFX_DIR}/snippets/tasks" ${exclude_args[@]+"${exclude_args[@]}"} \
+    --tasks "${TTFX_DIR}/snippets/tasks" ${bench_args[@]+"${bench_args[@]}"} \
     --depot "${TTFX_DIR}/depot" --workdir "${TTFX_DIR}/work" --logdir "${TTFX_DIR}/logs" \
     --blocks "${TTFX_BLOCKS}" --repeats "${TTFX_REPEATS}" \
     --results "${TTFX_DIR}/results.json" --meta "${TTFX_DIR}/results-meta.json" \
