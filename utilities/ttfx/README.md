@@ -99,7 +99,7 @@ else:
 
 | artifact | content |
 |---|---|
-| `ttfx/results.json` | records: `arm, package, task, block, order, status, error, precompile_time, load_times, run_times, total_times, load_stats, run_stats, load_times_gcoff, run_times_gcoff, total_times_gcoff, load_stats_gcoff, run_stats_gcoff, gc_after_load, error_gcoff, invalidations, packages_hash, load_times_stdlibs, run_times_stdlibs, total_times_stdlibs, load_stats_stdlibs, run_stats_stdlibs, error_stdlibs` |
+| `ttfx/results.json` | records: `arm, package, task, block, order, status, error, precompile_time, load_times, run_times, total_times, load_stats, run_stats, load_times_gcoff, run_times_gcoff, total_times_gcoff, load_stats_gcoff, run_stats_gcoff, gc_after_load, error_gcoff, invalidations, packages_hash, precompile_time_stdlibs, load_times_stdlibs, run_times_stdlibs, total_times_stdlibs, load_stats_stdlibs, run_stats_stdlibs, error_stdlibs` |
 | `ttfx/results-meta.json` | the builds (`arms.<label>`: version, commit, date, CPU threads seen), machine, settings, task list, snippets commit, Buildkite build |
 | `ttfx/report.md`, `ttfx/compare.json` | the report and, on pull requests, the per-task and suite verdicts |
 | `ttfx/benchmark.log` | the driver's log |
@@ -152,9 +152,11 @@ added to the project rather than loaded from the stdlib directory, so the extens
 trigger are precompiled with everything else and each stdlib loads at its resolved
 version. After the normal and GC-off repeats, the copy is precompiled and loaded once,
 untimed, and the task runs once, cold: `load_times_stdlibs`, `run_times_stdlibs` and
-their stats. Its load is compared as `load (stdlibs first)`. Precompile time is not
-recorded, as the copy's packages are mostly precompiled already. A failure here is kept
-in `error_stdlibs` and does not affect `status`.
+their stats. Its load is compared as `load (stdlibs first)`. `precompile_time_stdlibs`
+is recorded but not compared: it follows the task's own precompile in the same depot, so
+it is mostly the extensions the stdlibs trigger, and a large value means adding them
+changed the resolved versions. A failure here is kept in `error_stdlibs` and does not
+affect `status`.
 
 ## Release reference: the weekly schedule (julia-ci)
 

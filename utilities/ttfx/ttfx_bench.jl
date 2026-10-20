@@ -29,8 +29,8 @@
 # Records: {arm, package, task, block, order, status, error, precompile_time, load_times,
 # run_times, total_times, load_stats, run_stats, load_times_gcoff, run_times_gcoff,
 # total_times_gcoff, load_stats_gcoff, run_stats_gcoff, gc_after_load, error_gcoff,
-# invalidations, packages_hash, load_times_stdlibs, run_times_stdlibs, total_times_stdlibs,
-# load_stats_stdlibs, run_stats_stdlibs, error_stdlibs}. `order` is the arm's position
+# invalidations, packages_hash, precompile_time_stdlibs, load_times_stdlibs, run_times_stdlibs,
+# total_times_stdlibs, load_stats_stdlibs, run_stats_stdlibs, error_stdlibs}. `order` is the arm's position
 # within the block.
 # A task that fails on any arm finishes the current block, so every arm gets its one try,
 # and skips the remaining blocks: a broken package does not cost the whole ABBA.
@@ -45,7 +45,8 @@
 # `packages_hash` identifies the resolved package versions so a comparison can tell a
 # build difference from a resolution difference. The `*_stdlibs` fields are one run of the
 # task in the stdlibs copy (--stdlibs); a failure there is kept in `error_stdlibs` and does
-# not affect `status`.
+# not affect `status`. `precompile_time_stdlibs` is the precompile of that copy after the
+# task's own, so mostly the extensions the stdlibs trigger.
 
 using Dates, Printf, SHA, TOML
 include(joinpath(@__DIR__, "ttfx_json.jl"))
@@ -461,6 +462,7 @@ function measure(arm::Arm, depot::String, proj::String, script::String, repeats:
               run_stats_gcoff = g === nothing ? Any[] : g.run_stats,
               gc_after_load = g === nothing ? Float64[] : g.gc_after_load,
               error_gcoff = g === nothing || length(g.load) == repeats ? nothing : g.err,
+              precompile_time_stdlibs = s isa NamedTuple ? s.precompile_time : nothing,
               load_times_stdlibs = s isa NamedTuple ? s.load : Float64[],
               run_times_stdlibs = s isa NamedTuple ? s.run : Float64[],
               total_times_stdlibs = s isa NamedTuple ? s.total : Float64[],
@@ -484,13 +486,14 @@ end
 
 # The task once, cold, in the stdlibs copy of its project (ADD_STDLIBS), after an untimed
 # precompile and warmup load of that copy. Only the cold load is compared, so one run.
-# Returns the run's numbers, or the failure message.
+# Returns the precompile time and the run's numbers, or the failure message.
 function stdlibs_run(arm::Arm, depot::String, env, proj::String, script::String, timeout::Float64, logname::String)
     t = precompile_project(arm, env, proj, timeout, logname * "-stdlibs")
     t isa String && return t
     warmup_load(arm, env, proj, timeout)
     clear_objcache!(depot)
-    return run_repeats(addenv(`$(arm.julia) --startup-file=no --project=$proj $script`, env...), 1, timeout, logname * "-stdlibs")
+    r = run_repeats(addenv(`$(arm.julia) --startup-file=no --project=$proj $script`, env...), 1, timeout, logname * "-stdlibs")
+    return (; precompile_time = t, r...)
 end
 
 # The task script `repeats` times in fresh processes, stopping at the first failure.
@@ -625,6 +628,7 @@ function main()
                          error_gcoff = get(result, :error_gcoff, nothing),
                          invalidations = get(result, :invalidations, nothing),
                          packages_hash = packages_hash(projs[arm.label]),
+                         precompile_time_stdlibs = get(result, :precompile_time_stdlibs, nothing),
                          load_times_stdlibs = get(result, :load_times_stdlibs, Float64[]),
                          run_times_stdlibs = get(result, :run_times_stdlibs, Float64[]),
                          total_times_stdlibs = get(result, :total_times_stdlibs, Float64[]),
@@ -648,8 +652,8 @@ function main()
                     end
                     rec.error_gcoff === nothing || println("           gc-off runs failed: $(rec.error_gcoff)")
                     if !isempty(rec.load_times_stdlibs)
-                        @printf("           %-8s stdlibs first: load=%6.2fs  run=%6.2fs\n", "",
-                                rec.load_times_stdlibs[1], rec.run_times_stdlibs[1])
+                        @printf("           %-8s stdlibs first: load=%6.2fs  run=%6.2fs  (added precompile %6.2fs)\n", "",
+                                rec.load_times_stdlibs[1], rec.run_times_stdlibs[1], rec.precompile_time_stdlibs)
                     end
                     rec.error_stdlibs === nothing || println("           stdlibs-first run failed: $(rec.error_stdlibs)")
                 else
