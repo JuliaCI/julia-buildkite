@@ -43,6 +43,20 @@ TTFX_VERSIONS_URL="${TTFX_VERSIONS_URL:-${TTFX_RELEASES_URL}/versions.json}"
 # "commit": compare with the regular build of this build's own commit rather than with
 # the merge-base (the nightly optimized build, pipelines/main/misc/ttfx/ttfx_opt.yml)
 TTFX_BASE="${TTFX_BASE:-}"
+# MEGA/All-Tasks, every task again in one session, adds some 30 minutes per arm, so by
+# default julia-pr's pull requests and the self-test skip it; "on" or "off" overrides
+if [[ -z "${TTFX_MEGA:-}" ]]; then
+    if [[ "${BUILDKITE_PIPELINE_SLUG:-}" == julia-buildkite* ||
+          ( "${BUILDKITE_PIPELINE_SLUG:-}" == "julia-pr" && "${BUILDKITE_PULL_REQUEST:-false}" != "false" ) ]]; then
+        TTFX_MEGA="off"
+    else
+        TTFX_MEGA="on"
+    fi
+fi
+if [[ "${TTFX_MEGA}" != "on" && "${TTFX_MEGA}" != "off" ]]; then
+    echo "TTFX_MEGA must be on or off, not '${TTFX_MEGA}'" >&2
+    exit 1
+fi
 
 rm -rf "${TTFX_DIR}"
 mkdir -p "${TTFX_DIR}"
@@ -304,7 +318,7 @@ fi
 "${HEAD_JULIA}" --startup-file=no "${TTFX_UTILS}/ttfx_bench.jl" \
     --tasks "${TTFX_DIR}/snippets/tasks" ${exclude_args[@]+"${exclude_args[@]}"} \
     --depot "${TTFX_DIR}/depot" --workdir "${TTFX_DIR}/work" --logdir "${TTFX_DIR}/logs" \
-    --blocks "${TTFX_BLOCKS}" --repeats "${TTFX_REPEATS}" \
+    --blocks "${TTFX_BLOCKS}" --repeats "${TTFX_REPEATS}" --mega "${TTFX_MEGA}" \
     --results "${TTFX_DIR}/results.json" --meta "${TTFX_DIR}/results-meta.json" \
     --tracedir "${TTFX_DIR}/trace" --snippets-commit "${SNIPPETS_COMMIT}" \
     "${ARMS[@]}" 2>&1 | tee "${TTFX_DIR}/benchmark.log"

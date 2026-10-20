@@ -12,7 +12,7 @@ repository's `main` branch at job time; everything that runs them lives here.
 | `ttfx_launch.sh` | the launch step: decides whether this build is measured, uploads the job |
 | `paths.txt` | the paths a pull request must touch to be measured without the label |
 | `ttfx_ci.sh` | the job: fetch the builds, check out the snippets, benchmark, compare, report |
-| `ttfx_bench.jl` | the driver: interleaved ABBA measurement, one record per task, arm and block, and the untimed trace and invalidation run |
+| `ttfx_bench.jl` | the driver: interleaved ABBA measurement, one record per task, arm and block, the untimed trace and invalidation run, and the generated MEGA task |
 | `ttfx_invalidations.jl` | loaded by a task script in the untimed trace run: summarizes the invalidations of its load and run phases |
 | `ttfx_compare.jl` | the verdict and the markdown report |
 | `ttfx_build_state.jl` | whether a commit's julia-ci build is pending, done, failed or absent |
@@ -67,6 +67,25 @@ it took; Julia 1.12 and later) and logging invalidations over the same span (bel
 the traces are the `trace-compile.tar.gz` artifact. The depot
 holds packages and artifacts only; the agent user's own depot is not on the path.
 
+After the tasks comes one more, `MEGA/All-Tasks`: every task that succeeded, in one session. Its
+project is the union of the tasks' projects (a compat bound is kept where every task that
+has the package agrees on it), so its packages resolve, precompile and load together. Its
+load phase loads every task's packages, each task's load section in a module of its own;
+its run phase then runs every task's work, each in its task's module, as the
+script would (`include_string`). Load therefore includes what the packages cost each
+other, the invalidations of one by another included. Its GC-off repeats allocate some
+1.3 GiB in load and 13 GiB in run (julia 1.13), within the agents' 24 GiB. It is
+measured like any task and judged on its own, but left out of the suite geomeans, which
+would otherwise count every task twice. A task that failed in any block on any arm is
+left out (and one without the standard phase markers), so a broken package costs MEGA that task rather than the whole run, and every
+arm runs the same set; the tasks left out are `mega_left_out` in its records. Its numbers
+therefore compare only to others with the same set of tasks (which also changes when the
+snippets repository adds one). A run of it takes a minute or two, so it is repeated
+twice rather than `TTFX_REPEATS` times (a cold run and a warm one, and as many with the
+GC off). Like every task it precompiles from scratch in every block. It costs some 30
+minutes per arm, so julia-pr's pull requests and the self-test skip it; every other
+job runs it. `TTFX_MEGA=on` or `off` on the job overrides that.
+
 A task's metric is a robust regression when the head samples are all slower than every
 base sample, every block's head/base ratio exceeds the metric's threshold, and the
 difference clears an absolute floor; improvements are the mirror image. Load and run are
@@ -98,7 +117,7 @@ else:
 
 | artifact | content |
 |---|---|
-| `ttfx/results.json` | records: `arm, package, task, block, order, status, error, precompile_time, load_times, run_times, total_times, load_stats, run_stats, load_times_gcoff, run_times_gcoff, total_times_gcoff, load_stats_gcoff, run_stats_gcoff, gc_after_load, error_gcoff, invalidations, packages_hash` |
+| `ttfx/results.json` | records: `arm, package, task, block, order, status, error, precompile_time, load_times, run_times, total_times, load_stats, run_stats, load_times_gcoff, run_times_gcoff, total_times_gcoff, load_stats_gcoff, run_stats_gcoff, gc_after_load, error_gcoff, invalidations, packages_hash, mega_left_out` |
 | `ttfx/results-meta.json` | the builds (`arms.<label>`: version, commit, date, CPU threads seen), machine, settings, task list, snippets commit, Buildkite build |
 | `ttfx/report.md`, `ttfx/compare.json` | the report and, on pull requests, the per-task and suite verdicts |
 | `ttfx/benchmark.log` | the driver's log |
@@ -197,11 +216,11 @@ which draws the optimized build next to the master series with the paired differ
 ## Knobs
 
 Environment variables on the job: `TTFX_EXCLUDE` (default `exclude.txt`, or `none`),
-`TTFX_BLOCKS` (2), `TTFX_REPEATS` (3), `TTFX_BASE_WAIT_MINUTES` (20),
+`TTFX_BLOCKS` (2), `TTFX_REPEATS` (3), `TTFX_MEGA` (`on` or `off`; unset, off on julia-pr's pull requests and in the self-test), `TTFX_BASE_WAIT_MINUTES` (20),
 `TTFX_SNIPPETS_REPO` and `TTFX_SNIPPETS_REF`, `TTFX_RELEASE` (`latest`, a series such as
 `1.10`, a release branch's nightly such as `1.14-nightly`, `branch-nightly`, or a version; unset measures the build), `TTFX_BASE` (`commit` compares with the regular build of the
 same commit; unset uses the merge-base on pull requests), `TTFX_RELEASES_URL` and
 `TTFX_LATEST_RELEASE_API`, `TTFX_VERSIONS_URL`; on the
 launch step, `TTFX_PATHS` (default `paths.txt`). The job's budget is the sum of the tasks' precompile times, times two arms,
-times the blocks, plus one untimed run of every task script per arm, plus package
+times the blocks, plus MEGA's precompile and runs (not on pull requests), plus one untimed run of every task script per arm, plus package
 downloads: exclude tasks before raising the timeout.

@@ -90,6 +90,9 @@ function group(records, arms)
     return g
 end
 
+# MEGA/All-Tasks, every task again in one session (ttfx_bench.jl)
+is_mega(name) = startswith(name, "MEGA/")
+
 function compare_task(name, byarm, base, head, nblocks)
     b = get(byarm, base, Any[]); h = get(byarm, head, Any[])
     out = Dict{String,Any}("name" => name, "metrics" => Dict{String,Any}(), "note" => nothing,
@@ -160,11 +163,12 @@ function judge(bv, hv, m)
 end
 
 # Per metric, the geometric mean of the per-task ratios, per block; load and run once more
-# from the GC-off repeats (suite keys `load_gcoff`, `run_gcoff`).
+# from the GC-off repeats (suite keys `load_gcoff`, `run_gcoff`). The MEGA task, every
+# task again in one session, is judged on its own and kept out of the geomean.
 function compare_suite(tasks, nblocks)
     suite = Dict{String,Any}()
     for m in METRICS, field in ("ratios", "gcoff_ratios")
-        has(t) = haskey(t["metrics"], m.key) && haskey(t["metrics"][m.key], field)
+        has(t) = !is_mega(t["name"]) && haskey(t["metrics"], m.key) && haskey(t["metrics"][m.key], field)
         gs = Float64[]
         for k in 1:nblocks
             rs = [t["metrics"][m.key][field][k] for t in tasks if has(t)]
