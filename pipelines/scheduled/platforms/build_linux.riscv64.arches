@@ -7,5 +7,6 @@ package_linux_riscv64    riscv64-linux-gnu    x86_64    x86_64         OS=Linux,
 # No -Werror for C++: GCC 15 targeting riscv64 reports -Warray-bounds in LLVM's headers
 # (llvm/ADT/PointerIntPair.h), which it does not for the other targets.
 # Cross-compiled, with the riscv64 parts of the build (system image, pkgimages, docs)
-# running under qemu-user, mostly single-threaded: about 3 hours on the amdci builders
-#default TIMEOUT 300
+# running under qemu-user, mostly single-threaded: 3.5 to 5 hours on the amdci builders
+# (slowest on amdci4), including the bounds-checked stdlib companion pkgimages
+#default TIMEOUT 420
