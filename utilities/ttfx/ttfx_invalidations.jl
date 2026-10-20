@@ -1,5 +1,5 @@
 # Included by an instrumented task script (`task_ttfx.jl`, see instrument_task in
-# ttfx_bench.jl) before its first marker, in the untimed invalidations run only. The
+# ttfx_bench.jl) before its first marker, in the untimed trace run only. The
 # script logs invalidations from its first marker to its third, in the two logs
 # SnoopCompile reads:
 #

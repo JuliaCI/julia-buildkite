@@ -12,8 +12,8 @@ repository's `main` branch at job time; everything that runs them lives here.
 | `ttfx_launch.sh` | the launch step: decides whether this build is measured, uploads the job |
 | `paths.txt` | the paths a pull request must touch to be measured without the label |
 | `ttfx_ci.sh` | the job: fetch the builds, check out the snippets, benchmark, compare, report |
-| `ttfx_bench.jl` | the driver: interleaved ABBA measurement, one record per task, arm and block, and the trace-compile and invalidation runs |
-| `ttfx_invalidations.jl` | loaded by a task script in the invalidation run: summarizes the invalidations of its load and run phases |
+| `ttfx_bench.jl` | the driver: interleaved ABBA measurement, one record per task, arm and block, and the untimed trace and invalidation run |
+| `ttfx_invalidations.jl` | loaded by a task script in the untimed trace run: summarizes the invalidations of its load and run phases |
 | `ttfx_compare.jl` | the verdict and the markdown report |
 | `ttfx_build_state.jl` | whether a commit's julia-ci build is pending, done, failed or absent |
 | `exclude.txt` | tasks not measured; every other task in the checkout is |
@@ -61,8 +61,10 @@ project's packages once in an untimed process (and clears the object cache again
 task script `TTFX_REPEATS` times (three) in fresh processes: the first run is the cold
 measurement, the later ones hit whatever caches the first populated. The script then runs
 `TTFX_REPEATS` more times with the GC disabled (see the artifact table below). After the timed runs
-of block 1 the script runs once more per arm, not timed, with `--trace-compile` and
-`--trace-compile-timing`; those logs are the `trace-compile.tar.gz` artifact. The depot
+of block 1 the script runs once more per arm, not timed, tracing compilation from its
+first marker to its last as `@trace_compile` does (every method compiled, and how long
+it took; Julia 1.12 and later) and logging invalidations over the same span (below);
+the traces are the `trace-compile.tar.gz` artifact. The depot
 holds packages and artifacts only; the agent user's own depot is not on the path.
 
 A task's metric is a robust regression when the head samples are all slower than every
@@ -101,7 +103,7 @@ else:
 | `ttfx/report.md`, `ttfx/compare.json` | the report and, on pull requests, the per-task and suite verdicts |
 | `ttfx/benchmark.log` | the driver's log |
 | `ttfx/logs/*.log` | full stdout and stderr of every subprocess that failed |
-| `ttfx/trace-compile.tar.gz` | `trace/<Package>-<Task>-<arm>.log`: the `--trace-compile --trace-compile-timing` output of one extra run of the task script per task and arm, after the timed runs of block 1 and not timed itself |
+| `ttfx/trace-compile.tar.gz` | `trace/<Package>-<Task>-<arm>.log`: the `--trace-compile --trace-compile-timing` lines of one extra run of the task script per task and arm, from its first marker to its last, after the timed runs of block 1 and not timed itself |
 
 `load_times[1]` and `run_times[1]` are the cold numbers; `precompile_time` is one
 sample per record, take the minimum over blocks for a task.
@@ -128,8 +130,7 @@ do not affect `status`; if one fails (a task that allocates
 too much to run without collection, say) the message is kept in `error_gcoff` and the
 normal numbers stand.
 
-After the trace run each task script runs once more per arm, also untimed, logging
-invalidations from the script's first marker to its last (the logs
+The same untimed run logs invalidations from the script's first marker to its last (the logs
 `SnoopCompileCore.@snoop_invalidations` reads, without the package). `invalidations` in
 the block 1 record holds, for the `load` and `run` phases: `invalidated`, the
 MethodInstances whose compiled code was dropped; `by_definition`, those invalidated by a
@@ -137,7 +138,7 @@ method definition, and `definitions`, how many definitions invalidated anything;
 `rejected_at_load`, package-image code not reinstated on load because an edge no longer
 holds; and `top_definitions` and `top_rejected`, the five causes with the most, as
 `[method, count]`. Logging slows loading by up to a sixth, so it is kept out of the timed
-runs, and out of the trace run so the summary's own compilation stays out of the trace. The
+runs; the summary is compiled after tracing stops, so it stays out of the trace. The
 counts are deterministic for a given build and set of package versions.
 
 ## Release reference: the weekly schedule (julia-ci)
@@ -202,5 +203,5 @@ Environment variables on the job: `TTFX_EXCLUDE` (default `exclude.txt`, or `non
 same commit; unset uses the merge-base on pull requests), `TTFX_RELEASES_URL` and
 `TTFX_LATEST_RELEASE_API`, `TTFX_VERSIONS_URL`; on the
 launch step, `TTFX_PATHS` (default `paths.txt`). The job's budget is the sum of the tasks' precompile times, times two arms,
-times the blocks, plus two untimed runs of every task script per arm, plus package
+times the blocks, plus one untimed run of every task script per arm, plus package
 downloads: exclude tasks before raising the timeout.

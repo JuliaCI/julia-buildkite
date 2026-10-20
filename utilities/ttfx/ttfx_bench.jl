@@ -11,9 +11,10 @@
 #                        compiled code is cleared before every sample (default: temporary)
 #   --workdir DIR        per-arm copies of the task projects go here (default: temporary)
 #   --logdir DIR         full output of every failed subprocess is kept here
-#   --tracedir DIR       keep the --trace-compile --trace-compile-timing output of one extra,
-#                        untimed run of each task script per arm, after the timed repeats of
-#                        block 1, as DIR/<Package>-<Task>-<arm>.log
+#   --tracedir DIR       keep the compilation trace (as --trace-compile --trace-compile-timing)
+#                        of one extra, untimed run of each task script per arm, after the
+#                        timed repeats of block 1, as DIR/<Package>-<Task>-<arm>.log; the
+#                        same run logs invalidations
 #   --blocks N           ABBA blocks: every task is measured N times per arm, the arm order
 #                        reversed on alternate blocks (default 2)
 #   --repeats N          task script runs per sample; the first is the cold one, later ones
@@ -36,7 +37,7 @@
 # one forced collection between them (`gc_after_load`, seconds, excluded from both), so
 # load and run can be read without GC pauses landing in them; a failure there is kept in
 # `error_gcoff` and does not affect `status`. `invalidations` summarizes, in block 1 with
-# --tracedir, an untimed run that logs invalidations (ttfx_invalidations.jl).
+# --tracedir, the invalidations the trace run logs (ttfx_invalidations.jl).
 # `packages_hash` identifies the resolved package versions so a comparison can tell a
 # build difference from a resolution difference.
 
@@ -264,16 +265,23 @@ end
 # remains is the second marker's block being lowered inside the load window, about a
 # quarter of a millisecond against loads of tens of milliseconds and up.
 #
-# With `TTFX_INVALIDATIONS=on` (the untimed invalidations run) the script also logs
+# With `TTFX_INVALIDATIONS=on` (the untimed trace run) the script also logs
 # invalidations from the first marker to the third and prints a summary of the load and
-# run phases (ttfx_invalidations.jl). In every other run this adds two branches not
-# taken, one before the first marker and one in the second marker's block.
+# run phases (ttfx_invalidations.jl). With `TTFX_TRACE=on` (the same run) it traces
+# compilation over the same span, as `@trace_compile` does: every method compiled, and how
+# long it took, to stderr. The summary's own compilation comes after and stays out. The
+# switches are evaluated (`Core.eval`) because a toplevel expression with a `ccall` in it
+# is compiled natively. Julia before 1.12 has no such switch: it notes that on stderr
+# instead, and the trace file keeps the note. In
+# every other run this adds a few branches not taken, before the first marker, in the
+# second marker's block and after the third.
 #
 # The original `task.jl` is left alone, and a script without exactly these markers runs
 # as it is.
 const PHASE_MARKERS = ("__t1 = time()", "__t2 = time()", "__t3 = time()")
 const STATS_PREFIX = "__TTFX_STATS__:"
 const INV_PREFIX = "__TTFX_INV__:"
+const UNTRACED_NOTE = "# not traced: tracing the compilation of a span needs Julia 1.12"
 
 function instrument_task(proj::String)
     script = joinpath(proj, "task.jl")
@@ -297,12 +305,16 @@ function instrument_task(proj::String)
             end
             $(PHASE_MARKERS[2])
         end""",
-        PHASE_MARKERS[3] => PHASE_MARKERS[3] * "\n" * snapshot("__ttfx_s3"))
+        PHASE_MARKERS[3] => PHASE_MARKERS[3] * "\n" * snapshot("__ttfx_s3") * "\n" *
+            "__ttfx_trace && Core.eval(Main, :(ccall(:jl_force_trace_compile_timing_disable, Cvoid, ())))")
     src = "const __ttfx_gc_off = get(ENV, \"TTFX_GC\", \"\") == \"off\"\n" *
           "const __ttfx_inv = get(ENV, \"TTFX_INVALIDATIONS\", \"\") == \"on\"\n" *
           "__ttfx_inv && include($(repr(joinpath(@__DIR__, "ttfx_invalidations.jl"))))\n" *
           "__ttfx_inv && (__ttfx_invlogs = Main.TTFXInvalidations.start())\n" *
-          "Base.cumulative_compile_timing(true)\n__ttfx_gc_off && GC.enable(false)\n" * src * "\n" * """
+          "const __ttfx_trace = get(ENV, \"TTFX_TRACE\", \"\") == \"on\" &&\n" *
+          "    (VERSION >= v\"1.12\" || (println(stderr, \"$UNTRACED_NOTE\"); false))\n" *
+          "Base.cumulative_compile_timing(true)\n__ttfx_gc_off && GC.enable(false)\n" *
+          "__ttfx_trace && Core.eval(Main, :(ccall(:jl_force_trace_compile_timing_enable, Cvoid, ())))\n" * src * "\n" * """
     __ttfx_gc_off && GC.enable(true)
     let stats(a, b) = (d = Base.GC_Diff(b[1], a[1]);
             "{\\"gc_time\\":\$(d.total_time / 1e9),\\"gc_pauses\\":\$(d.pause),\\"gc_full\\":\$(d.full_sweep),\\"allocd\\":\$(d.allocd)," *
@@ -318,30 +330,36 @@ function instrument_task(proj::String)
     return instrumented, true
 end
 
-# The task script once more, after the timed runs so it warms nothing they measure, with
-# --trace-compile --trace-compile-timing writing every method the process compiles, and
-# how long each took, to `tracefile`. A failed run (a build without --trace-compile-timing,
-# say) is noted at the end of the file and does not touch the record.
-function trace_compile(arm::Arm, env, proj::String, script::String, timeout::Float64, tracefile::String, logname::String)
+# The task script once more, after the timed runs so it warms nothing they measure,
+# tracing compilation and logging invalidations from its first marker to its third
+# (instrument_task): every method compiled, and how long it took, goes to `tracefile`.
+# Returns the trace's summary and the invalidations summary ttfx_invalidations.jl prints,
+# or nothing for the latter when the run failed. A script without the markers is traced
+# as a whole process (--trace-compile --trace-compile-timing) and logs no invalidations.
+# A failed or untraced run is noted in the trace (`ok` false) and does not touch the record.
+const TRACE_LINE = r"^(#=.*=# )?precompile\("
+
+function trace_run(arm::Arm, env, proj::String, script::String, timeout::Float64, tracefile::String, logname::String)
     mkpath(dirname(tracefile))
     rm(tracefile; force = true)
-    cmd = addenv(`$(arm.julia) --startup-file=no --project=$proj --trace-compile=$tracefile --trace-compile-timing $script`, env...)
+    instrumented = script != joinpath(proj, "task.jl")
+    cmd = instrumented ?
+        addenv(`$(arm.julia) --startup-file=no --color=no --project=$proj $script`, env...,
+               "TTFX_TRACE" => "on", "TTFX_INVALIDATIONS" => "on") :
+        addenv(`$(arm.julia) --startup-file=no --project=$proj --trace-compile=$tracefile --trace-compile-timing $script`, env...)
     out, err, ok, timed_out = run_timed(cmd, timeout)
+    traced = true
+    instrumented && open(tracefile, "w") do io
+        for l in eachline(IOBuffer(err))
+            l == UNTRACED_NOTE && (traced = false)
+            (l == UNTRACED_NOTE || occursin(TRACE_LINE, l)) && println(io, l)
+        end
+    end
     ok || open(io -> println(io, "# ", failure_message("trace run", out, err, timed_out, timeout; logname = logname * "-trace")), tracefile, "a")
-    statements = isfile(tracefile) ? count(contains("precompile("), eachline(tracefile)) : 0
-    return (; file = tracefile, statements, ok)
-end
-
-# The instrumented task script once more, untimed, logging invalidations
-# (instrument_task): the summary ttfx_invalidations.jl prints, or nothing when the run
-# failed or the script is not instrumented. Kept out of the trace run so the summary's
-# own compilation does not land in the trace.
-function invalidations(arm::Arm, env, proj::String, script::String, timeout::Float64)
-    script == joinpath(proj, "task.jl") && return nothing
-    cmd = addenv(`$(arm.julia) --startup-file=no --project=$proj $script`, env..., "TTFX_INVALIDATIONS" => "on")
-    out, _, ok, _ = run_timed(cmd, timeout)
+    statements = isfile(tracefile) ? count(l -> occursin(TRACE_LINE, l), eachline(tracefile)) : 0
     m = match(Regex("^" * INV_PREFIX * raw"(\{.*\})$", "m"), out)
-    return ok && m !== nothing ? json_parse(m.captures[1]) : nothing
+    inv = ok && instrumented && m !== nothing ? json_parse(m.captures[1]) : nothing
+    return (; file = tracefile, statements, ok = ok && traced), inv
 end
 
 # The first process to load freshly written pkgimages pays a one-time cost that no later
@@ -366,8 +384,8 @@ function warmup_load(arm::Arm, env, proj::String, timeout::Float64)
 end
 
 # One sample: clear the caches, precompile the project, load its packages once untimed
-# (warmup_load), then run the task script `repeats` times in fresh processes. With `tracefile`, the script runs twice more after
-# them, untimed: once traced (trace_compile), once logging invalidations.
+# (warmup_load), then run the task script `repeats` times in fresh processes. With `tracefile`, the script runs once more after
+# them, untimed, traced and logging invalidations (trace_run).
 function measure(arm::Arm, depot::String, proj::String, script::String, repeats::Int, timeout::Float64, logname::String;
                  tracefile::Union{Nothing,String} = nothing)
     clear_compiled!(depot)
@@ -396,9 +414,8 @@ function measure(arm::Arm, depot::String, proj::String, script::String, repeats:
         clear_objcache!(depot)
         g = run_repeats(addenv(task_cmd, "TTFX_GC" => "off"), repeats, timeout, logname * "-gcoff")
     end
-    trace = tracefile === nothing || isempty(r.load) ? nothing :
-        trace_compile(arm, env, proj, script, timeout, tracefile, logname)
-    inv = tracefile === nothing || isempty(r.load) ? nothing : invalidations(arm, env, proj, script, timeout)
+    trace, inv = tracefile === nothing || isempty(r.load) ? (nothing, nothing) :
+        trace_run(arm, env, proj, script, timeout, tracefile, logname)
     return (; status, error = status == "ok" ? nothing : r.err, precompile_time,
               load_times = r.load, run_times = r.run, total_times = r.total,
               load_stats = r.load_stats, run_stats = r.run_stats,
@@ -557,7 +574,7 @@ function main()
                 trace = get(result, :trace, nothing)
                 if trace !== nothing
                     println("  trace    $(rpad(arm.label, 8)) $(trace.statements) precompile statements in $(basename(trace.file))",
-                            trace.ok ? "" : " (the instrumented run failed, see the end of the file)")
+                            trace.ok ? "" : " (see the note in the file)")
                 end
                 inv = get(result, :invalidations, nothing)
                 if inv !== nothing
