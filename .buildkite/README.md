@@ -15,8 +15,9 @@ the build checks out this repository and runs `hooks/post-checkout`,
 which:
 
 1. replaces the working directory with a `JuliaLang/julia` checkout
-   (`UPSTREAM_BRANCH`, default `master`; pinned once per build via
-   meta-data so all jobs test the same julia commit), and
+   (`UPSTREAM_BRANCH`, default `master`, or julia's `release-X.Y` when
+   building this repository's `release-X.Y` or a PR into it; pinned once
+   per build via meta-data so all jobs test the same julia commit), and
 2. pins the external-buildkite plugin's build meta-data to
    `${BUILDKITE_COMMIT}` (this build's julia-buildkite commit), so every
    launched job runs the proposed pipeline code.
