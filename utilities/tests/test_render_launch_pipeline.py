@@ -28,7 +28,7 @@ def render(*args, source=None, **build_env):
     env = os.environ.copy()
     for var in ("BUILDKITE_SOURCE", "BUILDKITE_PIPELINE_SLUG", "BUILDKITE_TAG",
                 "BUILDKITE_BRANCH", "NOGPL_ONLY", "OPT_ONLY", "OPT_TESTS_ALLOW_FAIL",
-                "TTFX_RELEASE"):
+                "ONLY_TRIPLETS", "TTFX_RELEASE"):
         env.pop(var, None)
     if source is not None:
         env["BUILDKITE_SOURCE"] = source
@@ -338,6 +338,43 @@ class RenderLaunchPipelineTests(unittest.TestCase):
         )
         self.assertNotIn("PUBLISH_SCHEDULED", output)
 
+    def test_only_triplets(self):
+        release = {"BUILDKITE_PIPELINE_SLUG": "julia-ci", "BUILDKITE_BRANCH": "v1.14.0"}
+        groups = r'^  - group: "([^"]+)"'
+
+        output = render(ONLY_TRIPLETS="riscv64-linux-gnu", **release)
+        self.assertEqual(re.findall(groups, output, re.M), ["RISC-V Build (Allow Fail)", "Publish"])
+        self.assertEqual(re.findall(r'PUBLISH_TARGET: "([^"]+)"', output), ["riscv64-linux-gnu"])
+        self.assertIn(depends_on("build_riscv64-linux-gnu"), output)
+
+        # A platform keeps all of its tests, which still gate its publish,
+        # and platforms combine across groups.
+        output = render(ONLY_TRIPLETS="x86_64-linux-gnuassert, i686-linux-gnuopt", **release)
+        self.assertEqual(re.findall(groups, output, re.M),
+                         ["Build", "Test", "Optimized Build", "Optimized Tests", "Publish"])
+        self.assertEqual(set(re.findall(r'TRIPLET: "([^"]+)"', output)),
+                         {"x86_64-linux-gnuassert", "i686-linux-gnuopt"})
+        self.assertIn(depends_on("build_x86_64-linux-gnuassert", "test_x86_64-linux-gnuassert",
+                                 "test_x86_64-linux-gnuassertrr", "test_x86_64-linux-gnuassertrr-net"),
+                      output)
+        self.assertIn(depends_on("build_i686-linux-gnuopt", "test_i686-linux-gnuopt",
+                                 "test_i686-linux-gnuoptnet"), output)
+        for job in ("doctest", "gcext", "juliac", "ttfx", "docs"):
+            self.assertNotIn(f'"{job}"', output)
+
+        # An unpublished platform is built and tested only.
+        output = render(ONLY_TRIPLETS="x86_64-linux-gnummtk")
+        self.assertNotIn('group: "Publish"', output)
+        self.assertIn('key: "build_x86_64-linux-gnummtk"', output)
+
+    def test_only_triplets_rejects_unknown_platforms(self):
+        # riscv64 is only built for releases and by the schedule
+        for build_env in ({"ONLY_TRIPLETS": "riscv64-linux-gnu"},
+                          {"ONLY_TRIPLETS": "x86_64-linux-gnu,x86_64-linux-gnux"}):
+            with self.subTest(env=build_env), self.assertRaises(subprocess.CalledProcessError) as cm:
+                render(**build_env)
+            self.assertIn("ONLY_TRIPLETS: no jobs for", cm.exception.stderr)
+
     def test_rr_only_outside_pull_requests(self):
         # pull requests test the assertion build without rr; the rr jobs are skipped
         output = render()
@@ -396,7 +433,10 @@ class RenderLaunchPipelineTests(unittest.TestCase):
                                   (None, {"BUILDKITE_PIPELINE_SLUG": "julia-ci",
                                           "BUILDKITE_BRANCH": "release-1.14"}),
                                   (None, {"NOGPL_ONLY": "true"}),
-                                  (None, {"OPT_ONLY": "true"})):
+                                  (None, {"OPT_ONLY": "true"}),
+                                  (None, {"BUILDKITE_PIPELINE_SLUG": "julia-ci",
+                                          "BUILDKITE_BRANCH": "v1.14.0",
+                                          "ONLY_TRIPLETS": "riscv64-linux-gnu,x86_64-linux-gnuopt"})):
             output = render(source=source, **build_env)
             keys = set(re.findall(r'^\s+key:\s*"?([^"\s]+)"?\s*$', output, re.M))
             deps = set(re.findall(r'^          - "([^"]+)"$', publish_group(output), re.M))
