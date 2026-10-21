@@ -96,7 +96,10 @@ function create_dmg() {
     # Mark the volume root as having a custom icon (.VolumeIcon.icns)
     "${HFSPLUS_TOOL}" "${HFS_IMAGE}" attr "/" C
 
-    "${DMG_TOOL}" build "${HFS_IMAGE}" "${DMG_NAME}"
+    # lzfse (ULFO, macOS 10.11+) rather than the default bzip2 (UDBZ), which
+    # macOS decompresses so slowly that copying Julia.app off the mounted image
+    # takes over 10 seconds instead of one.
+    "${DMG_TOOL}" build --compression lzfse "${HFS_IMAGE}" "${DMG_NAME}"
     rm -f "${HFS_IMAGE}"
 
     # Sign the `.dmg` itself
