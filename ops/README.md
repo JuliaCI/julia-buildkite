@@ -393,12 +393,15 @@ The single publish step signs and packages for every OS on linux:
   for the optimized binaries. To redo individual platforms, e.g. one whose
   build timed out, set `ONLY_TRIPLETS` to a comma-separated list of
   triplets (`riscv64-linux-gnu`, `x86_64-linux-gnuopt`, ...): only their
-  build, test and publish jobs run. If the failed build already staged its
-  tarball, delete it from the staging bucket first
-  (`s3://julialang-ephemeral-ci/bin/<commit>/tag/julia-<shortcommit>-<os>-<arch>.tar.gz`
-  for a release); otherwise the rebuild keeps it (first upload wins) and
-  publishes it with the rebuild's companion archives, whose bounds-checked
-  stdlib pkgimages belong to a different build of the sysimage. To re-run just the
+  build, test and publish jobs run. If the failed build already staged
+  some of its objects, delete all of them from the staging bucket first: the
+  tarball and its companion archives (`.app.tar.gz` on macOS,
+  `.checkbounds.tar.gz`), i.e.
+  `s3://julialang-ephemeral-ci/bin/<commit>/tag/julia-<shortcommit>-<os>-<arch>.*`
+  for a release. The rebuild keeps any object that is already staged (first
+  upload wins), so a partial set would be published mixed with the rebuild's
+  objects, e.g. bounds-checked stdlib pkgimages that belong to a different
+  build of the sysimage. To re-run just the
   promote, POST a `julia-publish` build with the release commit and
   `branch: v<version>` plus `ignore_pipeline_branch_filters: true`
   (branch webhook builds are disabled on the publish pipeline); a plain
