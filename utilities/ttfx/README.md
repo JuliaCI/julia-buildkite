@@ -71,9 +71,9 @@ holds packages and artifacts only; the agent user's own depot is not on the path
 A task's metric is a robust regression when the head samples are all slower than every
 base sample, every block's head/base ratio exceeds the metric's threshold, and the
 difference clears an absolute floor; improvements are the mirror image. Load and run are
-judged twice, as measured and from the repeats with the GC off, and either counts: a
-difference that only shows with the GC on was GC pauses, one that only shows with it off
-was hidden by them. The exception is a collection that moved between the phases: when
+judged twice, as measured and from the repeats with the GC off (the stdlibs-first load
+with its GC time subtracted), and either counts: a difference that only shows with the
+GC on was GC pauses, one that only shows with it off was hidden by them. The exception is a collection that moved between the phases: when
 a load or run difference shows with the GC on only, and that phase's change in GC time
 is at least half offset by the opposite change in the other phase, the report lists it
 under "GC moved between load and run" and it does not count. Per metric,
@@ -155,10 +155,12 @@ added to the project rather than loaded from the stdlib directory, so the extens
 trigger are precompiled with everything else and each stdlib loads at its resolved
 version. After the normal and GC-off repeats, the copy is precompiled and loaded once,
 untimed, and the task runs once, cold: `load_times_stdlibs`, `run_times_stdlibs` and
-their stats. Its load is compared as `load (stdlibs first)`. `precompile_time_stdlibs`
-is recorded but not compared: it follows the task's own precompile in the same depot, so
-it is mostly the extensions the stdlibs trigger, and a large value means adding them
-changed the resolved versions. A failure here is kept in `error_stdlibs` and does not
+their stats. Its load is compared as `load (stdlibs first)`. There is no GC-off repeat of
+this run, so the load's GC time is subtracted to stand in for one; it is judged like the
+GC-off load and run, including the check for a collection that moved into or out of run.
+`precompile_time_stdlibs` is recorded but not compared: it follows the task's own
+precompile in the same depot, so it is mostly the extensions the stdlibs trigger, and a
+large value means adding them changed the resolved versions. A failure here is kept in `error_stdlibs` and does not
 affect `status`.
 
 ## Release reference: the weekly schedule (julia-ci)
