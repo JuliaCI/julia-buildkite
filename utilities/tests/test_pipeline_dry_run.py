@@ -62,7 +62,8 @@ class PipelineDryRunTests(unittest.TestCase):
         for args, build_env in (([], {}), (["--scheduled-workloads"], {}),
                                 ([], release), ([], branch),
                                 ([], {**release, "NOGPL_ONLY": "true"}),
-                                ([], {**release, "OPT_ONLY": "true"})):
+                                ([], {**release, "OPT_ONLY": "true"}),
+                                ([], {**release, "ONLY_TRIPLETS": "riscv64-linux-gnu,i686-linux-gnu"})):
             with self.subTest(args=args, env=build_env), tempfile.TemporaryDirectory() as tmp:
                 rendered = os.path.join(tmp, "pipeline.yml")
                 with open(rendered, "w") as f:
