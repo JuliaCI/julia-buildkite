@@ -40,7 +40,9 @@ TTFX jobs alone. Release branch and tag builds add the no-GPL group
 (and its publish triggers) to the per-commit groups, and NOGPL_ONLY=true
 renders only those; they also add the optimized groups (OPT_ONLY=true
 renders only those), whose tests gate their publish triggers on tags unless
-OPT_TESTS_ALLOW_FAIL=true. Labeled PRs render the same workload groups as a
+OPT_TESTS_ALLOW_FAIL=true. ONLY_TRIPLETS=<triplet>[,...] renders only the
+build, test and publish jobs of those platforms, from whichever groups the
+build would otherwise contain. Labeled PRs render the same workload groups as a
 supplemental pipeline, without publish triggers. Per-commit results are grouped
 into one `group:` per label: Build, Check, Test, Allow Fail, JuliaSyntax,
 JuliaC, TTFX, Publish.
@@ -315,6 +317,11 @@ def load_group_text(path):
 BUILD_KEYS = {}   # TRIPLET -> "build_..." key
 TEST_KEYS = {}    # TRIPLET -> ["test_...", ...]
 
+# ONLY_TRIPLETS: the platforms to render jobs for (None renders all of them),
+# and every platform that had a job to render, to report misspelled ones.
+ONLY_TRIPLETS = None
+SEEN_TRIPLETS = set()
+
 # A step's own attributes sit two spaces inside its `- ` at STEP_INDENT;
 # matching that exact column skips any `key:` nested in plugin config.
 _STEP_KEY_RE = re.compile(
@@ -350,6 +357,9 @@ def render_arches_group_text(arches_file, yaml_file, group, allow_fail,
 
     chunks = []
     for arch_env in arches_envs(arches_path):
+        SEEN_TRIPLETS.add(arch_env["TRIPLET"])
+        if ONLY_TRIPLETS is not None and arch_env["TRIPLET"] not in ONLY_TRIPLETS:
+            continue
         env = dict(arch_env)
         env["GROUP"] = group
         env["ALLOW_FAIL"] = allow_fail
@@ -569,9 +579,9 @@ def check_group_text():
     return emit_group("Check", "\n".join(c for c in chunks if c))
 
 
-def test_group_text():
+def test_group_text(static=True):
     chunks = []
-    for rel in TEST_STATIC:
+    for rel in TEST_STATIC if static else []:
         label, inner = load_group_text(os.path.join(MISC, rel))
         assert label == "Test", f"{rel}: expected Test group, got {label!r}"
         chunks.append(inner)
@@ -704,6 +714,28 @@ def release_opt_groups():
             ("Optimized Tests", "false", test_arches)]
 
 
+def only_triplets_text(only):
+    global ONLY_TRIPLETS
+    ONLY_TRIPLETS = {t.strip() for t in only.split(",") if t.strip()}
+    blocks = [build_group_text(), test_group_text(static=False), allow_fail_group_text()]
+    triplets = upload_triplets(UPLOAD_ARCHES, PLATFORMS)
+    if is_release_build():
+        groups = [NOGPL_GROUP] + release_opt_groups() + [RISCV64_GROUP]
+        blocks.extend(schedule_group_text(label, arches, allow_fail)
+                      for label, allow_fail, arches in groups)
+        triplets += nogpl_triplets() + opt_triplets() + riscv64_triplets()
+    unknown = ONLY_TRIPLETS - SEEN_TRIPLETS
+    if unknown:
+        sys.exit(f"ONLY_TRIPLETS: no jobs for {', '.join(sorted(unknown))} in this build; "
+                 f"it has {', '.join(sorted(SEEN_TRIPLETS))}")
+    selected = [t for t in triplets if t in ONLY_TRIPLETS]
+    if selected:
+        blocks.append(publish_group_text(selected))
+    # drop the groups that have none of the selected platforms
+    blocks = [b for b in blocks if not b.endswith("    steps:")]
+    return "steps:\n" + "\n".join(blocks) + "\n"
+
+
 def main():
     args = parse_args()
     # TTFX_RELEASE (set by the weekly julia-ci schedule, or on a build created
@@ -753,6 +785,16 @@ def main():
         sys.stdout.write("steps:\n")
         sys.stdout.write("\n".join(blocks))
         sys.stdout.write("\n")
+        return
+
+    # ONLY_TRIPLETS=<triplet>[,<triplet>...] (set when creating the build)
+    # builds, tests and publishes only those platforms, out of the groups this
+    # build would otherwise render, e.g. to redo a release platform whose
+    # build or publish failed (branch=v<version>) without rebuilding and
+    # republishing all others. The platform-independent jobs (Check,
+    # JuliaSyntax, JuliaC, TTFX, the docs publish) are left out.
+    if os.environ.get("ONLY_TRIPLETS", "").strip():
+        sys.stdout.write(only_triplets_text(os.environ["ONLY_TRIPLETS"]))
         return
 
     blocks = [
