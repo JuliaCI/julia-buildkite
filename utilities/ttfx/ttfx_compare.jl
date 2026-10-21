@@ -14,7 +14,9 @@
 # next to it in time, agrees beyond the metric's threshold; a floor on the absolute
 # difference keeps sub-second startup jitter out. Beyond the tasks, each metric's
 # geometric mean over the suite is judged per block with a tighter threshold, which is
-# where a small regression spread over many packages shows up.
+# where a small regression spread over many packages shows up. A load or run difference
+# that only shows with the GC on, and whose extra GC time was taken from the other phase,
+# is a collection that moved between load and run; it is reported but not counted.
 
 include(joinpath(@__DIR__, "ttfx_json.jl"))
 using .TTFXJSON
@@ -72,6 +74,12 @@ function value_gcoff(r, key)
     return isempty(t) ? nothing : Float64(t[1])
 end
 
+# GC time of the cold sample's load or run phase; nothing when the task has no phase markers.
+function gc_time(r, key)
+    st = get(r, key * "_stats", Any[])
+    isempty(st) || !(st[1] isa AbstractDict) ? nothing : get(st[1], "gc_time", nothing)
+end
+
 median(x) = (s = sort(x); n = length(s); isodd(n) ? s[(n + 1) ÷ 2] : (s[n ÷ 2] + s[n ÷ 2 + 1]) / 2)
 geomean(x) = exp(sum(log, x) / length(x))
 fmt(x) = x === nothing ? "–" : x >= 100 ? string(round(Int, x)) : x >= 10 ? string(round(x; digits = 1)) : string(round(x; digits = 2))
@@ -98,7 +106,7 @@ end
 function compare_task(name, byarm, base, head, nblocks)
     b = get(byarm, base, Any[]); h = get(byarm, head, Any[])
     out = Dict{String,Any}("name" => name, "metrics" => Dict{String,Any}(), "note" => nothing,
-                           "regressions" => String[], "improvements" => String[])
+                           "regressions" => String[], "improvements" => String[], "gc_moved" => String[])
     # The driver stops a task at its first failure, so a failed task has fewer samples than
     # blocks and possibly none for the arm that never got its turn.
     berrs = [r for r in b if r["status"] != "ok"]; herrs = [r for r in h if r["status"] != "ok"]
@@ -142,13 +150,27 @@ function compare_task(name, byarm, base, head, nblocks)
             merge!(out["metrics"][m.key], Dict("gcoff_base" => gb, "gcoff_head" => gh,
                                                 "gcoff_ratios" => gh ./ gb, "gcoff_verdict" => gverdict))
         end
-        if verdict == "regression" || gverdict == "regression"
+        if gverdict == "same" && verdict != "same" && haskey(out["metrics"][m.key], "gcoff_verdict") && gc_moved(b, h, m.key)
+            out["metrics"][m.key]["gc_moved"] = true
+            push!(out["gc_moved"], m.key)
+        elseif verdict == "regression" || gverdict == "regression"
             push!(out["regressions"], m.key)
         elseif verdict == "improvement" || gverdict == "improvement"
             push!(out["improvements"], m.key)
         end
     end
     return out
+end
+
+# Whether the change in a phase's GC time is mostly offset by the opposite change in the
+# other phase, so the same collections ran but on the other side of the load/run boundary.
+function gc_moved(b, h, key)
+    other = key == "load" ? "run" : "load"
+    gcs = [gc_time(r, k) for r in vcat(b, h), k in (key, other)]
+    any(isnothing, gcs) && return false
+    delta(k) = median(Float64[gc_time(r, k) for r in h]) - median(Float64[gc_time(r, k) for r in b])
+    d, o = delta(key), delta(other)
+    return d * o < 0 && abs(d + o) <= abs(d) / 2
 end
 
 # Robust: the two builds' samples do not overlap, every block agrees beyond the threshold,
@@ -209,7 +231,8 @@ function write_comparison(io, opts, meta, tasks, suite, nblocks)
             ", ", nimp, " improvement", nimp == 1 ? "" : "s", ".** ",
             "Robust: samples do not overlap and every block clears the threshold (",
             join([m.name * " " * pct(m.threshold) for m in METRICS], ", "),
-            "); load and run are also judged from the repeats with the GC off, and either counts (bold marks which).\n")
+            "); load and run are also judged from the repeats with the GC off, and either counts (bold marks which), ",
+            "except a difference that shows with the GC on only and whose GC time moved from the other phase.\n")
     println(io, "| suite (geomean over tasks) | change per block | with GC off | threshold |")
     println(io, "|---|---|---|---|")
     for m in METRICS
@@ -220,7 +243,8 @@ function write_comparison(io, opts, meta, tasks, suite, nblocks)
         println(io, "| ", m.name, " (", s["n_tasks"], s["n_tasks"] == 1 ? " task) | " : " tasks) | ", marked(s), " | ",
                 g === nothing ? "–" : marked(g), " | ±", pct(m.suite), " |")
     end
-    for (title, field) in (("Regressions", "regressions"), ("Improvements", "improvements"))
+    for (title, field) in (("Regressions", "regressions"), ("Improvements", "improvements"),
+                           ("GC moved between load and run (not counted)", "gc_moved"))
         rows = [(t, k) for t in tasks for k in t[field]]
         isempty(rows) && continue
         println(io, "\n### ", title, "\n")
@@ -232,7 +256,7 @@ function write_comparison(io, opts, meta, tasks, suite, nblocks)
             else
                 m = t["metrics"][k]
                 bold(s, v) = v == "same" ? s : "**" * s * "**"
-                normal = bold(join(change.(m["ratios"]), ", "), m["verdict"])
+                normal = bold(join(change.(m["ratios"]), ", "), get(m, "gc_moved", false) ? "same" : m["verdict"])
                 gcoff = haskey(m, "gcoff_ratios") ? bold(join(change.(m["gcoff_ratios"]), ", "), m["gcoff_verdict"]) : "–"
                 println(io, "| ", t["name"], " | ", k, " | ", join(fmt.(m["base"]), ", "), " | ", join(fmt.(m["head"]), ", "),
                         " | ", normal, " | ", gcoff, " |")
