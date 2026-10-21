@@ -44,8 +44,8 @@ steps:
               # newfs_hfs, wine + Inno Setup, jsign, python). Without this the
               # step runs on a bare agent and fails with `aws: command not
               # found`. x86_64-only image; built by JuliaCI/rootfs-images.
-              rootfs_url: https://github.com/JuliaCI/rootfs-images/releases/download/v8.6/julia_publish.x86_64.tar.gz
-              rootfs_treehash: "8b28c5b8937f25827c1ad4b6a3bc1bb90c9e9087"
+              rootfs_url: https://github.com/JuliaCI/rootfs-images/releases/download/v8.12/julia_publish.x86_64.tar.gz
+              rootfs_treehash: "d15a92a832cf3261be20d7fed2467591342fd5dd"
               uid: 1000
               gid: 1000
               workspaces:
