@@ -724,6 +724,11 @@ def only_triplets_text(only):
         blocks.extend(schedule_group_text(label, arches, allow_fail)
                       for label, allow_fail, arches in groups)
         triplets += nogpl_triplets() + opt_triplets() + riscv64_triplets()
+    else:
+        # The scheduled platforms, e.g. to try one on a branch; their
+        # nightlies are not republished.
+        blocks.extend(schedule_group_text(label, arches, allow_fail)
+                      for label, allow_fail, arches in SCHEDULE_GROUPS)
     unknown = ONLY_TRIPLETS - SEEN_TRIPLETS
     if unknown:
         sys.exit(f"ONLY_TRIPLETS: no jobs for {', '.join(sorted(unknown))} in this build; "
