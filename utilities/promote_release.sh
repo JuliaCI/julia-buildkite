@@ -110,6 +110,7 @@ VARIANT_PLATFORMS=(
     "linuxopt/x86_64/${MAJMIN}     julia-${VERSION}-linuxopt-x86_64.tar.gz"
     "linuxopt/i686/${MAJMIN}       julia-${VERSION}-linuxopt-i686.tar.gz"
     "linuxopt/aarch64/${MAJMIN}    julia-${VERSION}-linuxopt-aarch64.tar.gz"
+    "linuxopt/riscv64/${MAJMIN}    julia-${VERSION}-linuxopt-riscv64.tar.gz"
     "macosopt/x86_64/${MAJMIN}     julia-${VERSION}-macosopt-x86_64.tar.gz julia-${VERSION}-macosopt-x86_64.dmg"
     "macosopt/aarch64/${MAJMIN}    julia-${VERSION}-macosopt-aarch64.tar.gz julia-${VERSION}-macosopt-aarch64.dmg"
     "windowsopt/x86_64/${MAJMIN}   julia-${VERSION}-windowsopt-x86_64.tar.gz julia-${VERSION}-windowsopt-x86_64.zip julia-${VERSION}-windowsopt-x86_64.exe"
