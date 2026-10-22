@@ -86,10 +86,10 @@ class RenderLaunchPipelineTests(unittest.TestCase):
         self.assertNotIn('group: "Build"', output)
         self.assertNotIn('group: "Test"', output)
 
-        self.assertEqual(output.count('key: "build_'), 12)
+        self.assertEqual(output.count('key: "build_'), 13)
         self.assertEqual(output.count('key: "test_'), 9)
         self.assertEqual(output.count("soft_fail: false"), 11)
-        self.assertEqual(output.count("soft_fail: true"), 11)  # the tests, TTFX opt, riscv64
+        self.assertEqual(output.count("soft_fail: true"), 12)  # the tests, TTFX opt, riscv64
         self.assertEqual(
             output.count('depends_on:\n          - "build_x86_64-linux-gnusrcassert"'),
             2,
@@ -104,7 +104,7 @@ class RenderLaunchPipelineTests(unittest.TestCase):
             output.count('depends_on:\n          - "build_i686-linux-gnuopt"'),
             3,  # its two test jobs (net / no-net), and its publish trigger
         )
-        self.assertEqual(output.count('JULIA_CI_BUILD_MODE: "opt"'), 6)
+        self.assertEqual(output.count('JULIA_CI_BUILD_MODE: "opt"'), 7)
 
         # riscv64 is cross-compiled on x86_64 hosts that run riscv64 code with qemu-user
         match = re.search(
@@ -119,6 +119,25 @@ class RenderLaunchPipelineTests(unittest.TestCase):
         self.assertIn('XC_HOST=riscv64-linux-gnu', step)
         self.assertIn('timeout_in_minutes: 420\n', step)
         self.assertIn('soft_fail: true\n', step)
+        self.assertIn('JL_CFLAGS=-Werror', step)
+        self.assertIn('JULIA_CI_BUILD_MODE: ""', step)
+
+        # The optimized riscv64 build: same hosts and image, PGO+ThinLTO through
+        # contrib/optimized, and no tests either
+        match = re.search(
+            r'^      - label: ":linux: build riscv64-linux-gnuopt"\n'
+            r'.*?(?=^      - |^  - group:|\Z)', output, re.M | re.S,
+        )
+        self.assertIsNotNone(match)
+        step = match.group()
+        self.assertIn('/package_linux_riscv64.x86_64.tar.gz', step)
+        self.assertIn('binfmt_riscv64: "true"', step)
+        self.assertIn('XC_HOST=riscv64-linux-gnu', step)
+        self.assertNotIn('-Werror', step)
+        self.assertIn('JULIA_CI_BUILD_MODE: "opt"', step)
+        self.assertIn('timeout_in_minutes: 720\n', step)
+        self.assertIn('soft_fail: true\n', step)
+        self.assertNotIn('key: "test_riscv64', output)
 
         # Check the new platform's rendered jobs, including agent routing and
         # sandbox images: aggregate job counts alone cannot catch a wrong arch.
@@ -150,9 +169,9 @@ class RenderLaunchPipelineTests(unittest.TestCase):
         # One scheduled publish trigger per scheduled upload triplet, each
         # gated on that triplet's own jobs; no docs trigger, no wait barrier.
         publish = publish_group(output)
-        self.assertEqual(publish.count('trigger: "julia-publish"'), 11)
-        self.assertEqual(publish.count('PUBLISH_SCHEDULED: "true"'), 11)
-        self.assertEqual(publish.count('if: pipeline.slug == "julia-ci"'), 11)
+        self.assertEqual(publish.count('trigger: "julia-publish"'), 12)
+        self.assertEqual(publish.count('PUBLISH_SCHEDULED: "true"'), 12)
+        self.assertEqual(publish.count('if: pipeline.slug == "julia-ci"'), 12)
         self.assertNotIn('PUBLISH_TARGET: "docs"', output)
         self.assertNotIn("wait:", output)
         self.assertNotIn("PUBLISH_NOGPL", output)
@@ -166,6 +185,7 @@ class RenderLaunchPipelineTests(unittest.TestCase):
         # no-GPL and riscv64 builds have no test jobs: they publish straight after the build
         self.assertIn(depends_on("build_x86_64-w64-mingw32nogpl"), publish)
         self.assertIn(depends_on("build_riscv64-linux-gnu"), publish)
+        self.assertIn(depends_on("build_riscv64-linux-gnuopt"), publish)
         self.assertIn(depends_on("build_aarch64-apple-darwinnogpl"), publish)
 
     def test_normal_mode_excludes_schedule_groups(self):
@@ -274,10 +294,11 @@ class RenderLaunchPipelineTests(unittest.TestCase):
             self.assertEqual(
                 sorted(re.findall(r'PUBLISH_TARGET: "([^"]+)"', publish)),
                 sorted(PUBLISHED_TRIPLETS + NOGPL_TRIPLETS + ALL_OPT_TRIPLETS
-                       + ["riscv64-linux-gnu", "docs"]),
+                       + ["riscv64-linux-gnu", "riscv64-linux-gnuopt", "docs"]),
             )
             self.assertEqual(output.count('group: "RISC-V Build (Allow Fail)"'), 1)
             self.assertIn(depends_on("build_riscv64-linux-gnu"), publish)
+            self.assertIn(depends_on("build_riscv64-linux-gnuopt"), publish)
             # Each optimized platform's publish waits for its own tests
             self.assertIn(depends_on("build_x86_64-linux-gnuopt", "test_x86_64-linux-gnuopt"), publish)
             self.assertIn(depends_on("build_i686-linux-gnuopt", "test_i686-linux-gnuopt",
