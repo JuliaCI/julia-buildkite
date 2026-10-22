@@ -388,9 +388,14 @@ class RenderLaunchPipelineTests(unittest.TestCase):
         self.assertNotIn('group: "Publish"', output)
         self.assertIn('key: "build_x86_64-linux-gnummtk"', output)
 
+        # A scheduled platform is built and tested only, outside releases.
+        output = render(ONLY_TRIPLETS="riscv64-linux-gnuopt")
+        self.assertNotIn('group: "Publish"', output)
+        self.assertIn('key: "build_riscv64-linux-gnuopt"', output)
+        self.assertNotIn('key: "build_riscv64-linux-gnu"', output)
+
     def test_only_triplets_rejects_unknown_platforms(self):
-        # riscv64 is only built for releases and by the schedule
-        for build_env in ({"ONLY_TRIPLETS": "riscv64-linux-gnu"},
+        for build_env in ({"ONLY_TRIPLETS": "x86_64-linux-gnux"},
                           {"ONLY_TRIPLETS": "x86_64-linux-gnu,x86_64-linux-gnux"}):
             with self.subTest(env=build_env), self.assertRaises(subprocess.CalledProcessError) as cm:
                 render(**build_env)
