@@ -27,6 +27,7 @@ const METRICS = [
     (key = "run",        name = "run (cold)",      threshold = 0.15, suite = 0.03, floor = 0.05),
     (key = "warm",       name = "load+run (warm)", threshold = 0.15, suite = 0.03, floor = 0.05),
     (key = "load_stdlibs", name = "load (stdlibs first)", threshold = 0.10, suite = 0.02, floor = 0.10),
+    (key = "run_stdlibs",  name = "run (stdlibs first)",  threshold = 0.15, suite = 0.03, floor = 0.05),
 ]
 
 function parse_args(args)
@@ -56,8 +57,8 @@ function value(r, key)
         return isempty(r["load_times"]) ? nothing : Float64(r["load_times"][1])
     elseif key == "run"
         return isempty(r["run_times"]) ? nothing : Float64(r["run_times"][1])
-    elseif key == "load_stdlibs"
-        t = get(r, "load_times_stdlibs", Any[])
+    elseif key in ("load_stdlibs", "run_stdlibs")
+        t = get(r, key[1:end-8] * "_times_stdlibs", Any[])
         return isempty(t) ? nothing : Float64(t[1])
     else
         t = r["total_times"]
@@ -66,11 +67,11 @@ function value(r, key)
 end
 
 # The same phase measured with the GC disabled (see the driver), for load and run;
-# nothing for records from before the driver recorded it. The stdlibs-first load has no
+# nothing for records from before the driver recorded it. The stdlibs-first run has no
 # GC-off repeat, so its GC time is taken out instead, which is close but not the same.
 function value_gcoff(r, key)
     r["status"] == "error" && return nothing
-    if key == "load_stdlibs"
+    if key in ("load_stdlibs", "run_stdlibs")
         t = value(r, key); g = gc_time(r, key)
         return t === nothing || g === nothing ? nothing : t - g
     end
@@ -173,7 +174,7 @@ end
 # Whether the change in a phase's GC time is mostly offset by the opposite change in the
 # other phase, so the same collections ran but on the other side of the load/run boundary.
 function gc_moved(b, h, key)
-    other = Dict("load" => "run", "run" => "load", "load_stdlibs" => "run_stdlibs")[key]
+    other = Dict("load" => "run", "run" => "load", "load_stdlibs" => "run_stdlibs", "run_stdlibs" => "load_stdlibs")[key]
     gcs = [gc_time(r, k) for r in vcat(b, h), k in (key, other)]
     any(isnothing, gcs) && return false
     delta(k) = median(Float64[gc_time(r, k) for r in h]) - median(Float64[gc_time(r, k) for r in b])
@@ -239,7 +240,7 @@ function write_comparison(io, opts, meta, tasks, suite, nblocks)
             ", ", nimp, " improvement", nimp == 1 ? "" : "s", ".** ",
             "Robust: samples do not overlap and every block clears the threshold (",
             join([m.name * " " * pct(m.threshold) for m in METRICS], ", "),
-            "); load and run are also judged from the repeats with the GC off (the stdlibs-first load with its GC time ",
+            "); load and run are also judged from the repeats with the GC off (the stdlibs-first load and run with their GC time ",
             "taken out), and either counts (bold marks which), ",
             "except a difference that shows with the GC on only and whose GC time moved from the other phase.\n")
     println(io, "| suite (geomean over tasks) | change per block | with GC off | threshold |")
