@@ -393,7 +393,9 @@ The single publish step signs and packages for every OS on linux:
   for the optimized binaries. To redo individual platforms, e.g. one whose
   build timed out, set `ONLY_TRIPLETS` to a comma-separated list of
   triplets (`riscv64-linux-gnu`, `x86_64-linux-gnuopt`, ...): only their
-  build, test and publish jobs run. If the failed build already staged
+  build, test and publish jobs run. On other builds, `ONLY_TRIPLETS` can
+  also select the scheduled platforms, which are then built and tested but
+  not published, e.g. to try one on a branch. If the failed build already staged
   some of its objects, delete all of them from the staging bucket first: the
   tarball and its companion archives (`.app.tar.gz` on macOS,
   `.checkbounds.tar.gz`), i.e.

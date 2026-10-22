@@ -1,5 +1,6 @@
-# ROOTFS_IMAGE_NAME      TRIPLET              ARCH      ARCH_ROOTFS    MAKE_FLAGS                                                                      TIMEOUT       ROOTFS_TAG     ROOTFS_HASH
-package_linux_riscv64    riscv64-linux-gnu    x86_64    x86_64         OS=Linux,XC_HOST=riscv64-linux-gnu,MARCH=rv64gc,JL_CFLAGS=-Werror                       .             v8.11          52effa511a3f19b94aacc2449a5d767d9e86e365
+# ROOTFS_IMAGE_NAME      TRIPLET                 ARCH      ARCH_ROOTFS    JULIA_CI_BUILD_MODE    MAKE_FLAGS                                                           TIMEOUT    ROOTFS_TAG     ROOTFS_HASH
+package_linux_riscv64    riscv64-linux-gnu       x86_64    x86_64         .                      OS=Linux,XC_HOST=riscv64-linux-gnu,MARCH=rv64gc,JL_CFLAGS=-Werror    .          v8.11          52effa511a3f19b94aacc2449a5d767d9e86e365
+package_linux_riscv64    riscv64-linux-gnuopt    x86_64    x86_64         opt                    OS=Linux,XC_HOST=riscv64-linux-gnu,MARCH=rv64gc                      720        v8.11          52effa511a3f19b94aacc2449a5d767d9e86e365
 
 # These special lines allow us to embed default values for the columns above.
 # Any column without a default mapping here will simply substitute a `.` to the empty string
@@ -9,4 +10,7 @@ package_linux_riscv64    riscv64-linux-gnu    x86_64    x86_64         OS=Linux,
 # Cross-compiled, with the riscv64 parts of the build (system image, pkgimages, docs)
 # running under qemu-user, mostly single-threaded: 3.5 to 5 hours on the amdci builders
 # (slowest on amdci4), including the bounds-checked stdlib companion pkgimages
+# The optimized build compiles LLVM three times and runs the instrumented stage 1 under
+# qemu as well; it took ~1.75x a plain build on a local 24-core host. It has no -Werror,
+# as its stages compile with clang.
 #default TIMEOUT 420
