@@ -1,7 +1,15 @@
 # shellcheck shell=bash
 # Shared write-once S3 upload helper. Source this file, then call
-# `upload_to_s3 <local-file> <bucket/key>`; AWS credentials come from
-# Buildkite OIDC (source aws_oidc.sh first).
+# `upload_to_s3 <local-file> <bucket/key> [<cache-control>]`; AWS
+# credentials come from Buildkite OIDC (source aws_oidc.sh first).
+#
+# The optional third argument is stored as the object's Cache-Control
+# header, which is what the Fastly CDN in front of the buckets and clients
+# cache by. Without it, public (ACL'd) write-once uploads default to 31 days:
+# they never change. The overwritten julia-latest-* / julia-<majmin>-latest-*
+# pointers get no default; how long they may be cached is set by a Fastly
+# rule (the CDN can be purged, clients cannot). Staging uploads
+# (UPLOAD_TO_S3_ACL=none) get no default either.
 #
 # By default objects are uploaded with `--acl public-read` (the legacy
 # release buckets are ACL-based). Set UPLOAD_TO_S3_ACL=none for buckets
@@ -25,9 +33,23 @@ export AWS_EC2_METADATA_DISABLED=true
 # `julia-<majmin>-latest-*` pointer objects are intentionally overwritten
 # (and only the publish resp. promote roles are allowed to do so).
 upload_to_s3() {
-    local file="$1" target="$2"
+    local file="$1" target="$2" cache_control="${3:-}"
     local bucket="${target%%/*}"
     local key="${target#*/}"
+
+    local is_latest=0
+    case "$(basename "${key}")" in
+        julia-latest-*|julia-*-latest-*) is_latest=1 ;;
+    esac
+
+    if [[ -z "${cache_control}" && "${is_latest}" == "0" && "${UPLOAD_TO_S3_ACL:-public-read}" != "none" ]]; then
+        cache_control="public,max-age=2678400"
+    fi
+
+    local cache_control_args=()
+    if [[ -n "${cache_control}" ]]; then
+        cache_control_args=( --cache-control "${cache_control}" )
+    fi
 
     local acl_args=( --acl public-read )
     if [[ "${UPLOAD_TO_S3_ACL:-public-read}" == "none" ]]; then
@@ -49,10 +71,11 @@ upload_to_s3() {
     # against a bucket whose role permits an unconditional PutObject -- the
     # production roles' IAM denies it (write-once), so the flag is inert on the
     # real publish path even if accidentally set.
-    if [[ "${UPLOAD_TO_S3_OVERWRITE:-0}" == "1" || "$(basename "${key}")" == julia-latest-* || "$(basename "${key}")" == julia-*-latest-* ]]; then
+    if [[ "${UPLOAD_TO_S3_OVERWRITE:-0}" == "1" || "${is_latest}" == "1" ]]; then
         aws s3api put-object \
             --bucket "${bucket}" --key "${key}" \
             --body "${file}" ${acl_args[@]+"${acl_args[@]}"} \
+            ${cache_control_args[@]+"${cache_control_args[@]}"} \
             ${metadata_args[@]+"${metadata_args[@]}"} >/dev/null
         echo "uploaded (overwrite): s3://${target}"
         return 0
@@ -62,6 +85,7 @@ upload_to_s3() {
     if output="$(aws s3api put-object \
             --bucket "${bucket}" --key "${key}" \
             --body "${file}" ${acl_args[@]+"${acl_args[@]}"} \
+            ${cache_control_args[@]+"${cache_control_args[@]}"} \
             ${metadata_args[@]+"${metadata_args[@]}"} \
             --if-none-match '*' 2>&1)"; then
         echo "uploaded (write-once): s3://${target}"

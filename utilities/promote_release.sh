@@ -15,7 +15,14 @@
 # VersionsJSONUtil.jl constructs URLs against. This script re-maps the
 # published objects into that layout, repoints the julia-<majmin>-latest
 # pointers, generates the bin/checksums/julia-<version> files, purges the
-# Fastly cache, and verifies everything is reachable via the CDN.
+# repointed latest pointers from the Fastly cache, and verifies everything
+# is reachable via the CDN.
+#
+# Optional env var:
+#   FASTLY_PURGE_TOKEN  Fastly API token with purge scope on the julialang
+#                       service. Without it the latest pointers are not
+#                       purged and serve the previous release until their
+#                       cache entry expires (1 h Fastly default).
 set -euo pipefail
 
 if [[ ! "${BUILDKITE_BRANCH:-}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
@@ -40,6 +47,11 @@ source .buildkite/utilities/upload_to_s3.sh
 SRC_BUCKET="${SRC_BUCKET:-julialangnightlies}"
 DEST_BUCKET="${DEST_BUCKET:-julialang2}"
 CDN_URL="${CDN_URL:-https://julialang-s3.julialang.org}"
+
+# Versioned objects never change, so Fastly and clients may cache them for 31
+# days (the value the release bucket has always used). The latest pointers get
+# no Cache-Control: they are overwritten on every release and purged below.
+RELEASE_CACHE_CONTROL="public,max-age=2678400"
 
 # "<file basename> <source dir> <destination dir>", dirs relative to bin/.
 # Sources are what upload_julia.sh published for a v* tag; destinations
@@ -170,13 +182,14 @@ md5sum ${BINARIES} > "julia-${VERSION}.md5"
 cat "julia-${VERSION}.sha256"
 
 echo "--- Promote to s3://${DEST_BUCKET}"
-PURGE_KEYS=()
+PROMOTED_KEYS=()
+LATEST_KEYS=()
 for m in "${MAPPINGS[@]}"; do
     read -r base _ destdir <<<"${m}"
     latest="julia-${MAJMIN}-latest-${base#julia-"${VERSION}"-}"
     for f in $(with_asc "${base}"); do
-        upload_to_s3 "${f}" "${DEST_BUCKET}/bin/${destdir}/${f}"
-        PURGE_KEYS+=( "bin/${destdir}/${f}" )
+        upload_to_s3 "${f}" "${DEST_BUCKET}/bin/${destdir}/${f}" "${RELEASE_CACHE_CONTROL}"
+        PROMOTED_KEYS+=( "bin/${destdir}/${f}" )
         # Repoint the majmin-latest copy (upload_to_s3 overwrites
         # julia-*-latest-* names; write-once applies to everything else).
         # Source dists have no latest-pointer convention (and the promote
@@ -186,23 +199,32 @@ for m in "${MAPPINGS[@]}"; do
         fi
         latest_name="${latest}${f#"${base}"}"
         upload_to_s3 "${f}" "${DEST_BUCKET}/bin/${destdir}/${latest_name}"
-        PURGE_KEYS+=( "bin/${destdir}/${latest_name}" )
+        LATEST_KEYS+=( "bin/${destdir}/${latest_name}" )
     done
 done
 for ext in sha256 md5; do
-    upload_to_s3 "julia-${VERSION}.${ext}" "${DEST_BUCKET}/bin/checksums/julia-${VERSION}.${ext}"
-    PURGE_KEYS+=( "bin/checksums/julia-${VERSION}.${ext}" )
+    upload_to_s3 "julia-${VERSION}.${ext}" "${DEST_BUCKET}/bin/checksums/julia-${VERSION}.${ext}" "${RELEASE_CACHE_CONTROL}"
+    PROMOTED_KEYS+=( "bin/checksums/julia-${VERSION}.${ext}" )
 done
 
-echo "--- Purge the Fastly cache"
-for key in "${PURGE_KEYS[@]}"; do
-    curl -fsS -o /dev/null -X PURGE "${CDN_URL}/${key}" \
-        || echo "WARN: cache purge failed for ${CDN_URL}/${key}" >&2
-done
+# Only the latest pointers are overwritten. The versioned objects are new
+# keys, which Fastly can at most hold a cached 404 for (expires within 60 s).
+# Hard purge, not soft: after a soft purge Fastly was seen to keep serving the
+# old copy with its old headers, which defeats the purpose for objects that
+# have just been replaced.
+echo "--- Purge the latest pointers from the Fastly cache"
+if [[ -n "${FASTLY_PURGE_TOKEN:-}" ]]; then
+    for key in "${LATEST_KEYS[@]}"; do
+        curl -fsS -o /dev/null -X PURGE -H "Fastly-Key: ${FASTLY_PURGE_TOKEN}" "${CDN_URL}/${key}" \
+            || echo "WARN: cache purge failed for ${CDN_URL}/${key}" >&2
+    done
+else
+    echo "WARN: FASTLY_PURGE_TOKEN is not set; not purging ${#LATEST_KEYS[@]} latest pointer(s), they update within 1 h" >&2
+fi
 
 echo "--- Verify everything is reachable via ${CDN_URL}"
 FAILED=()
-for key in "${PURGE_KEYS[@]}"; do
+for key in "${PROMOTED_KEYS[@]}" "${LATEST_KEYS[@]}"; do
     code="$(curl -s -o /dev/null -w '%{http_code}' -I "${CDN_URL}/${key}")"
     [[ "${code}" == "200" ]] || FAILED+=( "${code} ${CDN_URL}/${key}" )
 done
@@ -212,5 +234,5 @@ if [[ "${#FAILED[@]}" -gt 0 ]]; then
     exit 1
 fi
 
-echo "+++ Promoted ${VERSION}: ${#PURGE_KEYS[@]} objects live on ${CDN_URL}"
+echo "+++ Promoted ${VERSION}: $(( ${#PROMOTED_KEYS[@]} + ${#LATEST_KEYS[@]} )) objects live on ${CDN_URL}"
 echo "Next: dispatch the CI workflow on JuliaLang/VersionsJSONUtil.jl to regenerate versions.json."
