@@ -47,6 +47,7 @@ UPLOAD_TARGETS=(published/julia-fixture published/julia-latest-fixture)
 upload_to_s3() {
     mkdir -p "${FIXTURE_OUTPUT}/$(dirname "$2")"
     cp "$1" "${FIXTURE_OUTPUT}/$2"
+    printf '%s\\t%s\\n' "$2" "${3:-}" >> "${FIXTURE_STAGE}/../uploads.log"
 }
 ''')
         for helper in ("verify_trusted_commit.sh", "aws_oidc.sh"):
@@ -101,7 +102,12 @@ else:
     pathlib.Path("julia-fixture.exe").write_text("installer")
 ''')
         self.python(self.bin / "7z", 'import pathlib; pathlib.Path("julia-fixture.zip").write_text("zip")\n')
-        self.python(self.bin / "curl", 'print("200")\n')
+        self.python(self.bin / "curl", '''
+import os, pathlib, sys
+with (pathlib.Path(os.environ["FIXTURE_STAGE"]).parent / "curl.log").open("a") as f:
+    f.write(" ".join(sys.argv[1:]) + "\\n")
+print("200")
+''')
         self.python(self.bin / "sysctl", 'print("core")\n')
         self.python(self.bin / "buildkite-agent", '''
 import os, pathlib, shutil, sys
@@ -268,15 +274,20 @@ elif "checkbounds-pkgimages" in args:
         self.assertEqual((cache / "checked.ji").read_text(), "fixed checksum")
         self.assertEqual((cache / "auto.ji").read_text(), "fixed checksum")
 
-    def test_release_promotion_includes_companions_and_checksums(self):
-        self.write(self.work / "Makefile", "checkbounds-pkgimages:\n")
-        platforms = ("linux-x86_64", "linux-i686", "linux-aarch64", "mac64", "macaarch64", "win64", "win32", "freebsd-x86_64")
-        for platform in platforms:
-            for ext in ("tar.gz", "checkbounds.tar.gz"):
+    RELEASE_PLATFORMS = ("linux-x86_64", "linux-i686", "linux-aarch64", "mac64", "macaarch64", "win64", "win32", "freebsd-x86_64")
+
+    def release_fixtures(self, checkbounds):
+        for platform in self.RELEASE_PLATFORMS:
+            for ext in ("tar.gz", "checkbounds.tar.gz") if checkbounds else ("tar.gz",):
                 for signature in ("", ".asc"):
                     self.write(self.stage / f"julia-1.14.0-{platform}.{ext}{signature}", "archive")
             for ext in (("dmg",) if platform.startswith("mac") else ("exe", "zip") if platform.startswith("win") else ()):
                 self.write(self.stage / f"julia-1.14.0-{platform}.{ext}", "installer")
+
+    def test_release_promotion_includes_companions_and_checksums(self):
+        self.write(self.work / "Makefile", "checkbounds-pkgimages:\n")
+        platforms = self.RELEASE_PLATFORMS
+        self.release_fixtures(checkbounds=True)
         # A published variant platform is promoted with its companion, but stays out of
         # the checksum files.
         for ext in ("tar.gz", "checkbounds.tar.gz"):
@@ -291,6 +302,33 @@ elif "checkbounds-pkgimages" in args:
         self.assertTrue((variant / "julia-1.14.0-linuxopt-x86_64.checkbounds.tar.gz").is_file())
         self.assertTrue((variant / "julia-1.14.0-linuxopt-x86_64.checkbounds.tar.gz.asc").is_file())
         self.assertEqual(len(list(self.output.rglob("*.checkbounds.tar.gz.asc"))), 18)
+
+    def test_release_promotion_purges_promoted_objects(self):
+        self.write(self.work / "Makefile", "")
+        self.release_fixtures(checkbounds=False)
+        self.env["FASTLY_PURGE_TOKEN"] = "fixture-token"
+        self.run_script("promote_release.sh")
+        uploads = dict(line.split("\t") for line in (self.work / "uploads.log").read_text().splitlines())
+        latest = sorted(k for k in uploads if "-latest-" in k)
+        # Promote passes no Cache-Control, so upload_to_s3's default applies:
+        # 31 days for versioned objects (checksums included), none for the
+        # overwritten latest pointers (see test_upload_to_s3.py). Everything
+        # promoted is purged (latest pointers and any cached 404s).
+        self.assertIn("julialang2/bin/checksums/julia-1.14.0.sha256", uploads)
+        self.assertIn("julialang2/bin/linux/x64/1.14/julia-1.14-latest-linux-x86_64.tar.gz", latest)
+        self.assertEqual(set(uploads.values()), {""})
+        purges = [line.split() for line in (self.work / "curl.log").read_text().splitlines() if "PURGE" in line]
+        self.assertEqual(sorted("julialang2/" + p[-1].split("julialang.org/", 1)[1] for p in purges), sorted(uploads))
+        self.assertTrue(all("Fastly-Key: fixture-token" in " ".join(p) for p in purges))
+        self.assertFalse(any("Fastly-Soft-Purge" in " ".join(p) for p in purges))
+
+    def test_release_promotion_without_purge_token(self):
+        self.write(self.work / "Makefile", "")
+        self.release_fixtures(checkbounds=False)
+        self.env.pop("FASTLY_PURGE_TOKEN", None)
+        result = self.run_script("promote_release.sh")
+        self.assertIn("FASTLY_PURGE_TOKEN is not set", result.stderr)
+        self.assertNotIn("PURGE", (self.work / "curl.log").read_text())
 
 
 if __name__ == "__main__":
