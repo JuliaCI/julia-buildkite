@@ -20,15 +20,7 @@
 
 include(joinpath(@__DIR__, "ttfx_json.jl"))
 using .TTFXJSON
-
-const METRICS = [
-    (key = "precompile", name = "precompile",      threshold = 0.08, suite = 0.02, floor = 0.25),
-    (key = "load",       name = "load (cold)",     threshold = 0.10, suite = 0.02, floor = 0.10),
-    (key = "run",        name = "run (cold)",      threshold = 0.15, suite = 0.03, floor = 0.05),
-    (key = "warm",       name = "load+run (warm)", threshold = 0.15, suite = 0.03, floor = 0.05),
-    (key = "load_stdlibs", name = "load (stdlibs first)", threshold = 0.10, suite = 0.02, floor = 0.10),
-    (key = "run_stdlibs",  name = "run (stdlibs first)",  threshold = 0.15, suite = 0.03, floor = 0.05),
-]
+include(joinpath(@__DIR__, "ttfx_metrics.jl"))
 
 function parse_args(args)
     opts = Dict{String,Any}("results" => nothing, "meta" => nothing, "head" => nothing, "base" => nothing,
@@ -144,8 +136,8 @@ function compare_task(name, byarm, base, head, nblocks)
     length(hashes) > 1 && (out["note"] = "the arms resolved different package versions")
     for m in METRICS
         bv = [value(r, m.key) for r in b]; hv = [value(r, m.key) for r in h]
-        # A run that precompiles in block 1 only (--precompile-once) has no precompile
-        # time in the later blocks; the blocks that measured both arms are judged.
+        # With --precompile-once most tasks have a precompile time in block 1 only; the
+        # blocks that measured both arms are judged.
         blocks = [k for k in 1:nblocks if bv[k] !== nothing && hv[k] !== nothing]
         (isempty(blocks) || (m.key != "precompile" && length(blocks) != nblocks)) && continue
         bv = Float64.(bv[blocks]); hv = Float64.(hv[blocks])
@@ -199,16 +191,24 @@ function judge(bv, hv, m)
 end
 
 # Per metric, the geometric mean of the per-task ratios, per block; load and run once more
-# from the GC-off repeats (suite keys `load_gcoff`, `run_gcoff`). Precompile has one
-# geomean per block that measured it.
-function compare_suite(tasks, nblocks)
+# from the GC-off repeats (suite keys `load_gcoff`, `run_gcoff`). With --precompile-once
+# the tasks have one or two precompile samples, so precompile gets a single geomean of
+# each task's fastest head sample over its fastest base sample.
+function compare_suite(tasks, nblocks; precompile_once::Bool = false)
     suite = Dict{String,Any}()
     for m in METRICS, field in ("ratios", "gcoff_ratios")
         has(t) = haskey(t["metrics"], m.key) && haskey(t["metrics"][m.key], field)
         gs = Float64[]
-        for k in 1:nblocks
-            rs = [t["metrics"][m.key][field][i] for t in tasks if has(t) for (i, bk) in enumerate(t["metrics"][m.key]["blocks"]) if bk == k]
+        if precompile_once && m.key == "precompile"
+            rs = [minimum(t["metrics"][m.key]["head"]) / minimum(t["metrics"][m.key]["base"]) for t in tasks if has(t)]
             isempty(rs) || push!(gs, geomean(rs))
+        else
+            for k in 1:nblocks
+                rs = [t["metrics"][m.key][field][k] for t in tasks if has(t)]
+                isempty(rs) && break
+                push!(gs, geomean(rs))
+            end
+            length(gs) == nblocks || continue
         end
         isempty(gs) && continue
         verdict = all(>(1 + m.suite), gs) ? "regression" : all(<(1 - m.suite), gs) ? "improvement" : "same"
@@ -222,12 +222,15 @@ arm_desc(meta, label) = begin
     a === nothing ? code(label) : code(label) * " " * a["version"] * " (" * a["commit_short"] * ")"
 end
 
-# A pull request precompiles each task once per arm (ttfx_bench.jl --precompile-once), so
+precompile_once(meta) = meta !== nothing && get(get(meta, "settings", Dict()), "precompile_once", false) === true
+
+# A pull request precompiles most tasks once per arm (ttfx_bench.jl --precompile-once), so
 # the report says how to get the precision master builds have.
 function precompile_note(meta)
-    settings = meta === nothing ? nothing : get(meta, "settings", nothing)
-    (settings === nothing || get(settings, "precompile_once", false) !== true) && return ""
-    return "Precompile was measured once per arm, in block 1; master builds measure it in every block. " *
+    precompile_once(meta) || return ""
+    return "Precompile was measured once per arm, in block 1, and again in block 2 only for the tasks " *
+           "whose block-1 difference cleared the threshold; the suite geomean compares each task's fastest samples. " *
+           "Master builds precompile in every block. " *
            "For a more precise precompile comparison, add the `needs TTFX check` label; " *
            "Buildkite reads labels when it creates a build, so it applies from the next push."
 end
@@ -331,7 +334,7 @@ function main()
     end
 
     tasks = [compare_task(name, grouped[name], base, head, nblocks) for name in sort!(collect(keys(grouped)))]
-    suite = compare_suite(tasks, nblocks)
+    suite = compare_suite(tasks, nblocks; precompile_once = precompile_once(meta))
     nreg, nimp = open(opts["report"], "w") do io
         write_comparison(io, opts, meta, tasks, suite, nblocks)
     end

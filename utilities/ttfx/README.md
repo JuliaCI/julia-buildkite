@@ -15,6 +15,7 @@ repository's `main` branch at job time; everything that runs them lives here.
 | `ttfx_bench.jl` | the driver: interleaved ABBA measurement, one record per task, arm and block, and the untimed trace and invalidation run |
 | `ttfx_invalidations.jl` | loaded by a task script in the untimed trace run: summarizes the invalidations of its load and run phases |
 | `ttfx_compare.jl` | the verdict and the markdown report |
+| `ttfx_metrics.jl` | the compared metrics and their thresholds, shared by the driver and the comparison |
 | `ttfx_build_state.jl` | whether a commit's julia-ci build is pending, done, failed or absent |
 | `exclude.txt` | tasks not measured; every other task in the checkout is |
 
@@ -72,8 +73,12 @@ Precompiling is most of the job's time, and on a pull request each task is preco
 once per arm, in block 1 (`TTFX_PRECOMPILE_ONCE`, ttfx_bench.jl `--precompile-once`).
 The arm's package images are moved aside after that sample and back into the depot for
 its sample in block 2, which measures load and run from them and records no precompile
-time. So that neither arm always precompiles first, the arm order also alternates from
-task to task (`base head head base`, then `head base base head`). Master and release
+time. A task whose block-1 precompile times differ by more than the precompile threshold
+and floor is precompiled again in block 2: only those could be judged a regression or an
+improvement, which needs every block to agree. So that neither arm always precompiles
+first, the arm order also alternates from task to task (`base head head base`, then
+`head base base head`). The first precompile of a task in a job can be slow (GMT's is
+about 8% slower), and the second block keeps that from becoming a verdict. Master and release
 builds keep a precompile in every block, since their series is read commit to commit,
 and so does a pull request with the `needs TTFX check` label; the report says so when
 precompile was measured once.
@@ -89,7 +94,8 @@ is at least half offset by the opposite change in the other phase, the report li
 under "GC moved between load and run" and it does not count. Per metric,
 the geometric mean of the ratios over the suite is judged per block against a tighter
 threshold, which catches a small cost spread across every package. Precompile is judged
-on the blocks that measured it, so on a pull request on one sample per arm. Thresholds are the
+on the blocks that measured it; on a pull request its suite geomean is a single one, of
+each task's fastest head sample over its fastest base sample. Thresholds are the
 `METRICS` table in `ttfx_compare.jl`. A task that fails on head and passes on base is a
 regression; one that fails on both is listed in `compare.json` and left out of the
 verdict. A task stops at its first failed sample rather than finishing its blocks, and
@@ -121,8 +127,8 @@ else:
 | `ttfx/trace-compile.tar.gz` | `trace/<Package>-<Task>-<arm>.log`: the `--trace-compile --trace-compile-timing` lines of one extra run of the task script per task and arm, from its first marker to its last, after the timed runs of block 1 and not timed itself |
 
 `load_times[1]` and `run_times[1]` are the cold numbers; `precompile_time` is one
-sample per record, take the minimum over blocks for a task. It is null in the records
-after block 1 of a pull request, as is `precompile_time_stdlibs`.
+sample per record, take the minimum over blocks for a task. On a pull request it is null
+after block 1, as is `precompile_time_stdlibs`, unless the task precompiled again.
 `load_stats` and `run_stats` hold, per repeat, what `@time` reports besides wall time for
 that phase: `gc_time`, `gc_pauses`, `gc_full`, `allocd` (bytes), `compile_time` and
 `recompile_time` (seconds). The driver gets them by running an instrumented copy of the

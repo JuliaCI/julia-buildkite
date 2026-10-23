@@ -20,9 +20,11 @@
 #   --blocks N           ABBA blocks: every task is measured N times per arm, the arm order
 #                        reversed on alternate blocks (default 2)
 #   --precompile-once    precompile each task once per arm, in block 1; later blocks load
-#                        that arm's package images again and measure load and run only.
-#                        The arm order also alternates from task to task, so no arm always
-#                        precompiles first
+#                        that arm's package images again and measure load and run only,
+#                        unless the arms' block-1 precompile times differ by more than the
+#                        precompile threshold (ttfx_metrics.jl), which only more samples can
+#                        confirm. The arm order also alternates from task to task, so no
+#                        arm always precompiles first
 #   --repeats N          task script runs per sample; the first is the cold one, later ones
 #                        may hit caches it populated (default 3)
 #   --timeout S          wall-clock limit per subprocess, seconds (default 1800)
@@ -42,7 +44,7 @@
 # repeat in run order, and `*_stats` what `@time` would have added for the phase: gc time
 # and pauses, allocation, compilation and recompilation time (see instrument_task). The
 # `precompile_time` and `precompile_time_stdlibs` are null after block 1 with
-# --precompile-once. The `*_gcoff` fields are a second set of repeats with the GC disabled for both phases and
+# --precompile-once, except for the tasks that precompiled again. The `*_gcoff` fields are a second set of repeats with the GC disabled for both phases and
 # one forced collection between them (`gc_after_load`, seconds, excluded from both), so
 # load and run can be read without GC pauses landing in them; a failure there is kept in
 # `error_gcoff` and does not affect `status`. `invalidations` summarizes, in block 1 with
@@ -56,6 +58,7 @@
 using Dates, Printf, SHA, TOML
 include(joinpath(@__DIR__, "ttfx_json.jl"))
 using .TTFXJSON
+include(joinpath(@__DIR__, "ttfx_metrics.jl"))
 
 struct Arm
     label::String
@@ -151,6 +154,15 @@ end
 function restore_compiled!(depot::String, stash::String)
     clear_compiled!(depot)
     isdir(stash) && mv(stash, joinpath(depot, "compiled"))
+end
+
+# Whether block-1 precompile times differ by enough that the comparison could call it a
+# regression or an improvement, which needs every block to agree. Otherwise one sample per
+# arm decides the same as more would.
+function precompile_differs(times)
+    m = only(filter(m -> m.key == "precompile", METRICS))
+    lo, hi = extrema(times)
+    return hi / lo > 1 + m.threshold && hi - lo >= m.floor
 end
 
 # Only the JIT object cache, so a second set of repeats starts as cold as the first did
@@ -696,8 +708,15 @@ function main()
         cols = log_columns(maximum(a -> length(a.label), arms), instrumented_task, opts["stdlibs"])
         foreach(println, log_header(cols))
         stop = false
+        again = false
         for block in 1:blocks
             stop && break
+            if precompile_once && block == 2
+                times = [r.precompile_time for r in records if r.package == task.package && r.task == task.task && r.block == 1]
+                again = length(times) == length(arms) && precompile_differs(times)
+                again && println("  precompile differs by ", @sprintf("%.1f%%", 100 * (maximum(times) / minimum(times) - 1)),
+                                 " in block 1; precompiling again in the later blocks")
+            end
             order = isodd(precompile_once ? block + ti - 1 : block) ? arms : reverse(arms)
             for (pos, arm) in enumerate(order)
                 result = if haskey(failed, arm.label)
@@ -706,7 +725,7 @@ function main()
                     try
                         sl = get(stdlibs, arm.label, nothing)
                         stash = joinpath(stashdir, arm.label)
-                        reuse = precompile_once && block > 1
+                        reuse = precompile_once && block > 1 && !again
                         reuse && restore_compiled!(depot, stash)
                         res = measure(arm, depot, projs[arm.label], scripts[arm.label], repeats, timeout, "$(task.package)-$(task.task)-$(arm.label)-b$block";
                                       tracefile = tracedir === nothing || block != 1 ? nothing :
