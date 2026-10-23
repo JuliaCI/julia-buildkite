@@ -144,10 +144,13 @@ function compare_task(name, byarm, base, head, nblocks)
     length(hashes) > 1 && (out["note"] = "the arms resolved different package versions")
     for m in METRICS
         bv = [value(r, m.key) for r in b]; hv = [value(r, m.key) for r in h]
-        (any(isnothing, bv) || any(isnothing, hv)) && continue
-        bv = Float64.(bv); hv = Float64.(hv)
+        # A run that precompiles in block 1 only (--precompile-once) has no precompile
+        # time in the later blocks; the blocks that measured both arms are judged.
+        blocks = [k for k in 1:nblocks if bv[k] !== nothing && hv[k] !== nothing]
+        (isempty(blocks) || (m.key != "precompile" && length(blocks) != nblocks)) && continue
+        bv = Float64.(bv[blocks]); hv = Float64.(hv[blocks])
         verdict = judge(bv, hv, m)
-        out["metrics"][m.key] = Dict("base" => bv, "head" => hv, "ratios" => hv ./ bv, "verdict" => verdict)
+        out["metrics"][m.key] = Dict("base" => bv, "head" => hv, "ratios" => hv ./ bv, "blocks" => blocks, "verdict" => verdict)
         # Load and run are also judged with the GC off, and either measurement counts: a
         # difference that only shows with the GC on was GC pauses, one that only shows with
         # it off was hidden by them.
@@ -196,18 +199,18 @@ function judge(bv, hv, m)
 end
 
 # Per metric, the geometric mean of the per-task ratios, per block; load and run once more
-# from the GC-off repeats (suite keys `load_gcoff`, `run_gcoff`).
+# from the GC-off repeats (suite keys `load_gcoff`, `run_gcoff`). Precompile has one
+# geomean per block that measured it.
 function compare_suite(tasks, nblocks)
     suite = Dict{String,Any}()
     for m in METRICS, field in ("ratios", "gcoff_ratios")
         has(t) = haskey(t["metrics"], m.key) && haskey(t["metrics"][m.key], field)
         gs = Float64[]
         for k in 1:nblocks
-            rs = [t["metrics"][m.key][field][k] for t in tasks if has(t)]
-            isempty(rs) && break
-            push!(gs, geomean(rs))
+            rs = [t["metrics"][m.key][field][i] for t in tasks if has(t) for (i, bk) in enumerate(t["metrics"][m.key]["blocks"]) if bk == k]
+            isempty(rs) || push!(gs, geomean(rs))
         end
-        length(gs) == nblocks || continue
+        isempty(gs) && continue
         verdict = all(>(1 + m.suite), gs) ? "regression" : all(<(1 - m.suite), gs) ? "improvement" : "same"
         suite[field == "ratios" ? m.key : m.key * "_gcoff"] = Dict("geomeans" => gs, "verdict" => verdict, "n_tasks" => count(has, tasks))
     end
@@ -217,6 +220,16 @@ end
 arm_desc(meta, label) = begin
     a = meta === nothing ? nothing : get(get(meta, "arms", Dict()), label, nothing)
     a === nothing ? code(label) : code(label) * " " * a["version"] * " (" * a["commit_short"] * ")"
+end
+
+# A pull request precompiles each task once per arm (ttfx_bench.jl --precompile-once), so
+# the report says how to get the precision master builds have.
+function precompile_note(meta)
+    settings = meta === nothing ? nothing : get(meta, "settings", nothing)
+    (settings === nothing || get(settings, "precompile_once", false) !== true) && return ""
+    return "Precompile was measured once per arm, in block 1; master builds measure it in every block. " *
+           "For a more precise precompile comparison, add the `needs TTFX check` label; " *
+           "Buildkite reads labels when it creates a build, so it applies from the next push."
 end
 
 links(opts) = (isempty(opts["url"]) ? "" : " · [job](" * opts["url"] * ")") *
@@ -230,8 +243,10 @@ function write_comparison(io, opts, meta, tasks, suite, nblocks)
     link = links(opts)
     header = arm_desc(meta, head) * " vs " * arm_desc(meta, base) * note * " · " * string(length(tasks)) *
              " tasks · " * string(nblocks) * " blocks (ABBA)" * link
+    pnote = precompile_note(meta)
     if nreg + nimp == 0
         println(io, opts["title"], ": no robust regressions or improvements. ", header)
+        isempty(pnote) || println(io, "\n", pnote)
         return nreg, nimp
     end
     println(io, "## ", opts["title"])
@@ -243,6 +258,7 @@ function write_comparison(io, opts, meta, tasks, suite, nblocks)
             "); load and run are also judged from the repeats with the GC off (the stdlibs-first load and run with their GC time ",
             "taken out), and either counts (bold marks which), ",
             "except a difference that shows with the GC on only and whose GC time moved from the other phase.\n")
+    isempty(pnote) || println(io, pnote, "\n")
     println(io, "| suite (geomean over tasks) | change per block | with GC off | threshold |")
     println(io, "|---|---|---|---|")
     for m in METRICS
