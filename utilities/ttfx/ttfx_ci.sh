@@ -27,6 +27,17 @@ TTFX_BLOCKS="${TTFX_BLOCKS:-2}"
 TTFX_REPEATS="${TTFX_REPEATS:-3}"
 # Also load each task with every stdlib loaded first; "off" skips that run
 TTFX_STDLIBS="${TTFX_STDLIBS:-on}"
+# "on" precompiles each task once per arm, in the first block (ttfx_bench.jl
+# --precompile-once). Pull requests do, to halve the job's precompile time, unless they
+# have the `needs TTFX check` label; master and release builds precompile in every
+# block, since their series needs the lower noise.
+if [[ ",${BUILDKITE_PULL_REQUEST_LABELS:-}," == *",needs TTFX check,"* ]]; then
+    TTFX_PRECOMPILE_ONCE="${TTFX_PRECOMPILE_ONCE:-off}"
+elif [[ "${BUILDKITE_PIPELINE_SLUG:-}" == "julia-pr" || "${BUILDKITE_PIPELINE_SLUG:-}" == julia-buildkite* ]]; then
+    TTFX_PRECOMPILE_ONCE="${TTFX_PRECOMPILE_ONCE:-on}"
+else
+    TTFX_PRECOMPILE_ONCE="${TTFX_PRECOMPILE_ONCE:-off}"
+fi
 # Tasks not to run; "none" runs every task in the snippets checkout
 TTFX_EXCLUDE="${TTFX_EXCLUDE:-${TTFX_UTILS}/exclude.txt}"
 # The base build comes from where julia-ci stages its tarballs, or from the promoted
@@ -305,6 +316,9 @@ if [[ "${TTFX_EXCLUDE}" != "none" ]]; then
 fi
 if [[ "${TTFX_STDLIBS}" == "on" ]]; then
     bench_args+=( --stdlibs )
+fi
+if [[ "${TTFX_PRECOMPILE_ONCE}" == "on" ]]; then
+    bench_args+=( --precompile-once )
 fi
 "${HEAD_JULIA}" --startup-file=no "${TTFX_UTILS}/ttfx_bench.jl" \
     --tasks "${TTFX_DIR}/snippets/tasks" ${bench_args[@]+"${bench_args[@]}"} \

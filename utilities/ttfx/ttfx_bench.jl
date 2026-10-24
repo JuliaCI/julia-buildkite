@@ -19,6 +19,12 @@
 #                        same run logs invalidations
 #   --blocks N           ABBA blocks: every task is measured N times per arm, the arm order
 #                        reversed on alternate blocks (default 2)
+#   --precompile-once    precompile each task once per arm, in block 1; later blocks load
+#                        that arm's package images again and measure load and run only,
+#                        unless the arms' block-1 precompile times differ by more than the
+#                        precompile threshold (ttfx_metrics.jl), which only more samples can
+#                        confirm. The arm order also alternates from task to task, so no
+#                        arm always precompiles first
 #   --repeats N          task script runs per sample; the first is the cold one, later ones
 #                        may hit caches it populated (default 3)
 #   --timeout S          wall-clock limit per subprocess, seconds (default 1800)
@@ -37,7 +43,8 @@
 # The task script prints "load, run, total seconds"; the `*_times` arrays keep every
 # repeat in run order, and `*_stats` what `@time` would have added for the phase: gc time
 # and pauses, allocation, compilation and recompilation time (see instrument_task). The
-# `*_gcoff` fields are a second set of repeats with the GC disabled for both phases and
+# `precompile_time` and `precompile_time_stdlibs` are null after block 1 with
+# --precompile-once, except for the tasks that precompiled again. The `*_gcoff` fields are a second set of repeats with the GC disabled for both phases and
 # one forced collection between them (`gc_after_load`, seconds, excluded from both), so
 # load and run can be read without GC pauses landing in them; a failure there is kept in
 # `error_gcoff` and does not affect `status`. `invalidations` summarizes, in block 1 with
@@ -51,6 +58,7 @@
 using Dates, Printf, SHA, TOML
 include(joinpath(@__DIR__, "ttfx_json.jl"))
 using .TTFXJSON
+include(joinpath(@__DIR__, "ttfx_metrics.jl"))
 
 struct Arm
     label::String
@@ -67,7 +75,7 @@ end
 function parse_args(args)
     opts = Dict{String,Any}(
         "tasks" => nothing, "exclude" => nothing, "depot" => nothing, "workdir" => nothing, "logdir" => nothing,
-        "tracedir" => nothing, "stdlibs" => false,
+        "tracedir" => nothing, "stdlibs" => false, "precompile-once" => false,
         "blocks" => "2", "repeats" => "3", "timeout" => "1800",
         "results" => "results.json", "meta" => "results-meta.json", "snippets-commit" => "")
     arms = Arm[]
@@ -131,6 +139,30 @@ function clear_compiled!(depot::String)
         d = joinpath(depot, sub)
         isdir(d) && rm(d; recursive = true)
     end
+end
+
+# With --precompile-once an arm's package images are moved aside between its samples, and
+# moved back into the depot for the next one, so the other arm's samples start cold.
+function stash_compiled!(depot::String, stash::String)
+    rm(stash; recursive = true, force = true)
+    d = joinpath(depot, "compiled")
+    isdir(d) || return
+    mkpath(dirname(stash))
+    mv(d, stash)
+end
+
+function restore_compiled!(depot::String, stash::String)
+    clear_compiled!(depot)
+    isdir(stash) && mv(stash, joinpath(depot, "compiled"))
+end
+
+# Whether block-1 precompile times differ by enough that the comparison could call it a
+# regression or an improvement, which needs every block to agree. Otherwise one sample per
+# arm decides the same as more would.
+function precompile_differs(times)
+    m = only(filter(m -> m.key == "precompile", METRICS))
+    lo, hi = extrema(times)
+    return hi / lo > 1 + m.threshold && hi - lo >= m.floor
 end
 
 # Only the JIT object cache, so a second set of repeats starts as cold as the first did
@@ -422,14 +454,16 @@ function warmup_load(arm::Arm, env, proj::String, timeout::Float64)
 end
 
 # One sample: clear the caches, precompile the project, load its packages once untimed
-# (warmup_load), then run the task script `repeats` times in fresh processes. With `tracefile`, the script runs once more after
+# (warmup_load), then run the task script `repeats` times in fresh processes. With
+# `precompile = false` the depot already holds this arm's package images, and they are
+# used as they are. With `tracefile`, the script runs once more after
 # them, untimed, traced and logging invalidations (trace_run). With `stdlibs`, a project and
 # script, the task first runs once in that copy of its project (stdlibs_run).
 function measure(arm::Arm, depot::String, proj::String, script::String, repeats::Int, timeout::Float64, logname::String;
-                 tracefile::Union{Nothing,String} = nothing, stdlibs = nothing)
-    clear_compiled!(depot)
+                 tracefile::Union{Nothing,String} = nothing, stdlibs = nothing, precompile::Bool = true)
+    precompile && clear_compiled!(depot)
     env = arm_env(arm, depot)
-    precompile_time = precompile_project(arm, env, proj, timeout, logname)
+    precompile_time = precompile ? precompile_project(arm, env, proj, timeout, logname) : nothing
     precompile_time isa String && return (; status = "error", error = precompile_time)
     warmup_load(arm, env, proj, timeout)
     clear_objcache!(depot)
@@ -449,7 +483,7 @@ function measure(arm::Arm, depot::String, proj::String, script::String, repeats:
     end
     # Before the trace run, which would warm what this measures. Its packages are mostly
     # precompiled by now, in the same depot.
-    s = stdlibs === nothing || status == "error" ? nothing : stdlibs_run(arm, depot, env, stdlibs..., timeout, logname)
+    s = stdlibs === nothing || status == "error" ? nothing : stdlibs_run(arm, depot, env, stdlibs..., timeout, logname; precompile)
     trace, inv = tracefile === nothing || isempty(r.load) ? (nothing, nothing) :
         trace_run(arm, env, proj, script, timeout, tracefile, logname)
     return (; status, error = status == "ok" ? nothing : r.err, precompile_time,
@@ -487,8 +521,9 @@ end
 # The task once, cold, in the stdlibs copy of its project (ADD_STDLIBS), after an untimed
 # precompile and warmup load of that copy. Only the cold load is compared, so one run.
 # Returns the precompile time and the run's numbers, or the failure message.
-function stdlibs_run(arm::Arm, depot::String, env, proj::String, script::String, timeout::Float64, logname::String)
-    t = precompile_project(arm, env, proj, timeout, logname * "-stdlibs")
+function stdlibs_run(arm::Arm, depot::String, env, proj::String, script::String, timeout::Float64, logname::String;
+                     precompile::Bool = true)
+    t = precompile ? precompile_project(arm, env, proj, timeout, logname * "-stdlibs") : nothing
     t isa String && return t
     warmup_load(arm, env, proj, timeout)
     clear_objcache!(depot)
@@ -596,6 +631,7 @@ function main()
     blocks = parse(Int, opts["blocks"])
     repeats = parse(Int, opts["repeats"])
     timeout = parse(Float64, opts["timeout"])
+    precompile_once = opts["precompile-once"]
     depot = something(opts["depot"], mktempdir(; prefix = "ttfx-depot-"))
     workdir = something(opts["workdir"], mktempdir(; prefix = "ttfx-work-"))
     mkpath(depot); mkpath(workdir)
@@ -614,7 +650,7 @@ function main()
               arms = builds,
               arm_order = [arm.label for arm in arms],
               system = system_info(),
-              settings = (; blocks, repeats, timeout_s = timeout, depot, stdlibs = opts["stdlibs"], n_tasks = length(tasks),
+              settings = (; blocks, repeats, timeout_s = timeout, depot, stdlibs = opts["stdlibs"], precompile_once, n_tasks = length(tasks),
                             tasks = [t.package * "/" * t.task for t in tasks],
                             excluded = filter(∉(stale), opts["exclude"] === nothing ? String[] :
                                               [strip(first(split(l, '#'))) for l in eachline(opts["exclude"])])),
@@ -628,17 +664,20 @@ function main()
         b = builds[arm.label]
         println("  $(rpad(arm.label, 8)) $(b.version)  $(b.commit_short)  $(b.commit_date)  sees $(b.cpu_threads) CPU threads")
     end
-    println("$(length(tasks)) tasks, $blocks blocks (ABBA), $repeats repeats, timeout $(timeout)s")
+    println("$(length(tasks)) tasks, $blocks blocks (ABBA), $repeats repeats, timeout $(timeout)s",
+            precompile_once ? ", precompiled in block 1 only" : "")
     println("Load at start: $(sys.load_avg)")
     flush(stdout)
 
+    stashdir = joinpath(workdir, "compiled")
     records = Any[]
     write_results() = write(opts["results"], json_write(records) * "\n")
 
-    for task in tasks
+    for (ti, task) in enumerate(tasks)
         label = task.package * "/" * task.task
         println("--- $label")
         flush(stdout)
+        rm(stashdir; recursive = true, force = true)
         projs = Dict{String,String}()
         scripts = Dict{String,String}()
         failed = Dict{String,String}()
@@ -669,19 +708,30 @@ function main()
         cols = log_columns(maximum(a -> length(a.label), arms), instrumented_task, opts["stdlibs"])
         foreach(println, log_header(cols))
         stop = false
+        again = false
         for block in 1:blocks
             stop && break
-            order = isodd(block) ? arms : reverse(arms)
+            if precompile_once && block == 2
+                times = [r.precompile_time for r in records if r.package == task.package && r.task == task.task && r.block == 1]
+                again = length(times) == length(arms) && precompile_differs(times)
+                again && println("  precompile differs by ", @sprintf("%.1f%%", 100 * (maximum(times) / minimum(times) - 1)),
+                                 " in block 1; precompiling again in the later blocks")
+            end
+            order = isodd(precompile_once ? block + ti - 1 : block) ? arms : reverse(arms)
             for (pos, arm) in enumerate(order)
                 result = if haskey(failed, arm.label)
                     (; status = "error", error = failed[arm.label])
                 else
                     try
                         sl = get(stdlibs, arm.label, nothing)
+                        stash = joinpath(stashdir, arm.label)
+                        reuse = precompile_once && block > 1 && !again
+                        reuse && restore_compiled!(depot, stash)
                         res = measure(arm, depot, projs[arm.label], scripts[arm.label], repeats, timeout, "$(task.package)-$(task.task)-$(arm.label)-b$block";
                                       tracefile = tracedir === nothing || block != 1 ? nothing :
                                           joinpath(tracedir, "$(task.package)-$(task.task)-$(arm.label).log"),
-                                      stdlibs = sl isa Tuple ? sl : nothing)
+                                      stdlibs = sl isa Tuple ? sl : nothing, precompile = !reuse)
+                        precompile_once && block < blocks && stash_compiled!(depot, stash)
                         sl isa String ? merge(res, (; error_stdlibs = sl)) : res
                     catch e
                         (; status = "error", error = sprint(showerror, e))
