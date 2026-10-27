@@ -43,7 +43,8 @@ renders only those), whose tests gate their publish triggers on tags unless
 OPT_TESTS_ALLOW_FAIL=true. ONLY_TRIPLETS=<triplet>[,...] renders only the
 build, test and publish jobs of those platforms, from whichever groups the
 build would otherwise contain. Labeled PRs render the same workload groups as a
-supplemental pipeline, without publish triggers. Per-commit results are grouped
+supplemental pipeline, without publish triggers. A julia-pr pull request skips
+the jobs whose paths it does not change (PR_GATED_FILES, PR_GATED_TRIPLETS). Per-commit results are grouped
 into one `group:` per label: Build, Check, Test, Allow Fail, JuliaSyntax,
 JuliaC, TTFX, Publish.
 
@@ -52,10 +53,13 @@ build + test jobs (see publish_group_text).
 """
 
 import argparse
+import functools
+import json
 import os
 import re
 import subprocess
 import sys
+import urllib.request
 
 # Directory of the .buildkite checkout root (this file lives in
 # <root>/utilities/render_launch_pipeline.py).
@@ -360,6 +364,10 @@ def render_arches_group_text(arches_file, yaml_file, group, allow_fail,
         SEEN_TRIPLETS.add(arch_env["TRIPLET"])
         if ONLY_TRIPLETS is not None and arch_env["TRIPLET"] not in ONLY_TRIPLETS:
             continue
+        triplet = arch_env["TRIPLET"]
+        if triplet in PR_GATED_TRIPLETS and pr_skips(PR_GATED_TRIPLETS[triplet],
+                                                     f"{yaml_file} {triplet}"):
+            continue
         env = dict(arch_env)
         env["GROUP"] = group
         env["ALLOW_FAIL"] = allow_fail
@@ -466,6 +474,32 @@ TEST_STATIC = [
     "test_revise.yml",
 ]
 
+# On julia-pr, these jobs run only when the pull request changes a path that
+# the job's pattern matches, relative to the merge-base with its target
+# branch. Every other pipeline runs them, so what a pull request skips is
+# still tested on master. Keyed by misc YAML, or by platform for the
+# arches-templated jobs.
+#
+# C/C++ code, the build system, the external dependencies, and the tests
+# built from C
+NATIVE_PATHS = re.compile(
+    r"(src|cli|deps|contrib)/|Make\.inc$|(.*/)?Makefile$|.*\.mk$"
+    r"|test/(clangsa|embedding|gcext|llvmpasses)/")
+PR_GATED_FILES = {
+    "analyzegc.yml": NATIVE_PATHS,
+    "embedding.yml": NATIVE_PATHS,
+    "llvmpasses.yml": NATIVE_PATHS,
+    "sanitizers/asan.yml": NATIVE_PATHS,
+    "sanitizers/tsan.yml": NATIVE_PATHS,
+    "gcext.yml": NATIVE_PATHS,
+}
+PR_GATED_TRIPLETS = {
+    # Tracy and ITT profiling compiled into the runtime
+    "x86_64-linux-gnuprofiling": NATIVE_PATHS,
+}
+# Runs every job on a pull request
+FULL_CI_LABEL = "needs full CI"
+
 # Built by the schedule (as nightlies) and by release tags (as releases).
 NOGPL_GROUP = ("no_GPL", "false", [
     ("build_linux.no_gpl.arches", "build_linux.yml"),
@@ -570,9 +604,90 @@ def build_group_text():
     return emit_group("Build", "\n".join(c for c in chunks if c))
 
 
+def log(msg):
+    # stdout is the rendered pipeline
+    sys.stderr.write(msg + "\n")
+
+
+def git(*args):
+    return subprocess.run(["git", *args], check=True, capture_output=True,
+                          text=True).stdout.strip()
+
+
+def github_repo():
+    """The julia repository this build is of. The self-test pipeline builds
+    julia-buildkite, so it falls back to JuliaLang/julia."""
+    m = re.search(r"github\.com[:/](.+?)(?:\.git)?/?$", os.environ.get("BUILDKITE_REPO", ""))
+    return m.group(1) if m and m.group(1).endswith("/julia") else "JuliaLang/julia"
+
+
+def pr_has_label(label):
+    """Whether the pull request has `label`. Buildkite records the labels when
+    it creates a build, and a rebuild from its UI keeps those of the build it
+    repeats, so a label missing there is looked up on GitHub."""
+    if label in os.environ.get("BUILDKITE_PULL_REQUEST_LABELS", "").split(","):
+        return True
+    url = (f"https://api.github.com/repos/{github_repo()}/issues/"
+           f"{os.environ['BUILDKITE_PULL_REQUEST']}/labels?per_page=100")
+    request = urllib.request.Request(url, headers={"Accept": "application/vnd.github+json"})
+    if os.environ.get("GITHUB_TOKEN"):
+        request.add_header("Authorization", f"Bearer {os.environ['GITHUB_TOKEN']}")
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            return any(l.get("name") == label for l in json.load(response))
+    except (OSError, ValueError) as e:
+        log(f"Could not read the pull request's labels from GitHub ({e}); "
+            "going by the labels Buildkite recorded")
+        return False
+
+
+@functools.cache
+def pr_changed_paths():
+    """The paths a julia-pr pull request changes relative to the merge-base
+    with its target branch. None runs every job: not a julia-pr pull request,
+    the FULL_CI_LABEL, a new julia-buildkite version, or no merge-base found."""
+    if (os.environ.get("BUILDKITE_PIPELINE_SLUG") != "julia-pr"
+            or os.environ.get("BUILDKITE_PULL_REQUEST", "false") == "false"):
+        return None
+    if pr_has_label(FULL_CI_LABEL):
+        log(f"The pull request has the '{FULL_CI_LABEL}' label; running every job")
+        return None
+    base_branch = os.environ.get("BUILDKITE_PULL_REQUEST_BASE_BRANCH") or "master"
+    try:
+        git("fetch", "--no-tags", "--quiet", os.environ["BUILDKITE_REPO"],
+            f"refs/heads/{base_branch}")
+        merge_base = git("merge-base", "HEAD", "FETCH_HEAD")
+        # Without rename detection, a file moved counts where it came from too
+        changed = git("diff", "--name-only", "--no-renames", merge_base, "HEAD").splitlines()
+    except (subprocess.CalledProcessError, KeyError) as e:
+        log(f"Could not compare the pull request with {base_branch} ({e}); running every job")
+        return None
+    if ".buildkite-external-version" in changed:
+        log("The pull request changes the julia-buildkite version; running every job")
+        return None
+    return changed
+
+
+def pr_skips(pattern, what):
+    """Whether this pull request skips the job `what`, which tests the paths
+    `pattern` matches."""
+    changed = pr_changed_paths()
+    if changed is None or any(pattern.match(path) for path in changed):
+        return False
+    log(f"Skipping {what}: the pull request changes none of the paths it tests "
+        f"(add the '{FULL_CI_LABEL}' label to run it)")
+    return True
+
+
+def static_files(files):
+    """The misc YAMLs of `files` that this build runs."""
+    return [rel for rel in files
+            if rel not in PR_GATED_FILES or not pr_skips(PR_GATED_FILES[rel], rel)]
+
+
 def check_group_text():
     chunks = []
-    for rel in CHECK_STATIC:
+    for rel in static_files(CHECK_STATIC):
         label, inner = load_group_text(os.path.join(MISC, rel))
         assert label == "Check", f"{rel}: expected Check group, got {label!r}"
         chunks.append(inner)
@@ -581,7 +696,7 @@ def check_group_text():
 
 def test_group_text(static=True):
     chunks = []
-    for rel in TEST_STATIC if static else []:
+    for rel in static_files(TEST_STATIC) if static else []:
         label, inner = load_group_text(os.path.join(MISC, rel))
         assert label == "Test", f"{rel}: expected Test group, got {label!r}"
         chunks.append(inner)

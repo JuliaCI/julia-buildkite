@@ -50,6 +50,19 @@ A second `julia-ci` schedule, Saturday nights with `TTFX_RELEASE=latest`, builds
 nothing and measures the newest stable release, the LTS and the next release's nightly on the
 TTFX tasks instead, as references for the master series (see `utilities/ttfx/README.md`).
 
+A pull request skips the jobs that test only paths it does not change, relative
+to the merge-base with its target branch (`PR_GATED_FILES` and
+`PR_GATED_TRIPLETS` in `utilities/render_launch_pipeline.py`):
+
+- `asan`, `tsan`, `llvmpasses`, `analyzegc`, `embedding`, `gcext` and the
+  profiling build run only when it changes C/C++ code, the build system,
+  `deps/` or `contrib/`.
+
+`julia-ci` runs every job, so what a pull request skips is still tested on
+master. Pull requests with the `needs full CI` label, or that change
+`.buildkite-external-version`, run every job. The label counts on a rebuild
+too: when Buildkite did not record it, the launch step asks GitHub.
+
 Pull requests with the `needs extended CI` label also run the scheduled workloads.
 Coverage data is collected but not uploaded to Codecov or Coveralls.
 
