@@ -57,6 +57,8 @@ to the merge-base with its target branch (`PR_GATED_FILES` and
 - `asan`, `tsan`, `llvmpasses`, `analyzegc`, `embedding`, `gcext` and the
   profiling build run only when it changes C/C++ code, the build system,
   `deps/` or `contrib/`.
+- The MMTk (ConcurrentImmix) build and its tests run only when it changes
+  those paths or `Compiler/`.
 - The PDF manual is built only when it changes `doc/`.
 - The JuliaSyntax jobs, which test that package on released Julia versions,
   run only when it changes `JuliaSyntax/`.

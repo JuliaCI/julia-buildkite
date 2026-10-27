@@ -498,9 +498,12 @@ PR_GATED_FILES = {
 }
 # The JuliaSyntax group tests that package on released Julia versions
 JULIASYNTAX_PATHS = re.compile(r"JuliaSyntax/")
+# What decides allocations and write barriers, for the builds with another GC
+GC_PATHS = re.compile(NATIVE_PATHS.pattern + r"|Compiler/")
 PR_GATED_TRIPLETS = {
     # Tracy and ITT profiling compiled into the runtime
     "x86_64-linux-gnuprofiling": NATIVE_PATHS,
+    "x86_64-linux-gnummtkconcurrent": GC_PATHS,
 }
 # Runs every job on a pull request
 FULL_CI_LABEL = "needs full CI"

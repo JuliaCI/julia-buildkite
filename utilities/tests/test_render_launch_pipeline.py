@@ -590,6 +590,17 @@ class PullRequestGatingTests(unittest.TestCase):
         self.assertIn(job, self.render_pr(["doc/src/manual/types.md"]))
         self.assertNotIn(job, self.render_pr(["base/array.jl", "src/gf.c"]))
 
+    def test_mmtk(self):
+        jobs = ('key: "build_x86_64-linux-gnummtkconcurrent"',
+                'key: "test_x86_64-linux-gnummtkconcurrent"')
+        for changed in (None, ["Compiler/src/optimize.jl"], ["src/gc-mmtk.c"]):
+            output = self.render_pr(changed)
+            for job in jobs:
+                self.assertIn(job, output, changed)
+        output = self.render_pr(["base/array.jl", "test/arrayops.jl"])
+        for job in jobs:
+            self.assertNotIn(job, output)
+
     def test_label_runs_everything(self):
         from unittest import mock
         rlp = self.rlp
