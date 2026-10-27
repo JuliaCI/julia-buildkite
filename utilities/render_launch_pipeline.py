@@ -485,6 +485,8 @@ TEST_STATIC = [
 NATIVE_PATHS = re.compile(
     r"(src|cli|deps|contrib)/|Make\.inc$|(.*/)?Makefile$|.*\.mk$"
     r"|test/(clangsa|embedding|gcext|llvmpasses)/")
+# The manual; docstrings can break the PDF too, which master then finds
+DOC_PATHS = re.compile(r"doc/")
 PR_GATED_FILES = {
     "analyzegc.yml": NATIVE_PATHS,
     "embedding.yml": NATIVE_PATHS,
@@ -492,6 +494,7 @@ PR_GATED_FILES = {
     "sanitizers/asan.yml": NATIVE_PATHS,
     "sanitizers/tsan.yml": NATIVE_PATHS,
     "gcext.yml": NATIVE_PATHS,
+    "pdf_docs/build_pdf_docs.yml": DOC_PATHS,
 }
 # The JuliaSyntax group tests that package on released Julia versions
 JULIASYNTAX_PATHS = re.compile(r"JuliaSyntax/")

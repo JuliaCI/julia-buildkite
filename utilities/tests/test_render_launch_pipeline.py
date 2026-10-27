@@ -584,6 +584,12 @@ class PullRequestGatingTests(unittest.TestCase):
         self.assertIn(group, self.render_pr(["JuliaSyntax/src/parser.jl"]))
         self.assertNotIn(group, self.render_pr(["base/array.jl", "src/gf.c"]))
 
+    def test_pdf_docs(self):
+        job = 'label: "pdf_docs_build"'
+        self.assertIn(job, self.render_pr(None))
+        self.assertIn(job, self.render_pr(["doc/src/manual/types.md"]))
+        self.assertNotIn(job, self.render_pr(["base/array.jl", "src/gf.c"]))
+
     def test_label_runs_everything(self):
         from unittest import mock
         rlp = self.rlp
