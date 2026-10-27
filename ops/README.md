@@ -213,11 +213,12 @@ are Terraform variables with the production defaults):
    keys (the notary key as `EXTERNAL`-origin, pending import), and the
    IAM roles + policies (one stage role per build pipeline, tokens for
    julia-ci only, publish + docs-deploy). Re-apply any time trust
-   patterns or policies change. Local state is fine while testing (it
-   contains no secrets); once things settle, move it to S3 by adding a
-   `backend "s3"` block (bucket `julia-ci-tfstate`, `use_lockfile =
-   true`) and running `terraform init -migrate-state` — the resources
-   are untouched by the migration.
+   patterns or policies change. The state (no secrets) lives in
+   `s3://julialang-terraform/julia-buildkite.tfstate`, and the Azure
+   module's in `julia-buildkite-azure.tfstate` beside it (see the
+   `backend "s3"` blocks in `versions.tf`), so `init` needs AWS
+   credentials for the account and Terraform/OpenTofu 1.10+ (S3 native
+   locking). A deployment elsewhere changes the backend block first.
 4. Key material:
    * `./20_export_gpg_pubkey.py` — exports the OpenPGP public half of the
      KMS-generated tarball signing key to
