@@ -541,11 +541,21 @@ class PullRequestGatingTests(unittest.TestCase):
                if k not in ("BUILDKITE_SOURCE", "NOGPL_ONLY", "OPT_ONLY", "ONLY_TRIPLETS",
                             "TTFX_RELEASE", "BUILDKITE_TAG", "BUILDKITE_BRANCH")}
         env["BUILDKITE_PIPELINE_SLUG"] = "julia-pr"
-        with mock.patch.object(rlp, "pr_changed_paths", lambda: changed), \
-                mock.patch.dict(os.environ, env, clear=True), \
-                mock.patch.object(sys, "argv", [RENDERER]), \
-                contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):
-            rlp.main()
+        import tempfile
+        cwd = os.getcwd()
+        # A julia checkout with JuliaSyntax in it
+        with tempfile.TemporaryDirectory() as julia:
+            os.makedirs(os.path.join(julia, "JuliaSyntax"))
+            open(os.path.join(julia, "JuliaSyntax", "Project.toml"), "w").close()
+            os.chdir(julia)
+            try:
+                with mock.patch.object(rlp, "pr_changed_paths", lambda: changed), \
+                        mock.patch.dict(os.environ, env, clear=True), \
+                        mock.patch.object(sys, "argv", [RENDERER]), \
+                        contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):
+                    rlp.main()
+            finally:
+                os.chdir(cwd)
         return out.getvalue()
 
     NATIVE_JOBS = ('key: "asan"', 'label: "tsan"', 'label: "llvmpasses"', 'label: "analyzegc"',
@@ -567,6 +577,12 @@ class PullRequestGatingTests(unittest.TestCase):
             output = self.render_pr([path])
             for job in self.NATIVE_JOBS:
                 self.assertIn(job, output, path)
+
+    def test_juliasyntax(self):
+        group = 'group: "JuliaSyntax"'
+        self.assertIn(group, self.render_pr(None))
+        self.assertIn(group, self.render_pr(["JuliaSyntax/src/parser.jl"]))
+        self.assertNotIn(group, self.render_pr(["base/array.jl", "src/gf.c"]))
 
     def test_label_runs_everything(self):
         from unittest import mock

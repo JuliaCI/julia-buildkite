@@ -57,6 +57,8 @@ to the merge-base with its target branch (`PR_GATED_FILES` and
 - `asan`, `tsan`, `llvmpasses`, `analyzegc`, `embedding`, `gcext` and the
   profiling build run only when it changes C/C++ code, the build system,
   `deps/` or `contrib/`.
+- The JuliaSyntax jobs, which test that package on released Julia versions,
+  run only when it changes `JuliaSyntax/`.
 
 `julia-ci` runs every job, so what a pull request skips is still tested on
 master. Pull requests with the `needs full CI` label, or that change

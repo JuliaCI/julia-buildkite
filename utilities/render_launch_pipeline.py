@@ -493,6 +493,8 @@ PR_GATED_FILES = {
     "sanitizers/tsan.yml": NATIVE_PATHS,
     "gcext.yml": NATIVE_PATHS,
 }
+# The JuliaSyntax group tests that package on released Julia versions
+JULIASYNTAX_PATHS = re.compile(r"JuliaSyntax/")
 PR_GATED_TRIPLETS = {
     # Tracy and ITT profiling compiled into the runtime
     "x86_64-linux-gnuprofiling": NATIVE_PATHS,
@@ -928,12 +930,12 @@ def main():
     # checkout (same conditional the old Check step used). Included verbatim
     # as its own group (it is itself a launcher with its own notify).
     juliasyntax_project = os.path.join(os.getcwd(), "JuliaSyntax", "Project.toml")
-    if os.path.exists(juliasyntax_project):
-        blocks.append(verbatim_group_text(os.path.join(MISC, "juliasyntax.launch.yml")))
-    else:
+    if not os.path.exists(juliasyntax_project):
         sys.stderr.write(
             "./JuliaSyntax/Project.toml does NOT exist; omitting JuliaSyntax group\n"
         )
+    elif not pr_skips(JULIASYNTAX_PATHS, "JuliaSyntax"):
+        blocks.append(verbatim_group_text(os.path.join(MISC, "juliasyntax.launch.yml")))
 
     # JuliaC: itself a launcher with its own group + notify -- include verbatim.
     blocks.append(verbatim_group_text(os.path.join(MISC, "juliac", "test_juliac.yml")))
