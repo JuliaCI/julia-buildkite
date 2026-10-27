@@ -15,7 +15,7 @@ steps:
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
         commands: |
           # Launch the code coverage job (scheduled julia-ci builds and
-          # "needs full CI"-labeled PRs; PR builds hold no coverage tokens,
+          # "needs extended CI"-labeled PRs; PR builds hold no coverage tokens,
           # so they collect coverage without uploading it -- see the
           # conditionals inside)
           buildkite-agent pipeline upload .buildkite/pipelines/scheduled/coverage/coverage.yml
