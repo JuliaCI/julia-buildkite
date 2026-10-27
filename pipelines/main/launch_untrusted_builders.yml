@@ -60,7 +60,7 @@ steps:
       arch: "x86_64" # prevent from running on PiBots
 
   - label: ":rocket: Launch scheduled workloads"
-    if: build.pull_request.labels includes "needs full CI"
+    if: build.pull_request.labels includes "needs extended CI"
     plugins:
       - JuliaCI/external-buildkite#v1:
           version: "./.buildkite-external-version"

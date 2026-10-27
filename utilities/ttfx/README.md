@@ -227,7 +227,7 @@ ThinLTO, `contrib/optimized`), which no per-commit build measures. After the
 of the same commit, fetched (and waited for) as a pull request's merge-base is. Both are
 measured interleaved in the same job, so the difference is what the optimizations buy,
 free of the drift between two separate jobs. The renderer emits it on the schedule
-itself only, not for pull requests labelled `needs full CI`.
+itself only, not for pull requests labelled `needs extended CI`.
 
 A "regression" in this job is the optimized build being slower than the regular one;
 the job is `soft_fail`, so it never fails the nightly, and it posts no commit status
