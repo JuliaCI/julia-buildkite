@@ -50,7 +50,29 @@ A second `julia-ci` schedule, Saturday nights with `TTFX_RELEASE=latest`, builds
 nothing and measures the newest stable release, the LTS and the next release's nightly on the
 TTFX tasks instead, as references for the master series (see `utilities/ttfx/README.md`).
 
-Pull requests with the `needs full CI` label also run the scheduled workloads.
+A pull request skips the jobs that test only paths it does not change, relative
+to the merge-base with its target branch (`PR_GATED_FILES` and
+`PR_GATED_TRIPLETS` in `utilities/render_launch_pipeline.py`):
+
+- `asan`, `tsan`, `llvmpasses`, `analyzegc`, `embedding`, `gcext` and the
+  profiling build run only when it changes C/C++ code, the build system,
+  `deps/` or `contrib/`.
+- The MMTk (ConcurrentImmix) build and its tests run only when it changes
+  those paths or `Compiler/`.
+- The PDF manual is built only when it changes `doc/`.
+- The JuliaSyntax jobs, which test that package on released Julia versions,
+  run only when it changes `JuliaSyntax/`.
+
+`julia-ci` runs every job, so what a pull request skips is still tested on
+master. Pull requests with the `needs full CI` label, or that change
+`.buildkite-external-version`, run every job. The label counts on a rebuild
+too: when Buildkite did not record it, the launch step asks GitHub.
+
+Once a job of a pull request fails that is not allowed to fail, the rest of
+its build is cancelled (`cancel_on_build_failing`). `julia-ci` builds run to
+the end, so each platform that passes still publishes.
+
+Pull requests with the `needs extended CI` label also run the scheduled workloads.
 Coverage data is collected but not uploaded to Codecov or Coveralls.
 
 The x86-64 Linux assertion build is tested under rr (with the `rr` and

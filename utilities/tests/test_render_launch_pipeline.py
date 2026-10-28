@@ -520,5 +520,137 @@ class InterpolateTests(unittest.TestCase):
                 self.interpolate(text, {"FOO": "x"}, "test")
 
 
+class PullRequestGatingTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        sys.path.insert(0, os.path.dirname(RENDERER))
+        import render_launch_pipeline
+        cls.rlp = render_launch_pipeline
+
+    def render_pr(self, changed):
+        """The pipeline of a pull request that changes `changed` (None: every
+        job runs, as with the `needs full CI` label)."""
+        import contextlib
+        import io
+        from unittest import mock
+        rlp = self.rlp
+        for keys in (rlp.BUILD_KEYS, rlp.TEST_KEYS, rlp.SEEN_TRIPLETS):
+            keys.clear()
+        out = io.StringIO()
+        env = {k: v for k, v in os.environ.items()
+               if k not in ("BUILDKITE_SOURCE", "NOGPL_ONLY", "OPT_ONLY", "ONLY_TRIPLETS",
+                            "TTFX_RELEASE", "BUILDKITE_TAG", "BUILDKITE_BRANCH")}
+        env["BUILDKITE_PIPELINE_SLUG"] = "julia-pr"
+        import tempfile
+        cwd = os.getcwd()
+        # A julia checkout with JuliaSyntax in it
+        with tempfile.TemporaryDirectory() as julia:
+            os.makedirs(os.path.join(julia, "JuliaSyntax"))
+            open(os.path.join(julia, "JuliaSyntax", "Project.toml"), "w").close()
+            os.chdir(julia)
+            try:
+                with mock.patch.object(rlp, "pr_changed_paths", lambda: changed), \
+                        mock.patch.dict(os.environ, env, clear=True), \
+                        mock.patch.object(sys, "argv", [RENDERER]), \
+                        contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):
+                    rlp.main()
+            finally:
+                os.chdir(cwd)
+        return out.getvalue()
+
+    NATIVE_JOBS = ('key: "asan"', 'label: "tsan"', 'label: "llvmpasses"', 'label: "analyzegc"',
+                   'label: "embedding"', 'label: "gcext"', 'key: "build_x86_64-linux-gnuprofiling"')
+
+    def test_native_checks(self):
+        everything = self.render_pr(None)
+        for job in self.NATIVE_JOBS:
+            self.assertIn(job, everything)
+        julia_only = self.render_pr(["base/array.jl", "test/arrayops.jl"])
+        for job in self.NATIVE_JOBS:
+            self.assertNotIn(job, julia_only)
+        # The required platforms still build and test
+        self.assertIn('key: "build_x86_64-linux-gnu"', julia_only)
+        self.assertIn('key: "test_x86_64-linux-gnu"', julia_only)
+        self.assertIn('label: "doctest"', julia_only)
+        for path in ("src/gf.c", "deps/llvm.mk", "Make.inc", "cli/loader_exe.c",
+                     "contrib/asan/build.sh", "test/llvmpasses/alloc-opt.ll", "stdlib/Makefile"):
+            output = self.render_pr([path])
+            for job in self.NATIVE_JOBS:
+                self.assertIn(job, output, path)
+
+    def test_juliasyntax(self):
+        group = 'group: "JuliaSyntax"'
+        self.assertIn(group, self.render_pr(None))
+        self.assertIn(group, self.render_pr(["JuliaSyntax/src/parser.jl"]))
+        self.assertNotIn(group, self.render_pr(["base/array.jl", "src/gf.c"]))
+
+    def test_pdf_docs(self):
+        job = 'label: "pdf_docs_build"'
+        self.assertIn(job, self.render_pr(None))
+        self.assertIn(job, self.render_pr(["doc/src/manual/types.md"]))
+        self.assertNotIn(job, self.render_pr(["base/array.jl", "src/gf.c"]))
+
+    def test_mmtk(self):
+        jobs = ('key: "build_x86_64-linux-gnummtkconcurrent"',
+                'key: "test_x86_64-linux-gnummtkconcurrent"')
+        for changed in (None, ["Compiler/src/optimize.jl"], ["src/gc-mmtk.c"]):
+            output = self.render_pr(changed)
+            for job in jobs:
+                self.assertIn(job, output, changed)
+        output = self.render_pr(["base/array.jl", "test/arrayops.jl"])
+        for job in jobs:
+            self.assertNotIn(job, output)
+
+    def test_fail_fast_on_pull_requests_only(self):
+        output = self.render_pr(None)
+        steps = re.findall(r"^ *- (?:label|key):", output, re.M)
+        self.assertEqual(output.count("cancel_on_build_failing: true"), len(steps))
+        self.assertIn('      - label: ":linux: build x86_64-linux-gnu"\n'
+                      '        cancel_on_build_failing: true\n', output)
+        self.assertNotIn("cancel_on_build_failing", render(BUILDKITE_PIPELINE_SLUG="julia-ci"))
+
+    def test_label_runs_everything(self):
+        from unittest import mock
+        rlp = self.rlp
+        env = {"BUILDKITE_PIPELINE_SLUG": "julia-pr", "BUILDKITE_PULL_REQUEST": "123",
+               "BUILDKITE_PULL_REQUEST_LABELS": "bugfix,needs full CI"}
+        with mock.patch.dict(os.environ, env):
+            rlp.pr_changed_paths.cache_clear()
+            self.assertIsNone(rlp.pr_changed_paths())
+        rlp.pr_changed_paths.cache_clear()
+        # Not a pull request
+        with mock.patch.dict(os.environ, {"BUILDKITE_PIPELINE_SLUG": "julia-ci"}):
+            self.assertIsNone(rlp.pr_changed_paths())
+        rlp.pr_changed_paths.cache_clear()
+
+
+    def test_label_added_after_the_build_was_created(self):
+        import io
+        import json
+        from unittest import mock
+        rlp = self.rlp
+        env = {"BUILDKITE_PULL_REQUEST": "63807", "BUILDKITE_PULL_REQUEST_LABELS": "bugfix",
+               "BUILDKITE_REPO": "https://github.com/JuliaLang/julia.git"}
+        urls = []
+
+        def github(labels):
+            def urlopen(request, timeout):
+                urls.append(request.full_url)
+                return io.BytesIO(json.dumps([{"name": n} for n in labels]).encode())
+            return urlopen
+        with mock.patch.dict(os.environ, env):
+            with mock.patch("urllib.request.urlopen", github(["bugfix", "needs full CI"])):
+                self.assertTrue(rlp.pr_has_label("needs full CI"))
+            self.assertEqual(urls, ["https://api.github.com/repos/JuliaLang/julia/issues/63807/labels?per_page=100"])
+            with mock.patch("urllib.request.urlopen", github(["bugfix"])):
+                self.assertFalse(rlp.pr_has_label("needs full CI"))
+
+            def unreachable(request, timeout):
+                raise OSError("no network")
+            with mock.patch("urllib.request.urlopen", unreachable), \
+                    mock.patch.object(rlp, "log"):
+                self.assertFalse(rlp.pr_has_label("needs full CI"))
+
+
 if __name__ == "__main__":
     unittest.main()
