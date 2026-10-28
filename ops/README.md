@@ -157,7 +157,10 @@ and which carry AWS session tags (`step_key`, `build_commit`, `pipeline_slug`, .
   no `-pr` counterpart: a pull request executes attacker-controlled code
   inside the job, which could exfiltrate any bearer token the job can
   read — so PR builds hold **no tokens at all** (and consequently no
-  coverage/analytics uploads happen on PRs).
+  coverage/analytics uploads happen on PRs). The promote and publish roles
+  read their own tokens (the Fastly purge tokens) from separate prefixes,
+  `/julia-promote/tokens` and `/julia-publish/tokens`, which
+  `julia-oidc-tokens-ci` cannot read.
 * **No overwrites**: all roles must use S3 conditional writes
   (`If-None-Match: *`, enforced via the `s3:if-none-match` policy condition);
   uploads of already-existing objects fail. The only exception is the
@@ -238,6 +241,16 @@ are Terraform variables with the production defaults):
    * `./23_put_tokens.sh codecov_token`
    * `./23_put_tokens.sh coveralls_token`
    * `./23_put_tokens.sh buildkite_analytics_token`
+   * `SSM_TOKEN_PREFIX=/julia-promote/tokens ./23_put_tokens.sh fastly_purge_token`
+     — a Fastly API token with only the `purge_select` scope, limited to
+     the julialang service; `promote_release.sh` uses it to purge the
+     repointed `-latest-` pointers. Without it, promotions still succeed
+     but skip the purge.
+   * `SSM_TOKEN_PREFIX=/julia-publish/tokens ./23_put_tokens.sh fastly_purge_token`
+     — the same for the nightlies Fastly service (`purge_select`, limited
+     to that service); `upload_julia.sh` / `publish.sh` use it to purge the
+     overwritten `julia-latest-*` pointers. Without it, publishing still
+     succeeds but skips the purge.
 6. macOS certificate for the new KMS key:
    * `./22_generate_macos_csr.sh`
    * Submit CSR at developer.apple.com → Developer ID Application cert

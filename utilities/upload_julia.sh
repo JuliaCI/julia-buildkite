@@ -26,6 +26,8 @@ THIS_DIR="$(realpath "$(dirname "${BASH_SOURCE[0]}")")"
 
 # shellcheck source=SCRIPTDIR/upload_to_s3.sh
 source .buildkite/utilities/upload_to_s3.sh
+# shellcheck source=SCRIPTDIR/fastly_purge.sh
+source .buildkite/utilities/fastly_purge.sh
 
 # KMS keys used for release signing (aliases resolve in the CI account).
 # The non-production publish test stack overrides these with the throwaway
@@ -82,6 +84,11 @@ if [[ -z "${PUBLISH_PREAUTHED:-}" ]]; then
     # shellcheck source=SCRIPTDIR/aws_oidc.sh
     source .buildkite/utilities/aws_oidc.sh publish
 fi
+
+# For purging the overwritten julia-latest-* pointers below. Readable only by
+# the publish role (ssm_publish_token_prefix in ops/terraform); publish.sh
+# reads it once for all triplets. A missing token only skips the purge.
+load_fastly_purge_token "${FASTLY_PURGE_TOKEN_PARAMETER:-/julia-publish/tokens/fastly_purge_token}"
 
 echo "--- Download unsigned tarball from s3://${STAGING_TARGET}.tar.gz"
 aws s3 cp "s3://${STAGING_TARGET}.tar.gz" "${UPLOAD_FILENAME}.tar.gz"
@@ -371,6 +378,18 @@ for UPLOAD_TARGET in "${UPLOAD_TARGETS[@]}"; do
     done
 done
 wait_pids "${PIDS[@]}"
+
+# Purge the uploads from the CDN in front of their bucket: the julia-latest-*
+# pointers were just overwritten, so that it does not keep serving the previous
+# build, and the commit build may have a cached 404 (see fastly_purge.sh).
+echo "--- Purge the Fastly cache"
+PURGE_TARGETS=()
+for UPLOAD_TARGET in "${UPLOAD_TARGETS[@]}"; do
+    for EXT in "${UPLOAD_EXTENSIONS[@]}"; do
+        PURGE_TARGETS+=( "${UPLOAD_TARGET}.${EXT}" )
+    done
+done
+fastly_purge_targets "${PURGE_TARGETS[@]}"
 
 echo "+++ Published to targets"
 for UPLOAD_TARGET in "${UPLOAD_TARGETS[@]}"; do

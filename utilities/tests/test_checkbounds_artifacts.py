@@ -34,7 +34,8 @@ class CheckboundsArtifactsTests(unittest.TestCase):
                     "PUBLISH_SKIP_WINDOWS_SIGN": "1", "BUILDKITE_BRANCH": "v1.14.0",
                     "BUILDKITE_COMMIT": "a" * 40, "BUILDKITE_JOB_ID": "fixture",
                     "BUILDKITE_TIMEOUT": "90", "BUILDKITE_PIPELINE_SLUG": "fixture"}
-        for script in ("upload_julia.sh", "promote_release.sh", "test_julia.sh", "build_julia.sh", "word.sh"):
+        for script in ("upload_julia.sh", "promote_release.sh", "test_julia.sh", "build_julia.sh", "word.sh",
+                       "fastly_purge.sh"):
             shutil.copy(ROOT / "utilities" / script, self.utils / script)
         self.write(self.utils / "build_envs.sh", '''
 export UPLOAD_FILENAME=julia-fixture JULIA_INSTALL_DIR=julia-fixture
@@ -62,6 +63,12 @@ if args[:2] == ["s3api", "head-object"]:
     print(os.environ["BUILDKITE_COMMIT"])
 elif args[:2] == ["s3", "cp"]:
     shutil.copy(pathlib.Path(os.environ["FIXTURE_STAGE"]) / pathlib.Path(args[-2]).name, args[-1])
+elif args[:2] == ["ssm", "get-parameter"]:
+    assert args[args.index("--name") + 1] in ("/julia-promote/tokens/fastly_purge_token",
+                                              "/julia-publish/tokens/fastly_purge_token")
+    if "FIXTURE_SSM_TOKEN" not in os.environ:
+        sys.exit("An error occurred (AccessDeniedException) when calling the GetParameter operation")
+    print(os.environ["FIXTURE_SSM_TOKEN"])
 else:
     raise RuntimeError(args)
 ''')
@@ -188,6 +195,23 @@ for name in sys.argv[1:]:
                             ji = tar.extractfile("share/julia/compiled/v1.14/Test/checked.ji").read()
                             self.assertEqual(ji, b"fixed checksum" if platform in ("macos", "windows") else b"checked checksum")
                         self.assertTrue((published / (target + ".checkbounds.tar.gz.asc")).is_file())
+
+    def test_publish_purges_uploads(self):
+        self.fixtures("linux")
+        envs = (self.utils / "build_envs.sh").read_text().replace(
+            "UPLOAD_TARGETS=(published/julia-fixture published/julia-latest-fixture)",
+            "UPLOAD_TARGETS=(julialangnightlies/bin/linux/x86_64/1.14/julia-fixture"
+            " julialangnightlies/bin/linux/x86_64/1.14/julia-latest-fixture)")
+        self.write(self.utils / "build_envs.sh", envs)
+        self.env["FASTLY_PURGE_TOKEN"] = "fixture-token"
+        self.run_script("upload_julia.sh", "publish")
+        uploads = [line.split("\t")[0] for line in (self.work / "uploads.log").read_text().splitlines()]
+        self.assertIn("julialangnightlies/bin/linux/x86_64/1.14/julia-latest-fixture.tar.gz.asc", uploads)
+        self.assertIn("julialangnightlies/bin/linux/x86_64/1.14/julia-fixture.tar.gz", uploads)
+        purges = [line.split() for line in (self.work / "curl.log").read_text().splitlines() if "PURGE" in line]
+        self.assertEqual(sorted(p[-1] for p in purges),
+                         sorted("https://julialangnightlies-s3.julialang.org/" + u.split("/", 1)[1] for u in uploads))
+        self.assertTrue(all("Fastly-Key: fixture-token" in " ".join(p) for p in purges))
 
     def __enter__(self):
         self.setUp()
@@ -322,12 +346,26 @@ elif "checkbounds-pkgimages" in args:
         self.assertTrue(all("Fastly-Key: fixture-token" in " ".join(p) for p in purges))
         self.assertFalse(any("Fastly-Soft-Purge" in " ".join(p) for p in purges))
 
-    def test_release_promotion_without_purge_token(self):
+    def test_release_promotion_reads_purge_token_from_ssm(self):
         self.write(self.work / "Makefile", "")
         self.release_fixtures(checkbounds=False)
         self.env.pop("FASTLY_PURGE_TOKEN", None)
+        self.env["FIXTURE_SSM_TOKEN"] = "ssm-token"
+        self.run_script("promote_release.sh")
+        purges = [line for line in (self.work / "curl.log").read_text().splitlines() if "PURGE" in line]
+        self.assertTrue(purges)
+        self.assertTrue(all("Fastly-Key: ssm-token" in p for p in purges))
+
+    def test_release_promotion_without_purge_token(self):
+        # Before the Terraform apply the promote role cannot read the token: the
+        # promotion must still succeed, just without purging.
+        self.write(self.work / "Makefile", "")
+        self.release_fixtures(checkbounds=False)
+        self.env.pop("FASTLY_PURGE_TOKEN", None)
+        self.env.pop("FIXTURE_SSM_TOKEN", None)
         result = self.run_script("promote_release.sh")
-        self.assertIn("FASTLY_PURGE_TOKEN is not set", result.stderr)
+        self.assertIn("could not read /julia-promote/tokens/fastly_purge_token", result.stderr)
+        self.assertIn("no Fastly purge token", result.stderr)
         self.assertNotIn("PURGE", (self.work / "curl.log").read_text())
 
 
