@@ -41,6 +41,9 @@
 #                See .buildkite/README.md.
 steps:
   - group: "Launch"
+    notify:
+      - github_commit_status:
+          context: "Launch"
     steps:
       - label: "Launch pipelines"
         agents:
