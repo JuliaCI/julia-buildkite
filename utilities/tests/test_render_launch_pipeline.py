@@ -606,8 +606,15 @@ class PullRequestGatingTests(unittest.TestCase):
         steps = re.findall(r"^ *- (?:label|key):", output, re.M)
         self.assertEqual(output.count("cancel_on_build_failing: true"), len(steps))
         self.assertIn('      - label: ":linux: build x86_64-linux-gnu"\n'
-                      '        cancel_on_build_failing: true\n', output)
-        self.assertNotIn("cancel_on_build_failing", render(BUILDKITE_PIPELINE_SLUG="julia-ci"))
+                      '        cancel_on_build_failing: true\n'
+                      '        retry:\n'
+                      '          automatic:\n'
+                      '            - exit_status: -1\n'
+                      '              limit: 2\n', output)
+        self.assertEqual(output.count("- exit_status: -1"), len(steps))
+        ci = render(BUILDKITE_PIPELINE_SLUG="julia-ci")
+        self.assertNotIn("cancel_on_build_failing", ci)
+        self.assertNotIn("exit_status: -1", ci)
 
     def test_label_runs_everything(self):
         from unittest import mock

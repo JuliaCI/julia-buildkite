@@ -691,14 +691,21 @@ def pr_skips(pattern, what):
 _STEP_START_RE = re.compile(r"^( *)- (?:label|key):.*$", re.MULTILINE)
 
 
+# Exit status -1: the agent was lost or stopped while it ran the job
+_AGENT_LOST_RETRY = ("retry:", "  automatic:", "    - exit_status: -1", "      limit: 2")
+
+
 def fail_fast(text):
     """On julia-pr, have each step cancel itself once a job that is not
     allowed to fail has failed: the pull request needs another push anyway.
+    A job whose agent is lost is retried, as its failure would cancel the build.
     julia-ci runs on, so every platform that passes still publishes."""
     if os.environ.get("BUILDKITE_PIPELINE_SLUG") != "julia-pr":
         return text
-    return _STEP_START_RE.sub(
-        lambda m: f"{m.group(0)}\n{m.group(1)}  cancel_on_build_failing: true", text)
+    def add(m):
+        lines = ("cancel_on_build_failing: true",) + _AGENT_LOST_RETRY
+        return m.group(0) + "".join(f"\n{m.group(1)}  {line}" for line in lines)
+    return _STEP_START_RE.sub(add, text)
 
 
 def static_files(files):
