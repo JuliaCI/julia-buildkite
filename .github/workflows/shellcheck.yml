@@ -30,6 +30,8 @@ jobs:
         run: python3 utilities/tests/test_render_launch_pipeline.py
       - name: Test companion artifact packaging and publishing
         run: python3 utilities/tests/test_checkbounds_artifacts.py
+      - name: Test the S3 upload helper
+        run: python3 utilities/tests/test_upload_to_s3.py
       - name: Install buildkite-agent
         # The same release (and sha256) that JuliaCI/sandboxed-buildkite-agent
         # deploys to the Linux agents
