@@ -103,9 +103,12 @@ regression; one that fails on both is listed in `compare.json` and left out of t
 verdict. A task stops at its first failed sample rather than finishing its blocks, and
 its log group is expanded with the failure in red.
 
-The job fails on any robust regression. The report is posted as a Buildkite annotation
-only when it has differences to show; a clean comparison leaves the green status, the
-report and the data as artifacts. Nothing is posted to GitHub beyond the commit status:
+The job fails on any robust regression, with exit status 4. The step soft-fails on that
+status, so a regression does not cancel the rest of a pull request's build, and Buildkite
+reports the `TTFX` commit status as passed; the regression shows in the annotation and as a
+soft-failed job. Any other failure (a missing build, a broken driver) fails the build.
+The report is posted as a Buildkite annotation only when it has differences to show; a
+clean comparison leaves the green status, the report and the data as artifacts. Nothing is posted to GitHub beyond the commit status:
 the job runs the pull request's own code, so it holds no GitHub token.
 
 In this repository's own self-test pipeline the commit under test is a julia master

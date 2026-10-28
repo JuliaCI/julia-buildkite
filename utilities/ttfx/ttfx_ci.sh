@@ -367,8 +367,10 @@ case "${verdict}" in
         exit 0
         ;;
     1)
+        # The step soft-fails on this status, so that a regression does not cancel
+        # the rest of a pull request's build
         annotate "error"
-        exit 1
+        exit 4
         ;;
     *)
         annotate "warning"

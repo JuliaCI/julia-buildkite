@@ -16,6 +16,9 @@ steps:
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
         commands: "bash .buildkite/utilities/ttfx/ttfx_ci.sh"
         timeout_in_minutes: ${TIMEOUT?}
+        # A regression (utilities/ttfx/README.md)
+        soft_fail:
+          - exit_status: 4
         agents:
           queue: "test"
           os: "macos"
