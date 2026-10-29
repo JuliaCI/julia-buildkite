@@ -68,10 +68,6 @@ master. Pull requests with the `needs full CI` label, or that change
 `.buildkite-external-version`, run every job. The label counts on a rebuild
 too: when Buildkite did not record it, the launch step asks GitHub.
 
-Once a job of a pull request fails that is not allowed to fail, the rest of
-its build is cancelled (`cancel_on_build_failing`). `julia-ci` builds run to
-the end, so each platform that passes still publishes.
-
 Pull requests with the `needs extended CI` label also run the scheduled workloads.
 Coverage data is collected but not uploaded to Codecov or Coveralls.
 
