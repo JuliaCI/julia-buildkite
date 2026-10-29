@@ -687,20 +687,6 @@ def pr_skips(pattern, what):
     return True
 
 
-# The first line of a step: its `- label:` or `- key:`
-_STEP_START_RE = re.compile(r"^( *)- (?:label|key):.*$", re.MULTILINE)
-
-
-def fail_fast(text):
-    """On julia-pr, have each step cancel itself once a job that is not
-    allowed to fail has failed: the pull request needs another push anyway.
-    julia-ci runs on, so every platform that passes still publishes."""
-    if os.environ.get("BUILDKITE_PIPELINE_SLUG") != "julia-pr":
-        return text
-    return _STEP_START_RE.sub(
-        lambda m: f"{m.group(0)}\n{m.group(1)}  cancel_on_build_failing: true", text)
-
-
 def static_files(files):
     """The misc YAMLs of `files` that this build runs."""
     return [rel for rel in files
@@ -982,7 +968,7 @@ def main():
     blocks.append(publish_group_text(triplets, docs=True))
 
     sys.stdout.write("steps:\n")
-    sys.stdout.write(fail_fast("\n".join(blocks)))
+    sys.stdout.write("\n".join(blocks))
     sys.stdout.write("\n")
 
 
