@@ -66,6 +66,12 @@ else
     MFLAGS+=( "TAGGED_RELEASE_BANNER=Official https://julialang.org/ release" )
 fi
 MFLAGS+=( "JULIA_CPU_TARGET=${JULIA_CPU_TARGET}" )
+# Shown as `+opt` after the version in the banner and `versioninfo()`. It is in MFLAGS,
+# not left to contrib/optimized, so the later make calls (binary-dist, ...) agree with the
+# build on build_h.jl. Julia versions without JULIA_BUILD_VARIANT ignore it.
+if [[ "${JULIA_CI_BUILD_MODE-}" == "opt" ]]; then
+    MFLAGS+=( "JULIA_BUILD_VARIANT=opt" )
+fi
 
 # Finish off with any extra make flags from the `.arches` file
 IFS=',' read -ra ARCHES_FLAGS <<<"${MAKE_FLAGS}"
