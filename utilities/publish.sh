@@ -96,12 +96,18 @@ echo "--- Publishing ${#TRIPLETS[@]} triplet(s): ${TRIPLETS[*]:-}"
 # PUBLISH_OIDC_MODE=publish-test to assume the throwaway test role instead.
 PUBLISH_OIDC_MODE="${PUBLISH_OIDC_MODE:-publish}"
 
+# shellcheck source=SCRIPTDIR/fastly_purge.sh
+source .buildkite/utilities/fastly_purge.sh
+
 FAILED=()
 for triplet in "${TRIPLETS[@]}"; do
     echo "+++ Publish ${triplet}"
     # Fresh OIDC token per triplet (2h max lifetime; see aws_oidc.sh)
     # shellcheck source=SCRIPTDIR/aws_oidc.sh
     source .buildkite/utilities/aws_oidc.sh "${PUBLISH_OIDC_MODE}"
+    # Read the Fastly purge token once (the first time round) and pass it on to
+    # every upload_julia.sh through the environment.
+    load_fastly_purge_token "${FASTLY_PURGE_TOKEN_PARAMETER:-/julia-publish/tokens/fastly_purge_token}"
     if ! TRIPLET="${triplet}" bash .buildkite/utilities/upload_julia.sh publish; then
         echo "ERROR: publishing ${triplet} failed" >&2
         FAILED+=( "${triplet}" )
@@ -172,6 +178,10 @@ if [[ "${#DEFERRED_MACOS[@]}" -gt 0 ]]; then
         if [[ "${upload_ok}" -ne 1 ]]; then
             echo "ERROR: publishing ${name} failed" >&2
             FAILED+=( "${name}" )
+        else
+            # As in upload_julia.sh: purge what was just uploaded.
+            load_fastly_purge_token "${FASTLY_PURGE_TOKEN_PARAMETER:-/julia-publish/tokens/fastly_purge_token}"
+            fastly_purge_targets "${targets[@]}"
         fi
     done
 fi

@@ -17,11 +17,12 @@
 # pointers, generates the bin/checksums/julia-<version> files, purges the
 # Fastly cache, and verifies everything is reachable via the CDN.
 #
-# Optional env var:
-#   FASTLY_PURGE_TOKEN  Fastly API token with purge scope on the julialang
-#                       service. Without it nothing is purged: the latest
-#                       pointers serve the previous release until their
-#                       cache entry expires (1 h Fastly default).
+# The promoted objects are purged from Fastly with an API token (purge scope
+# on the julialang service), read from the SSM parameter
+# /julia-promote/tokens/fastly_purge_token unless FASTLY_PURGE_TOKEN is
+# already set. Without a token nothing is purged: the latest pointers serve
+# the previous release until their cache entry expires (1 h Fastly default);
+# the promotion itself still succeeds.
 set -euo pipefail
 
 if [[ ! "${BUILDKITE_BRANCH:-}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
@@ -39,6 +40,14 @@ bash .buildkite/utilities/verify_trusted_commit.sh
 
 # shellcheck source=SCRIPTDIR/aws_oidc.sh
 source .buildkite/utilities/aws_oidc.sh promote
+
+# Readable only by the promote role (ssm_promote_token_prefix in
+# ops/terraform), not by julia-ci jobs. A missing token or permission only
+# skips the purge below.
+# shellcheck source=SCRIPTDIR/fastly_purge.sh
+source .buildkite/utilities/fastly_purge.sh
+load_fastly_purge_token "${FASTLY_PURGE_TOKEN_PARAMETER:-/julia-promote/tokens/fastly_purge_token}"
+
 # shellcheck source=SCRIPTDIR/upload_to_s3.sh
 source .buildkite/utilities/upload_to_s3.sh
 
@@ -204,14 +213,7 @@ done
 # Fastly may hold a cached 404 for them (60 s), which would also fail the
 # verification below.
 echo "--- Purge the Fastly cache"
-if [[ -n "${FASTLY_PURGE_TOKEN:-}" ]]; then
-    for key in "${DEST_KEYS[@]}"; do
-        curl -fsS -o /dev/null -X PURGE -H "Fastly-Key: ${FASTLY_PURGE_TOKEN}" "${CDN_URL}/${key}" \
-            || echo "WARN: cache purge failed for ${CDN_URL}/${key}" >&2
-    done
-else
-    echo "WARN: FASTLY_PURGE_TOKEN is not set; not purging ${#DEST_KEYS[@]} object(s), the latest pointers update within 1 h" >&2
-fi
+fastly_purge "${CDN_URL}" "${DEST_KEYS[@]}"
 
 echo "--- Verify everything is reachable via ${CDN_URL}"
 FAILED=()

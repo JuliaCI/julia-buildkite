@@ -32,13 +32,16 @@
 #                     master/release-*/v* (see ops/README.md). Since a PR
 #                     can never produce a build under that slug, the slug
 #                     is the trust boundary -- not the (PR-spoofable)
-#                     branch name.
+#                     branch name. Reads its own bearer tokens from SSM under
+#                     ssm_publish_token_prefix (the Fastly purge token).
 #   julia-oidc-promote  TRUSTED. Read the nightlies bucket, write the
 #                     release bucket (julialang2). Assumable ONLY from the
 #                     `julia-promote` pipeline slug, whose builds are
 #                     created manually by the release manager (no webhook
 #                     or PR builds; see pipelines/promote/0_webui.yml).
-#                     No KMS.
+#                     No KMS. Reads its own bearer tokens from SSM under
+#                     ssm_promote_token_prefix (separate from the
+#                     julia-ci-readable ssm_token_prefix).
 #   julia-oidc-docs-deploy  TRUSTED. kms:Sign with the docs SSH key; publish
 #                     pipeline only.
 #
@@ -359,6 +362,16 @@ data "aws_iam_policy_document" "publish" {
       values   = ["publish_*"]
     }
   }
+
+  # Publish's own bearer tokens (the Fastly purge token for the overwritten
+  # julia-latest-* pointers; SecureString values entered out-of-band, never
+  # through Terraform). A separate prefix, like ssm_promote_token_prefix, so
+  # that they are not readable by every julia-ci job via ssm_token_prefix.
+  statement {
+    sid       = "ReadPublishTokens"
+    actions   = ["ssm:GetParameter"]
+    resources = ["arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter${var.ssm_publish_token_prefix}/*"]
+  }
 }
 
 resource "aws_iam_role_policy" "publish" {
@@ -421,6 +434,17 @@ data "aws_iam_policy_document" "promote" {
     sid       = "ReadReleaseForRetryChecks"
     actions   = ["s3:GetObject"]
     resources = ["${local.release_path}/*"]
+  }
+
+  # Promote's own bearer tokens (SecureString values entered out-of-band
+  # via `aws ssm put-parameter`, never through Terraform). These live under
+  # a prefix separate from ssm_token_prefix on purpose: tokens-ci reads
+  # that whole prefix by wildcard from ANY julia-ci job, while this prefix
+  # is readable only by manually-created promote builds.
+  statement {
+    sid       = "ReadPromoteTokens"
+    actions   = ["ssm:GetParameter"]
+    resources = ["arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter${var.ssm_promote_token_prefix}/*"]
   }
 }
 

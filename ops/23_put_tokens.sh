@@ -11,6 +11,11 @@
 #   23_put_tokens.sh codecov_token             # prompts for the value
 #   23_put_tokens.sh coveralls_token
 #   23_put_tokens.sh buildkite_analytics_token
+#
+# Tokens for the julia-promote and julia-publish pipelines go under their
+# own prefixes, which only the promote resp. publish role can read:
+#   SSM_TOKEN_PREFIX=/julia-promote/tokens 23_put_tokens.sh fastly_purge_token
+#   SSM_TOKEN_PREFIX=/julia-publish/tokens 23_put_tokens.sh fastly_purge_token
 set -euo pipefail
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 # shellcheck source=SCRIPTDIR/common.sh

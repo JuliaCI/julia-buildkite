@@ -35,7 +35,7 @@ export KMS_ALIAS_TARBALL_SIGNING_TEST="alias/julia-tarball-signing-test"
 # SSM Parameter Store prefix for CI telemetry bearer tokens (codecov,
 # coveralls, buildkite analytics). These cannot be public-key operations,
 # so they live in the AWS secrets store, fetched at runtime via OIDC.
-export SSM_TOKEN_PREFIX="/julia-ci/tokens"
+export SSM_TOKEN_PREFIX="${SSM_TOKEN_PREFIX:-/julia-ci/tokens}"
 
 # --- Helpers ------------------------------------------------------------------
 

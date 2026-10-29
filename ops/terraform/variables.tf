@@ -155,3 +155,21 @@ variable "ssm_token_prefix" {
   type        = string
   default     = "/julia-ci/tokens"
 }
+
+# Deliberately a SEPARATE prefix from ssm_token_prefix: the tokens-ci role
+# reads that whole prefix by wildcard from any julia-ci job, and promote's
+# secrets must not widen to that audience. The parameter values are not
+# managed here (they would end up in the Terraform state); store them with
+#   aws ssm put-parameter --name <prefix>/<name> --type SecureString ...
+variable "ssm_promote_token_prefix" {
+  description = "SSM Parameter Store prefix for bearer tokens readable only by the julia-promote pipeline"
+  type        = string
+  default     = "/julia-promote/tokens"
+}
+
+# Same reasoning as ssm_promote_token_prefix, for the publish role.
+variable "ssm_publish_token_prefix" {
+  description = "SSM Parameter Store prefix for bearer tokens readable only by the julia-publish pipeline"
+  type        = string
+  default     = "/julia-publish/tokens"
+}

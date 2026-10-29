@@ -32,6 +32,8 @@ jobs:
         run: python3 utilities/tests/test_checkbounds_artifacts.py
       - name: Test the S3 upload helper
         run: python3 utilities/tests/test_upload_to_s3.py
+      - name: Test the Fastly purge helpers
+        run: python3 utilities/tests/test_fastly_purge.py
       - name: Install buildkite-agent
         # The same release (and sha256) that JuliaCI/sandboxed-buildkite-agent
         # deploys to the Linux agents
