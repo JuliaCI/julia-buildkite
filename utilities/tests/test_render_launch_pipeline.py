@@ -447,6 +447,8 @@ class RenderLaunchPipelineTests(unittest.TestCase):
             with open(os.path.join(ROOT, "pipelines", rel)) as f:
                 lines = [l for l in f if not l.startswith("#")]
             self.assertEqual(lines[0], "priority: ${JULIA_CI_PRIORITY:-0}\n", rel)
+        with open(os.path.join(ROOT, "pipelines", "promote", "launch.yml")) as f:
+            self.assertIn("\npriority: 1\n", f.read())
 
     def test_rr_only_outside_pull_requests(self):
         # pull requests test the assertion build without rr; the rr jobs are skipped
