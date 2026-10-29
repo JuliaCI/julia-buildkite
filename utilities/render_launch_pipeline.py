@@ -46,7 +46,7 @@ build would otherwise contain. Labeled PRs render the same workload groups as a
 supplemental pipeline, without publish triggers. A julia-pr pull request skips
 the jobs whose paths it does not change (PR_GATED_FILES, PR_GATED_TRIPLETS). Per-commit results are grouped
 into one `group:` per label: Build, Check, Test, Allow Fail, JuliaSyntax,
-JuliaC, TTFX, Publish.
+JuliaC, TTFX, Runtime benchmarks, Publish.
 
 The Publish group's triggers each `depends_on` only their own platform's
 build + test jobs (see publish_group_text).
@@ -952,6 +952,14 @@ def main():
     # `needs TTFX check` label (utilities/ttfx/README.md). A launcher with its
     # own group -- include verbatim.
     blocks.append(verbatim_group_text(os.path.join(MISC, "ttfx", "ttfx.yml")))
+
+    # Runtime benchmarks: the julia-ci-benchmarks suite (codegen, the runtime, GC,
+    # scheduler, compiler throughput) on the build, against the master build of the
+    # merge-base on pull requests, which are measured only when they touch a path
+    # in utilities/runtime_benchmarks/paths.txt or carry the `needs runtime
+    # benchmarks` label (utilities/runtime_benchmarks/README.md). A launcher with
+    # its own group -- include verbatim.
+    blocks.append(verbatim_group_text(os.path.join(MISC, "runtime_benchmarks", "runtime_benchmarks.yml")))
 
     # Release branches and tags also come as no-GPL, optimized and riscv64
     # builds, the nightlies (x.y-nightly+opt) and releases (x.y+opt) of their

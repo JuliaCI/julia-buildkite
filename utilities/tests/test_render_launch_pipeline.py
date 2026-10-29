@@ -191,7 +191,7 @@ class RenderLaunchPipelineTests(unittest.TestCase):
     def test_normal_mode_excludes_schedule_groups(self):
         output = render()
 
-        for group in ("Build", "Check", "Test", "Allow Fail", "JuliaC", "TTFX", "Publish"):
+        for group in ("Build", "Check", "Test", "Allow Fail", "JuliaC", "TTFX", "Runtime benchmarks", "Publish"):
             self.assertIn(f'group: "{group}"', output)
         self.assertNotIn('group: "Source Build"', output)
         self.assertNotIn("PUBLISH_SCHEDULED", output)
@@ -382,6 +382,7 @@ class RenderLaunchPipelineTests(unittest.TestCase):
                                  "test_i686-linux-gnuoptnet"), output)
         for job in ("doctest", "gcext", "juliac", "ttfx", "docs"):
             self.assertNotIn(f'"{job}"', output)
+        self.assertNotIn('group: "Runtime benchmarks"', output)
 
         # An unpublished platform is built and tested only.
         output = render(ONLY_TRIPLETS="x86_64-linux-gnummtk")
@@ -432,6 +433,16 @@ class RenderLaunchPipelineTests(unittest.TestCase):
         nightly = output[output.index('key: "ttfx_branch_nightly_'):]
         self.assertIn('if: build.env("TTFX_RELEASE") == "latest"', nightly)
         self.assertIn('TTFX_RELEASE: "branch-nightly"', nightly)
+
+    def test_runtime_benchmarks_launcher(self):
+        # The launcher decides per build; the renderer always includes it on commits
+        output = render()
+        group = output[output.index('group: "Runtime benchmarks"'):]
+        self.assertIn("utilities/runtime_benchmarks/runtime_benchmarks_launch.sh", group)
+        self.assertIn('pipeline.slug == "julia-pr" || pipeline.slug == "julia-ci"', group)
+        self.assertIn('queue: "launch"', group)
+        # Not part of the scheduled workloads
+        self.assertNotIn('group: "Runtime benchmarks"', render(source="schedule"))
 
     def test_schedule_measures_the_optimized_build_on_ttfx(self):
         output = render(source="schedule", BUILDKITE_PIPELINE_SLUG="julia-ci")
