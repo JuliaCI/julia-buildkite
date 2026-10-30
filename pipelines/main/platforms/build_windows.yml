@@ -24,6 +24,17 @@ steps:
                 # Have to include this for `buildkite-agent` to work:
                 - "BUILDKITE_AGENT_ACCESS_TOKEN"
         timeout_in_minutes: ${TIMEOUT?}
+        # Retry if the agent was lost (-1 without a signal reason) or stopped under the job
+        # (agent_stop, with whatever status the job exited with): a host or scheduler
+        # restart. Timeouts and cancellations have signal_reason "cancel" and are not retried.
+        retry:
+          automatic:
+            - exit_status: -1
+              signal_reason: [none, agent_stop]
+              limit: 1
+            - exit_status: "*"
+              signal_reason: agent_stop
+              limit: 1
         soft_fail: ${ALLOW_FAIL?}
         agents:
           queue: "build"
