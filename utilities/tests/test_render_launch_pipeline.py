@@ -418,17 +418,17 @@ class RenderLaunchPipelineTests(unittest.TestCase):
                      "BUILDKITE_PULL_REQUEST_BASE_BRANCH": "main"}),
                 (1, {"BUILDKITE_PIPELINE_SLUG": "julia-pr", "BUILDKITE_PULL_REQUEST": "1",
                      "BUILDKITE_PULL_REQUEST_BASE_BRANCH": "master",
-                     "BUILDKITE_PULL_REQUEST_LABELS": "high priority"}),
+                     "BUILDKITE_PULL_REQUEST_LABELS": "high priority CI"}),
                 (-1, {"BUILDKITE_PIPELINE_SLUG": "julia-pr", "BUILDKITE_PULL_REQUEST": "1",
                       "BUILDKITE_PULL_REQUEST_BASE_BRANCH": "master",
-                      "BUILDKITE_PULL_REQUEST_LABELS": "low priority"}),
+                      "BUILDKITE_PULL_REQUEST_LABELS": "low priority CI"}),
                 # a label wins over the rules, and high over low
                 (-1, {"BUILDKITE_PIPELINE_SLUG": "julia-pr", "BUILDKITE_PULL_REQUEST": "1",
                       "BUILDKITE_PULL_REQUEST_BASE_BRANCH": "release-1.14",
-                      "BUILDKITE_PULL_REQUEST_LABELS": "low priority"}),
+                      "BUILDKITE_PULL_REQUEST_LABELS": "low priority CI"}),
                 (1, {"BUILDKITE_PIPELINE_SLUG": "julia-pr", "BUILDKITE_PULL_REQUEST": "1",
                      "BUILDKITE_PULL_REQUEST_BASE_BRANCH": "master",
-                     "BUILDKITE_PULL_REQUEST_LABELS": "low priority,high priority"})):
+                     "BUILDKITE_PULL_REQUEST_LABELS": "low priority CI,high priority CI"})):
             with self.subTest(env=build_env):
                 output = render(**build_env)
                 self.assertTrue(output.startswith(header.format(priority)))

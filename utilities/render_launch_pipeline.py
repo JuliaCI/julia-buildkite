@@ -510,8 +510,8 @@ FULL_CI_LABEL = "needs full CI"
 
 # Buildkite job priorities; a higher one takes the next free agent first.
 HIGH_PRIORITY, NORMAL_PRIORITY, LOW_PRIORITY = 1, 0, -1
-HIGH_PRIORITY_LABEL = "high priority"
-LOW_PRIORITY_LABEL = "low priority"
+HIGH_PRIORITY_LABEL = "high priority CI"
+LOW_PRIORITY_LABEL = "low priority CI"
 
 # Built by the schedule (as nightlies) and by release tags (as releases).
 NOGPL_GROUP = ("no_GPL", "false", [
