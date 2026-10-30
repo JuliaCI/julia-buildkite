@@ -42,6 +42,10 @@ steps:
         soft_fail: ${ALLOW_FAIL?}
         agents:
           queue: "test"
+          # Parallelism not measured yet
+          sched_cpus: "4"
+          sched_threads: "4"
+          sched_mem_gib: "16"
           sandbox_capable: "true"
           os: "linux"
           arch: "${ARCH?}"

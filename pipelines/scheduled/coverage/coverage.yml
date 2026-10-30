@@ -79,6 +79,9 @@ steps:
           fi
         agents:
           queue: "test"
+          sched_cpus: "12"
+          sched_threads: "12"
+          sched_mem_gib: "64"
           # Only run on `sandbox.jl` machines (not `docker`-isolated ones) since we need nestable sandboxing
           sandbox_capable: "true"
           os: "linux"
@@ -148,6 +151,8 @@ steps:
           fi
         agents:
           queue: "test"
+          # No sched_* tags: macOS jobs always get the whole host, and its width is
+          # a per-host fact in the scheduler's config.
           os: "macos"
           arch: "aarch64"
         env:
@@ -226,6 +231,9 @@ steps:
         timeout_in_minutes: 720 # 12h
         agents:
           queue: "test"
+          sched_cpus: "6"
+          sched_threads: "6"
+          sched_mem_gib: "24"
           os: "windows"
           arch: "x86_64"
         env:
@@ -283,6 +291,9 @@ steps:
           fi
         agents:
           queue: "test"
+          sched_cpus: "1"
+          sched_threads: "1"
+          sched_mem_gib: "4"
           # Only run on `sandbox.jl` machines (not `docker`-isolated ones) since we need nestable sandboxing
           sandbox_capable: "true"
           os: "linux"

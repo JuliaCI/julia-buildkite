@@ -16,6 +16,11 @@ steps:
         timeout_in_minutes: 30
         agents:
           queue: "test"
+          # Sized for the Linux and Windows rows; the macOS rows ignore these
+          # and get the whole host.
+          sched_cpus: "1"
+          sched_threads: "1"
+          sched_mem_gib: "8"
           os: "{{matrix.agent_os}}"
           arch: "{{matrix.agent_arch}}"
         matrix:
@@ -116,6 +121,9 @@ steps:
         timeout_in_minutes: 30
         agents:
           queue: "test"
+          sched_cpus: "1"
+          sched_threads: "1"
+          sched_mem_gib: "8"
           os: "{{matrix.agent_os}}"
           arch: "{{matrix.agent_arch}}"
         matrix:

@@ -40,6 +40,10 @@ steps:
         commands: "bash .buildkite/utilities/build_julia.sh"
         agents:
           queue: "build"
+          # Builds are serial for half their time; charge 4 CPUs, run 16 wide
+          sched_cpus: "${SCHED_CPUS:-4}"
+          sched_threads: "${SCHED_THREADS:-16}"
+          sched_mem_gib: "${SCHED_MEM_GIB:-40}"
           # Only run on `sandbox.jl` machines (not `docker`-isolated ones) since we need nestable sandboxing
           sandbox_capable: "true"
           os: "linux"
