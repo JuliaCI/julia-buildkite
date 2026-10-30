@@ -51,6 +51,12 @@ instructions (`thread_selfcounts`); with root it also records branch and L1D mis
 through kperf. `CIBENCH_COUNTERS` (`auto`, `kperf`, `thread`, `none`) overrides the
 choice.
 
+The report ends with a link to the run page on perf.julialang.org
+(`/runtime-run?pipeline=...&build=...&job=...`), which reads this job's artifacts from
+Buildkite when first opened and draws every benchmark's change against its tolerance, the
+categories, instructions against cycles, allocations, and each benchmark's samples per arm
+and block (with the control arm of a confirmation run). The job prints the link too.
+
 ## Artifacts
 
 | artifact | content |

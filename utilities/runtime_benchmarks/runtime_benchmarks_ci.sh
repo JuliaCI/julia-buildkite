@@ -233,6 +233,13 @@ if [[ "${verdict}" == 1 && "${BUILDKITE_PIPELINE_SLUG:-}" == "julia-pr" && -n "$
         fi
     fi
 fi
+# The run page draws this job's artifacts (every benchmark's change, its samples,
+# instructions and allocations); the site reads them from Buildkite when first opened
+RUN_URL="https://perf.julialang.org/runtime-run?pipeline=${BUILDKITE_PIPELINE_SLUG:-}&build=${BUILDKITE_BUILD_NUMBER:-}&job=${BUILDKITE_JOB_ID:-}"
+if [[ -f "${RTB_DIR}/out/report.md" ]]; then
+    printf '\n[Every benchmark of this run, with its samples, on perf.julialang.org](%s)\n' "${RUN_URL}" >> "${RTB_DIR}/out/report.md"
+fi
+echo "Run page: ${RUN_URL}"
 annotate() {
     buildkite-agent annotate --context "runtime-benchmarks-${TRIPLET}" --style "$1" < "${RTB_DIR}/out/report.md" || true
 }
