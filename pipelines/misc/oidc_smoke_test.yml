@@ -33,6 +33,9 @@ steps:
     timeout_in_minutes: 10
     agents:
       queue: "build"
+      sched_cpus: "1"
+      sched_threads: "1"
+      sched_mem_gib: "4"
       sandbox_capable: "true"
       os: "linux"
       arch: "x86_64"

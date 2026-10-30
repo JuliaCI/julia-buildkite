@@ -29,6 +29,9 @@ steps:
         commands: "bash .buildkite/utilities/build_julia.sh"
         agents:
           queue: "build"
+          sched_cpus: "4"
+          sched_threads: "16"
+          sched_mem_gib: "40"
           # Only run on `sandbox.jl` machines (not `docker`-isolated ones) since we need nestable sandboxing
           sandbox_capable: "true"
           os: "linux"

@@ -14,6 +14,9 @@ steps:
         commands: "bash .buildkite/utilities/test_julia.sh"
         agents:
           queue: "test"
+          sched_cpus: "6"
+          sched_threads: "6"
+          sched_mem_gib: "24"
           os: "windows"
           arch: "${ARCH}"
         env:

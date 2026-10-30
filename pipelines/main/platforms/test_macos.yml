@@ -20,6 +20,10 @@ steps:
         commands: "bash .buildkite/utilities/test_julia.sh"
         agents:
           queue: "test"
+          # macOS jobs get the whole host whatever these say
+          sched_cpus: "4"
+          sched_threads: "4"
+          sched_mem_gib: "16"
           os: "macos"
           arch: "${ARCH}"
         env:
