@@ -49,7 +49,8 @@ before the merge-base (`tools/flagged.jl` in the suite picks the flagged benchma
 the whole of any flagged category). A regression stands only when head also differs that
 way from this control; otherwise two master builds differ as much and the report lists it
 as dropped. The job fails on a regression, and posts the report as an annotation when
-there are differences or when it measured a build alone.
+there are differences or when it measured a build alone. The job is `soft_fail` for now,
+so a failure does not fail the build; drop that once the verdicts have a track record.
 
 Hardware counters: without root the driver reads the calling thread's cycles and
 instructions (`thread_selfcounts`); with root it also records branch and L1D misses
