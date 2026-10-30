@@ -25,7 +25,7 @@ TTFX job's (`utilities/ttfx/README.md`), and the build state comes from
 |---|---|---|
 | `julia-pr` | only when the pull request touches a path in `paths.txt` (Base, the compiler, lowering, the runtime, LLVM), or has the `needs runtime benchmarks` label | comparison against the master build of the merge-base |
 | `julia-ci` (master, release branches) | every build | absolute: the build alone, kept for perf.julialang.org |
-| `julia-buildkite-ci` (self-test) | every build | comparison: the julia commit under test against its parent |
+| `julia-buildkite-ci` (self-test) | every build | comparison: the build against itself (A/A), so any flag is a harness bug |
 
 ## How it measures
 

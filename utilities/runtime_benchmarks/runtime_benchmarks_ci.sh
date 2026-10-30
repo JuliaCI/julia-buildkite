@@ -114,9 +114,12 @@ if [[ "${BUILDKITE_PIPELINE_SLUG:-}" == "julia-pr" && "${BUILDKITE_PULL_REQUEST:
     MERGE_BASE="$(git merge-base HEAD FETCH_HEAD)"
     echo "merge-base: ${MERGE_BASE}"
 elif [[ "${BUILDKITE_PIPELINE_SLUG:-}" == julia-buildkite* ]]; then
-    BASE_BRANCH="master"
-    MERGE_BASE="$(git rev-parse HEAD^)"
-    echo "--- Self-test: comparing against the parent commit ${MERGE_BASE}"
+    # Self-test: the build against itself. Two builds differ in code placement even when
+    # nothing they run changed (and this pipeline's builds differ from julia-ci's), so any
+    # verdict here would not be about the harness. Against itself, every flag is a bug.
+    echo "--- Self-test: comparing the build against itself"
+    MODE="compare"
+    ARMS=( "--arm=base=${HEAD_JULIA}" "--arm=head=${HEAD_JULIA}" )
 fi
 if [[ -n "${MERGE_BASE}" ]]; then
     MODE="compare"
