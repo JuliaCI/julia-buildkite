@@ -628,10 +628,10 @@ def git(*args):
 
 
 def github_repo():
-    """The julia repository this build is of. The self-test pipeline builds
-    julia-buildkite, so it falls back to JuliaLang/julia."""
+    """The GitHub repository this build is of: julia, or julia-buildkite for
+    the self-test pipeline."""
     m = re.search(r"github\.com[:/](.+?)(?:\.git)?/?$", os.environ.get("BUILDKITE_REPO", ""))
-    return m.group(1) if m and m.group(1).endswith("/julia") else "JuliaLang/julia"
+    return m.group(1) if m else "JuliaLang/julia"
 
 
 def pr_has_label(label):
@@ -824,12 +824,12 @@ def is_release_build():
 
 
 def ci_priority():
-    """The Buildkite job priority of this build: high, normal or low. A
-    julia-pr pull request can pick its tier with a label. Otherwise release
-    builds, pull requests into a release-*
-    branch (backports) and julia-buildkite's own pull requests run ahead of
-    master and other pull requests in the shared queues."""
-    if (os.environ.get("BUILDKITE_PIPELINE_SLUG") == "julia-pr"
+    """The Buildkite job priority of this build: high, normal or low. A pull
+    request to julia or julia-buildkite can pick its tier with a label.
+    Otherwise release builds and pull requests into a release-* branch
+    (backports) run ahead of master and other pull requests in the shared
+    queues."""
+    if (os.environ.get("BUILDKITE_PIPELINE_SLUG") in ("julia-pr", "julia-buildkite-ci")
             and os.environ.get("BUILDKITE_PULL_REQUEST", "false") != "false"):
         if pr_has_label(HIGH_PRIORITY_LABEL):
             return HIGH_PRIORITY
@@ -838,9 +838,6 @@ def ci_priority():
     if is_release_build():
         return HIGH_PRIORITY
     if os.environ.get("BUILDKITE_PULL_REQUEST_BASE_BRANCH", "").startswith("release-"):
-        return HIGH_PRIORITY
-    if (os.environ.get("BUILDKITE_PIPELINE_SLUG") == "julia-buildkite-ci"
-            and os.environ.get("BUILDKITE_PULL_REQUEST", "false") != "false"):
         return HIGH_PRIORITY
     return NORMAL_PRIORITY
 

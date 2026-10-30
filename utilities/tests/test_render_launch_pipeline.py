@@ -414,8 +414,14 @@ class RenderLaunchPipelineTests(unittest.TestCase):
                 (1, {"BUILDKITE_PIPELINE_SLUG": "julia-ci", "BUILDKITE_TAG": "v1.14.0"}),
                 (1, {"BUILDKITE_PIPELINE_SLUG": "julia-pr", "BUILDKITE_PULL_REQUEST": "1",
                      "BUILDKITE_PULL_REQUEST_BASE_BRANCH": "release-1.14"}),
-                (1, {"BUILDKITE_PIPELINE_SLUG": "julia-buildkite-ci", "BUILDKITE_PULL_REQUEST": "1",
+                (0, {"BUILDKITE_PIPELINE_SLUG": "julia-buildkite-ci", "BUILDKITE_PULL_REQUEST": "1",
                      "BUILDKITE_PULL_REQUEST_BASE_BRANCH": "main"}),
+                (1, {"BUILDKITE_PIPELINE_SLUG": "julia-buildkite-ci", "BUILDKITE_PULL_REQUEST": "1",
+                     "BUILDKITE_PULL_REQUEST_BASE_BRANCH": "main",
+                     "BUILDKITE_PULL_REQUEST_LABELS": "high priority CI"}),
+                (-1, {"BUILDKITE_PIPELINE_SLUG": "julia-buildkite-ci", "BUILDKITE_PULL_REQUEST": "1",
+                      "BUILDKITE_PULL_REQUEST_BASE_BRANCH": "main",
+                      "BUILDKITE_PULL_REQUEST_LABELS": "low priority CI"}),
                 (1, {"BUILDKITE_PIPELINE_SLUG": "julia-pr", "BUILDKITE_PULL_REQUEST": "1",
                      "BUILDKITE_PULL_REQUEST_BASE_BRANCH": "master",
                      "BUILDKITE_PULL_REQUEST_LABELS": "high priority CI"}),
@@ -686,6 +692,14 @@ class PullRequestGatingTests(unittest.TestCase):
             rlp.github_pr_labels.cache_clear()
             with mock.patch("urllib.request.urlopen", github(["bugfix"])):
                 self.assertFalse(rlp.pr_has_label("needs full CI"))
+
+            # julia-buildkite's own pull requests are looked up there
+            rlp.github_pr_labels.cache_clear()
+            urls.clear()
+            with mock.patch.dict(os.environ, {"BUILDKITE_REPO": "git@github.com:JuliaCI/julia-buildkite.git"}), \
+                    mock.patch("urllib.request.urlopen", github(["high priority CI"])):
+                self.assertTrue(rlp.pr_has_label("high priority CI"))
+            self.assertEqual(urls, ["https://api.github.com/repos/JuliaCI/julia-buildkite/issues/63807/labels?per_page=100"])
 
             def unreachable(request, timeout):
                 raise OSError("no network")
