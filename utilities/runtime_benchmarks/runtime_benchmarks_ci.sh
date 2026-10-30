@@ -10,11 +10,6 @@ set -euo pipefail
 # shellcheck source=SCRIPTDIR/../build_envs.sh
 source .buildkite/utilities/build_envs.sh
 
-if [[ "${OS%opt}" != "macos" ]]; then
-    echo "The runtime benchmark job only knows how to re-sign and run macOS builds (got ${TRIPLET})" >&2
-    exit 1
-fi
-
 RTB_DIR="$(pwd)/runtime-benchmarks"
 # The suite is checked out at job time; RTB_SUITE_REF may be a branch, tag or commit sha
 RTB_SUITE_REPO="${RTB_SUITE_REPO:-https://github.com/JuliaCI/julia-ci-benchmarks.git}"
@@ -52,15 +47,17 @@ trap upload_results EXIT
 
 ARMS_DIR="${RTB_DIR}/arms"
 
-# Extract a tarball to ${ARMS_DIR}/<name>, re-sign it and repair the stdlib pkgimage
-# checksums the signing invalidated, as test_julia.sh and the TTFX job do
+# Extract a tarball to ${ARMS_DIR}/<name>; on macOS re-sign it and repair the stdlib
+# pkgimage checksums the signing invalidated, as test_julia.sh and the TTFX job do
 install_julia() {
     local tarball="$1" name="$2"
     local dir="${ARMS_DIR}/${name}"
     mkdir -p "${dir}"
     tar -C "${dir}" --strip-components=1 -zxf "${tarball}"
-    .buildkite/utilities/macos/codesign.sh "${dir}"
-    JULIA_DEBUG=all "${dir}/bin/julia" .buildkite/utilities/update_stdlib_pkgimage_checksums.jl
+    if [[ "${OS%opt}" == "macos" ]]; then
+        .buildkite/utilities/macos/codesign.sh "${dir}"
+        JULIA_DEBUG=all "${dir}/bin/julia" .buildkite/utilities/update_stdlib_pkgimage_checksums.jl
+    fi
     echo "${name}: $("${dir}/bin/julia" --startup-file=no -e 'print(VERSION, "  ", Base.GIT_VERSION_INFO.commit)')"
 }
 

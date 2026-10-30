@@ -1,16 +1,20 @@
 # Runtime benchmarks
 
-A macOS aarch64 job in the `Runtime benchmarks` group runs the
+A job per platform in the `Runtime benchmarks` group (today macOS aarch64) runs the
 [julia-ci-benchmarks](https://github.com/JuliaCI/julia-ci-benchmarks) suite on the julia a
-build produced: ~110 benchmarks of codegen, the runtime, the GC, the scheduler and the
-compiler, judged on hardware counters (cycles, and instruction counts that are exact
-across processes) rather than wall time where the work stays on one thread. The suite is
-checked out from its `main` branch at job time (`RTB_SUITE_REF` pins another ref or a
+build produced: about 160 benchmarks of codegen, the runtime, the GC, the scheduler and
+the compiler, judged on hardware counters (cycles, and instruction counts that are exact
+across processes) rather than wall time where the work stays on one thread. The suite
+reads them through `thread_selfcounts` on macOS and `perf_event_open` on Linux (which needs
+`kernel.perf_event_paranoid` <= 2 and a sandbox that allows the syscall); elsewhere it
+judges wall time. A platform is added with a `runtime_benchmarks_<os>.arches` and a
+`runtime_benchmarks_<os>.yml` for its agents; the launcher uploads every such pair. The
+suite is checked out from its `main` branch at job time (`RTB_SUITE_REF` pins another ref or a
 commit); everything that runs it in CI lives here.
 
 | file | role |
 |---|---|
-| `pipelines/main/misc/runtime_benchmarks/` | the group launcher (registered in `render_launch_pipeline.py`) and the macOS job |
+| `pipelines/main/misc/runtime_benchmarks/` | the group launcher (registered in `render_launch_pipeline.py`) and a job per platform |
 | `runtime_benchmarks_launch.sh` | the launch step: decides whether this build is measured, uploads the job |
 | `paths.txt` | the paths a pull request must touch to be measured without the label |
 | `runtime_benchmarks_ci.sh` | the job: fetch the builds, check out the suite, benchmark, compare, report |

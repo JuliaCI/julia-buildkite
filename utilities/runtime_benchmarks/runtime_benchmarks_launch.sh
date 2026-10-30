@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Runtime benchmark launcher: uploads the macOS runtime benchmark job for this build,
+# Runtime benchmark launcher: uploads the runtime benchmark jobs for this build (one per
+# line of every runtime_benchmarks_<os>.arches beside a runtime_benchmarks_<os>.yml),
 # unless it is a pull request that touches none of the paths in paths.txt and has no
 # `needs runtime benchmarks` label. Master and release builds and the julia-buildkite
 # self-test always measure their build. See README.md alongside this script.
@@ -11,9 +12,11 @@ RTB_LABEL="needs runtime benchmarks"
 RTB_PATHS="${RTB_PATHS:-${RTB_UTILS}/paths.txt}"
 
 launch() {
-    GROUP="Runtime benchmarks" bash .buildkite/utilities/arches_pipeline_upload.sh \
-        "${RTB_PIPELINES}/runtime_benchmarks_macos.arches" \
-        "${RTB_PIPELINES}/runtime_benchmarks_macos.yml"
+    local arches
+    for arches in "${RTB_PIPELINES}"/runtime_benchmarks_*.arches; do
+        GROUP="Runtime benchmarks" bash .buildkite/utilities/arches_pipeline_upload.sh \
+            "${arches}" "${arches%.arches}.yml"
+    done
 }
 
 if [[ "${BUILDKITE_PIPELINE_SLUG:-}" != "julia-pr" || "${BUILDKITE_PULL_REQUEST:-false}" == "false" ]]; then
