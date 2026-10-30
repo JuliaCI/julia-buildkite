@@ -1,0 +1,13 @@
+# Paths a pull request must touch for the runtime benchmark job to run without the
+# `needs runtime benchmarks` label, one git pathspec per line (a directory covers
+# everything below it), # comments. Everything that changes generated code or the
+# runtime: Base, the compiler, lowering, the C runtime and codegen, and LLVM.
+src/
+base/
+Compiler/
+JuliaLowering/
+JuliaSyntax/
+deps/llvm.mk
+deps/llvm.version
+deps/patches/llvm*
+Make.inc

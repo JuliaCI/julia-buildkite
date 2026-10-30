@@ -1,0 +1,20 @@
+steps:
+  - group: "Runtime benchmarks"
+    steps:
+      - label: "Launch runtime benchmark jobs"
+        # julia-ci commits and the julia-buildkite self-test are always measured. A
+        # julia-pr pull request is measured only when it touches a path in
+        # utilities/runtime_benchmarks/paths.txt or has the `needs runtime benchmarks`
+        # label; runtime_benchmarks_launch.sh decides. The commit status is the job's own,
+        # so a pull request that is not measured shows none
+        # (utilities/runtime_benchmarks/README.md).
+        if: pipeline.slug == "julia-pr" || pipeline.slug == "julia-ci" || pipeline.slug == "julia-buildkite-ci"
+        plugins:
+          - JuliaCI/external-buildkite#v1:
+              version: "./.buildkite-external-version"
+              repo_url: "https://github.com/JuliaCI/julia-buildkite"
+        commands: "bash .buildkite/utilities/runtime_benchmarks/runtime_benchmarks_launch.sh"
+        agents:
+          queue: "launch"
+          os: "linux"
+          arch: "x86_64"

@@ -140,83 +140,22 @@ github_repo() {
 }
 TTFX_GITHUB_REPO="${TTFX_GITHUB_REPO:-$(github_repo)}"
 
-# The newest stable release: GitHub's "latest" release of JuliaLang/julia, which is
-# never a prerelease. The release tarballs are named by version below bin/<os>/<arch>/<majmin>/.
-latest_release() {
-    curl -fsSL --retry 3 -H "Accept: application/vnd.github+json" "${TTFX_LATEST_RELEASE_API}" \
-        | sed -n 's/^ *"tag_name": *"v\([0-9][0-9.]*\)".*/\1/p' | head -n1
-}
-
-# The newest patch release of a series such as 1.10, from the list of published versions.
-# Prereleases carry a suffix (1.10.0-rc1), so the pattern leaves them out.
-newest_patch_release() {
-    local series="${1//./\\.}"
-    curl -fsSL --retry 3 "${TTFX_VERSIONS_URL}" \
-        | sed -n "s/^ *\"\(${series}\.[0-9][0-9]*\)\": *{.*/\1/p" \
-        | sort -t. -k3,3n | tail -n1
-}
-
-# The release branch of the next release: the oldest release-x.y branch whose series has
-# no stable release yet. Empty when no such branch exists, e.g. after a release and before
-# the next branch is cut. Only later minors of the current major, or the next major's
-# x.0, count, which keeps out placeholder branches such as release-9.999.
-upcoming_release_branch() {
-    local stable
-    stable="$(curl -fsSL --retry 3 "${TTFX_VERSIONS_URL}" \
-        | sed -n 's/^ *"\([0-9][0-9]*\.[0-9][0-9]*\)\.[0-9][0-9]*": *{.*/\1/p' \
-        | sort -u -t. -k1,1n -k2,2n | tail -n1)"
-    [[ -n "${stable}" ]] || { echo "Could not find a stable release in ${TTFX_VERSIONS_URL}" >&2; return 1; }
-    git ls-remote --heads "https://github.com/${TTFX_GITHUB_REPO}.git" 'refs/heads/release-*' \
-        | sed -n 's|.*refs/heads/release-\([0-9][0-9]*\.[0-9][0-9]*\)$|\1|p' \
-        | awk -F. -v s="${stable}" 'BEGIN { split(s, v, ".") }
-              ($1 == v[1] && $2 > v[2]) || ($1 == v[1] + 1 && $2 == 0)' \
-        | sort -t. -k1,1n -k2,2n | head -n1
-}
+PUBLISHED_RELEASES_URL="${TTFX_RELEASES_URL}"
+PUBLISHED_LATEST_RELEASE_API="${TTFX_LATEST_RELEASE_API}"
+PUBLISHED_VERSIONS_URL="${TTFX_VERSIONS_URL}"
+PUBLISHED_NIGHTLIES_URL="${TTFX_NIGHTLIES_URL}"
+PUBLISHED_GITHUB_REPO="${TTFX_GITHUB_REPO}"
+# shellcheck source=SCRIPTDIR/../published_julia.sh
+source .buildkite/utilities/published_julia.sh
 
 if [[ -n "${TTFX_RELEASE}" ]]; then
-    if [[ "${TTFX_RELEASE}" == "latest" ]]; then
-        echo "--- Find the latest release"
-        TTFX_RELEASE="$(latest_release)"
-        [[ -n "${TTFX_RELEASE}" ]] || { echo "Could not find the latest release from ${TTFX_LATEST_RELEASE_API}" >&2; exit 1; }
-    elif [[ "${TTFX_RELEASE}" =~ ^[0-9]+\.[0-9]+$ ]]; then
-        echo "--- Find the newest ${TTFX_RELEASE} release"
-        series="${TTFX_RELEASE}"
-        TTFX_RELEASE="$(newest_patch_release "${series}")"
-        [[ -n "${TTFX_RELEASE}" ]] || { echo "Could not find a ${series} release in ${TTFX_VERSIONS_URL}" >&2; exit 1; }
-    elif [[ "${TTFX_RELEASE}" == "branch-nightly" ]]; then
-        echo "--- Find the release branch of the next release"
-        branch="$(upcoming_release_branch)"
-        if [[ -z "${branch}" ]]; then
-            echo "No release branch is ahead of the latest release; nothing to measure"
-            exit 0
-        fi
-        TTFX_RELEASE="${branch}-nightly"
-        skip_missing_nightly=1
-    fi
-    echo "--- Download julia ${TTFX_RELEASE}"
-    if [[ "${TTFX_RELEASE}" =~ ^([0-9]+\.[0-9]+)-nightly$ ]]; then
-        # The newest nightly that the release branch has published
-        release_url="${TTFX_NIGHTLIES_URL}/${S3_BUCKET_PREFIX}/${BASE_OS}/${ARCH}/${BASH_REMATCH[1]}/julia-latest-${BASE_OS}-${ARCH}.tar.gz"
-    else
-        # The releases bucket names macOS "mac" (the nightlies say "macos")
-        case "${TRIPLET}" in
-            aarch64-apple-darwin) release_path="mac/aarch64" release_name="macaarch64" ;;
-            x86_64-apple-darwin)  release_path="mac/x64"     release_name="mac64" ;;
-            *) echo "No release download path known for ${TRIPLET}" >&2; exit 1 ;;
-        esac
-        release_majmin="$(cut -d. -f1-2 <<<"${TTFX_RELEASE}")"
-        release_url="${TTFX_RELEASES_URL}/${release_path}/${release_majmin}/julia-${TTFX_RELEASE}-${release_name}.tar.gz"
-    fi
-    status="$(curl -sSL --retry 3 -o "${TTFX_DIR}/release.tar.gz" -w '%{http_code}' "${release_url}")"
-    # A branch cut in the last day may have no nightly yet; next week's run picks it up
-    if [[ "${status}" == "404" && -n "${skip_missing_nightly:-}" ]]; then
-        echo "No nightly at ${release_url} yet; nothing to measure"
-        exit 0
-    elif [[ "${status}" != "200" ]]; then
-        echo "Could not download ${release_url} (HTTP ${status})" >&2
-        exit 1
-    fi
-    echo "downloaded ${release_url}"
+    published=0
+    download_published_julia "${TTFX_RELEASE}" "${TTFX_DIR}/release.tar.gz" || published=$?
+    case "${published}" in
+        0) TTFX_RELEASE="${PUBLISHED_VERSION}" ;;
+        2) exit 0 ;;
+        *) exit 1 ;;
+    esac
     install_julia "${TTFX_DIR}/release.tar.gz" head
     HEAD_NOTE="julia ${TTFX_RELEASE}"
 else

@@ -36,8 +36,8 @@ omitted (see OMITTED_POWERPC below). This matches the runtime behaviour.
 Schedule builds emit the scheduled workload groups and publish triggers instead
 of the per-commit groups, and the TTFX job of the optimized macOS build; the
 weekly TTFX_RELEASE build (a second julia-ci schedule) emits the release and LTS
-TTFX jobs alone. Release branch and tag builds add the no-GPL group
-(and its publish triggers) to the per-commit groups, and NOGPL_ONLY=true
+TTFX and runtime benchmark jobs alone. Release branch and tag builds add the
+no-GPL group (and its publish triggers) to the per-commit groups, and NOGPL_ONLY=true
 renders only those; they also add the optimized groups (OPT_ONLY=true
 renders only those), whose tests gate their publish triggers on tags unless
 OPT_TESTS_ALLOW_FAIL=true. ONLY_TRIPLETS=<triplet>[,...] renders only the
@@ -46,7 +46,7 @@ build would otherwise contain. Labeled PRs render the same workload groups as a
 supplemental pipeline, without publish triggers. A julia-pr pull request skips
 the jobs whose paths it does not change (PR_GATED_FILES, PR_GATED_TRIPLETS). Per-commit results are grouped
 into one `group:` per label: Build, Check, Test, Allow Fail, JuliaSyntax,
-JuliaC, TTFX, Publish.
+JuliaC, TTFX, Runtime benchmarks, Publish.
 
 The Publish group's triggers each `depends_on` only their own platform's
 build + test jobs (see publish_group_text).
@@ -909,10 +909,13 @@ def only_triplets_text(only):
 def main():
     args = parse_args()
     # TTFX_RELEASE (set by the weekly julia-ci schedule, or on a build created
-    # by hand) measures a published release on the TTFX tasks; nothing is built.
+    # by hand) measures a published release on the TTFX tasks and the runtime
+    # benchmarks; nothing is built.
     if os.environ.get("TTFX_RELEASE"):
         sys.stdout.write(pipeline_header())
         sys.stdout.write(verbatim_group_text(os.path.join(MISC, "ttfx", "ttfx_release.yml")))
+        sys.stdout.write("\n")
+        sys.stdout.write(verbatim_group_text(os.path.join(MISC, "runtime_benchmarks", "runtime_benchmarks_release.yml")))
         sys.stdout.write("\n")
         return
     is_schedule = os.environ.get("BUILDKITE_SOURCE") == "schedule"
@@ -994,6 +997,14 @@ def main():
     # `needs TTFX check` label (utilities/ttfx/README.md). A launcher with its
     # own group -- include verbatim.
     blocks.append(verbatim_group_text(os.path.join(MISC, "ttfx", "ttfx.yml")))
+
+    # Runtime benchmarks: the julia-ci-benchmarks suite (codegen, the runtime, GC,
+    # scheduler, compiler throughput) on the build, against the master build of the
+    # merge-base on pull requests, which are measured only when they touch a path
+    # in utilities/runtime_benchmarks/paths.txt or carry the `needs runtime
+    # benchmarks` label (utilities/runtime_benchmarks/README.md). A launcher with
+    # its own group -- include verbatim.
+    blocks.append(verbatim_group_text(os.path.join(MISC, "runtime_benchmarks", "runtime_benchmarks.yml")))
 
     # Release branches and tags also come as no-GPL, optimized and riscv64
     # builds, the nightlies (x.y-nightly+opt) and releases (x.y+opt) of their
