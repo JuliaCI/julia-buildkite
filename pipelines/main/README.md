@@ -48,7 +48,8 @@ has a test job, and both builds are allowed to fail.
 
 A second `julia-ci` schedule, Saturday nights with `TTFX_RELEASE=latest`, builds
 nothing and measures the newest stable release, the LTS and the next release's nightly on the
-TTFX tasks instead, as references for the master series (see `utilities/ttfx/README.md`).
+TTFX tasks and the runtime benchmarks instead, as references for the master series (see
+`utilities/ttfx/README.md` and `utilities/runtime_benchmarks/README.md`).
 
 A pull request skips the jobs that test only paths it does not change, relative
 to the merge-base with its target branch (`PR_GATED_FILES` and
@@ -67,6 +68,10 @@ to the merge-base with its target branch (`PR_GATED_FILES` and
 master. Pull requests with the `needs full CI` label, or that change
 `.buildkite-external-version`, run every job. The label counts on a rebuild
 too: when Buildkite did not record it, the launch step asks GitHub.
+
+The TTFX and runtime benchmark jobs gate themselves in their own launch steps, by
+their own path lists and labels (`needs TTFX check`, `needs runtime benchmarks`;
+see `utilities/ttfx/README.md` and `utilities/runtime_benchmarks/README.md`).
 
 Pull requests with the `needs extended CI` label also run the scheduled workloads.
 Coverage data is collected but not uploaded to Codecov or Coveralls.

@@ -1,0 +1,68 @@
+# The weekly reference measurement of the latest Julia release, the LTS and the next
+# release's nightly on the runtime benchmark suite: the same job as
+# runtime_benchmarks_macos.yml, run on a published build instead of a build of this
+# commit, so the master series on perf.julialang.org has them next to it, measured on the
+# same machines with the same suite week after week. A fixed binary measured every week
+# also shows how much the machines drift. Rendered by render_launch_pipeline.py next to
+# the TTFX release group when the julia-ci build carries TTFX_RELEASE, which the weekly
+# schedule sets (utilities/runtime_benchmarks/README.md). Each job's own label and key
+# keep it apart from the master job for julia-ci-timing.
+steps:
+  - group: "Runtime benchmarks release"
+    steps:
+      - label: ":macos: Runtime benchmarks release aarch64-apple-darwin"
+        key: "runtime_benchmarks_release_aarch64-apple-darwin"
+        plugins:
+          - JuliaCI/external-buildkite#v1:
+              version: "./.buildkite-external-version"
+              repo_url: "https://github.com/JuliaCI/julia-buildkite"
+        commands: "bash .buildkite/utilities/runtime_benchmarks/runtime_benchmarks_ci.sh"
+        # One arm, three blocks: about 5 minutes
+        timeout_in_minutes: 45
+        agents:
+          queue: "test"
+          os: "macos"
+          arch: "aarch64"
+        env:
+          TRIPLET: "aarch64-apple-darwin"
+          # "latest" resolves to the newest stable release at job time; a version such
+          # as "1.13.1" measures that release instead
+          RTB_RELEASE: "${TTFX_RELEASE:-latest}"
+
+      - label: ":macos: Runtime benchmarks lts aarch64-apple-darwin"
+        key: "runtime_benchmarks_lts_aarch64-apple-darwin"
+        # Only on the weekly run; a build measuring one release by hand skips it
+        if: build.env("TTFX_RELEASE") == "latest"
+        plugins:
+          - JuliaCI/external-buildkite#v1:
+              version: "./.buildkite-external-version"
+              repo_url: "https://github.com/JuliaCI/julia-buildkite"
+        commands: "bash .buildkite/utilities/runtime_benchmarks/runtime_benchmarks_ci.sh"
+        timeout_in_minutes: 45
+        agents:
+          queue: "test"
+          os: "macos"
+          arch: "aarch64"
+        env:
+          TRIPLET: "aarch64-apple-darwin"
+          # The LTS series, measured at its newest patch release; move it on when a new
+          # LTS is named
+          RTB_RELEASE: "1.10"
+
+      - label: ":macos: Runtime benchmarks branch nightly aarch64-apple-darwin"
+        key: "runtime_benchmarks_branch_nightly_aarch64-apple-darwin"
+        if: build.env("TTFX_RELEASE") == "latest"
+        plugins:
+          - JuliaCI/external-buildkite#v1:
+              version: "./.buildkite-external-version"
+              repo_url: "https://github.com/JuliaCI/julia-buildkite"
+        commands: "bash .buildkite/utilities/runtime_benchmarks/runtime_benchmarks_ci.sh"
+        timeout_in_minutes: 45
+        agents:
+          queue: "test"
+          os: "macos"
+          arch: "aarch64"
+        env:
+          TRIPLET: "aarch64-apple-darwin"
+          # The newest nightly of the next release's branch, if one is cut
+          RTB_RELEASE: "branch-nightly"

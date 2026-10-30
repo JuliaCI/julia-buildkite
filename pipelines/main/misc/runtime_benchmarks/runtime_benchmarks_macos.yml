@@ -1,0 +1,26 @@
+steps:
+  - group: "${GROUP?}"
+    steps:
+      - label: ":macos: Runtime benchmarks ${TRIPLET?}"
+        key: "runtime_benchmarks_${TRIPLET?}"
+        depends_on:
+          - "build_${TRIPLET?}"
+        # The job's own status rather than its group's, so a pull request the launcher
+        # does not measure shows none
+        notify:
+          - github_commit_status:
+              context: "Runtime benchmarks"
+        plugins:
+          - JuliaCI/external-buildkite#v1:
+              version: "./.buildkite-external-version"
+              repo_url: "https://github.com/JuliaCI/julia-buildkite"
+        commands: "bash .buildkite/utilities/runtime_benchmarks/runtime_benchmarks_ci.sh"
+        timeout_in_minutes: ${TIMEOUT?}
+        # Until the verdicts have a track record, a flagged regression does not fail the build
+        soft_fail: true
+        agents:
+          queue: "test"
+          os: "macos"
+          arch: "${ARCH}"
+        env:
+          TRIPLET: "${TRIPLET?}"
