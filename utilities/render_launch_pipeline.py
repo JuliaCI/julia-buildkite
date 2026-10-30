@@ -36,8 +36,8 @@ omitted (see OMITTED_POWERPC below). This matches the runtime behaviour.
 Schedule builds emit the scheduled workload groups and publish triggers instead
 of the per-commit groups, and the TTFX job of the optimized macOS build; the
 weekly TTFX_RELEASE build (a second julia-ci schedule) emits the release and LTS
-TTFX jobs alone. Release branch and tag builds add the no-GPL group
-(and its publish triggers) to the per-commit groups, and NOGPL_ONLY=true
+TTFX and runtime benchmark jobs alone. Release branch and tag builds add the
+no-GPL group (and its publish triggers) to the per-commit groups, and NOGPL_ONLY=true
 renders only those; they also add the optimized groups (OPT_ONLY=true
 renders only those), whose tests gate their publish triggers on tags unless
 OPT_TESTS_ALLOW_FAIL=true. ONLY_TRIPLETS=<triplet>[,...] renders only the
@@ -867,10 +867,13 @@ def only_triplets_text(only):
 def main():
     args = parse_args()
     # TTFX_RELEASE (set by the weekly julia-ci schedule, or on a build created
-    # by hand) measures a published release on the TTFX tasks; nothing is built.
+    # by hand) measures a published release on the TTFX tasks and the runtime
+    # benchmarks; nothing is built.
     if os.environ.get("TTFX_RELEASE"):
         sys.stdout.write("steps:\n")
         sys.stdout.write(verbatim_group_text(os.path.join(MISC, "ttfx", "ttfx_release.yml")))
+        sys.stdout.write("\n")
+        sys.stdout.write(verbatim_group_text(os.path.join(MISC, "runtime_benchmarks", "runtime_benchmarks_release.yml")))
         sys.stdout.write("\n")
         return
     is_schedule = os.environ.get("BUILDKITE_SOURCE") == "schedule"

@@ -29,6 +29,7 @@ TTFX job's (`utilities/ttfx/README.md`), and the build state comes from
 |---|---|---|
 | `julia-pr` | only when the pull request touches a path in `paths.txt` (Base, the compiler, lowering, the runtime, LLVM), or has the `needs runtime benchmarks` label | comparison against the master build of the merge-base |
 | `julia-ci` (master, release branches) | every build | absolute: the build alone, kept for perf.julialang.org |
+| `julia-ci` (the weekly `TTFX_RELEASE` schedule) | the newest stable release, the LTS, and the next release's nightly | absolute: each release alone, as a reference |
 | `julia-buildkite-ci` (self-test) | every build | comparison: the build against itself (A/A), so any flag is a harness bug |
 
 ## How it measures
@@ -60,6 +61,25 @@ The report ends with a link to the run page on perf.julialang.org
 Buildkite when first opened and draws every benchmark's change against its tolerance, the
 categories, instructions against cycles, allocations, and each benchmark's samples per arm
 and block (with the control arm of a confirmation run). The job prints the link too.
+
+## Release reference: the weekly schedule (julia-ci)
+
+The weekly `julia-ci` build that measures published releases on the TTFX tasks
+(`TTFX_RELEASE=latest`, `utilities/ttfx/README.md`) also renders the `Runtime benchmarks
+release` group (`pipelines/main/misc/runtime_benchmarks/runtime_benchmarks_release.yml`).
+Its three jobs set `RTB_RELEASE` to `latest`, `1.10` (the LTS; move it on when a new LTS
+is named) and `branch-nightly`, and the job measures that published julia alone instead
+of a build. The specs resolve as for TTFX, through `utilities/published_julia.sh`; the
+nightly job passes without measuring when no release branch is ahead of the latest
+release. Weekly rather than once per release, because the suite gains benchmarks and the
+machines change: the reference has to be measured with this week's suite on this week's
+machine to sit next to this week's master. The same binary measured week after week also
+shows how far the machines drift.
+
+The jobs' labels (`:macos: Runtime benchmarks release <triplet>`, `... lts ...`,
+`... branch nightly ...`) tell julia-ci-timing which series a run belongs to. A build
+created by hand with `TTFX_RELEASE=1.13.1` measures that release (and only that, on both
+TTFX and the runtime benchmarks).
 
 ## Artifacts
 

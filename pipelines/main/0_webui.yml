@@ -16,7 +16,8 @@
 #                    pipelines/main/README.md
 #                  * weekly TTFX release schedule: master at `0 4 * * 0`
 #                    (Saturday night in the US) with the environment
-#                    variable TTFX_RELEASE=latest; see utilities/ttfx/README.md
+#                    variable TTFX_RELEASE=latest; it also runs the runtime
+#                    benchmarks on the releases; see utilities/ttfx/README.md
 #
 # Keeping the two configurations identical is deliberate: the only
 # difference in behavior is downstream, where the rendered julia-publish

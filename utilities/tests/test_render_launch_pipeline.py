@@ -416,8 +416,9 @@ class RenderLaunchPipelineTests(unittest.TestCase):
     def test_ttfx_release_build_renders_only_the_release_jobs(self):
         for env in ({"TTFX_RELEASE": "latest"}, {"TTFX_RELEASE": "1.13.1"}):
             output = render(source="schedule", BUILDKITE_PIPELINE_SLUG="julia-ci", **env)
-            self.assertEqual(re.findall(r'^  - group: "([^"]+)"', output, re.M), ["TTFX release"])
-            self.assertEqual(output.count("- label:"), 3)
+            self.assertEqual(re.findall(r'^  - group: "([^"]+)"', output, re.M),
+                             ["TTFX release", "Runtime benchmarks release"])
+            self.assertEqual(output.count("- label:"), 6)
             self.assertIn('key: "ttfx_release_aarch64-apple-darwin"', output)
             self.assertIn('key: "ttfx_lts_aarch64-apple-darwin"', output)
             self.assertIn('key: "ttfx_branch_nightly_aarch64-apple-darwin"', output)
@@ -433,6 +434,17 @@ class RenderLaunchPipelineTests(unittest.TestCase):
         nightly = output[output.index('key: "ttfx_branch_nightly_'):]
         self.assertIn('if: build.env("TTFX_RELEASE") == "latest"', nightly)
         self.assertIn('TTFX_RELEASE: "branch-nightly"', nightly)
+        # The runtime benchmark jobs follow the same variable
+        runtime = output[output.index('group: "Runtime benchmarks release"'):]
+        self.assertIn('key: "runtime_benchmarks_release_aarch64-apple-darwin"', runtime)
+        self.assertIn('RTB_RELEASE: "${TTFX_RELEASE:-latest}"', runtime)
+        self.assertIn("utilities/runtime_benchmarks/runtime_benchmarks_ci.sh", runtime)
+        lts = runtime[runtime.index('key: "runtime_benchmarks_lts_'):runtime.index('key: "runtime_benchmarks_branch_nightly_')]
+        self.assertIn('if: build.env("TTFX_RELEASE") == "latest"', lts)
+        self.assertIn('RTB_RELEASE: "1.10"', lts)
+        rnightly = runtime[runtime.index('key: "runtime_benchmarks_branch_nightly_'):]
+        self.assertIn('if: build.env("TTFX_RELEASE") == "latest"', rnightly)
+        self.assertIn('RTB_RELEASE: "branch-nightly"', rnightly)
 
     def test_runtime_benchmarks_launcher(self):
         # The launcher decides per build; the renderer always includes it on commits

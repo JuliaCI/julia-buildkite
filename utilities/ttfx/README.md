@@ -212,6 +212,10 @@ two, and in the day or so before a new branch has a nightly, the job measures no
 passes. The nightly is the `julia-latest` tarball below the series in the nightlies
 bucket; `TTFX_RELEASE=1.14-nightly` names a branch directly.
 
+The same build runs the runtime benchmarks on the same three julias
+(`utilities/runtime_benchmarks/README.md`); the resolution and download live in
+`utilities/published_julia.sh`, shared by both jobs.
+
 The jobs' labels and keys (`:macos: TTFX release <triplet>`, `ttfx_release_<triplet>`;
 `:macos: TTFX lts <triplet>`, `ttfx_lts_<triplet>`; `:macos: TTFX branch nightly <triplet>`,
 `ttfx_branch_nightly_<triplet>`) differ from the master job's, which is how julia-ci-timing

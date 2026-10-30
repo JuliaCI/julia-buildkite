@@ -48,7 +48,8 @@ has a test job, and both builds are allowed to fail.
 
 A second `julia-ci` schedule, Saturday nights with `TTFX_RELEASE=latest`, builds
 nothing and measures the newest stable release, the LTS and the next release's nightly on the
-TTFX tasks instead, as references for the master series (see `utilities/ttfx/README.md`).
+TTFX tasks and the runtime benchmarks instead, as references for the master series (see
+`utilities/ttfx/README.md` and `utilities/runtime_benchmarks/README.md`).
 
 A pull request skips the jobs that test only paths it does not change, relative
 to the merge-base with its target branch (`PR_GATED_FILES` and

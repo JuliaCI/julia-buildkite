@@ -4,7 +4,9 @@
 # merge-base is fetched too, the two are measured interleaved (ABBA, one process per
 # block, category and arm) and compared, and robust regressions fail the job. On master
 # and release branches the build is measured alone and the data kept as Buildkite
-# artifacts for perf.julialang.org. See README.md alongside this script.
+# artifacts for perf.julialang.org. With RTB_RELEASE set, a published julia (a spec of
+# utilities/published_julia.sh) is measured alone instead: the weekly reference runs. See
+# README.md alongside this script.
 set -euo pipefail
 
 # shellcheck source=SCRIPTDIR/../build_envs.sh
@@ -18,6 +20,7 @@ RTB_BLOCKS="${RTB_BLOCKS:-3}"
 RTB_THREADS="${RTB_THREADS:-4}"
 # Restrict to some categories (space separated); empty runs them all
 RTB_CATEGORIES="${RTB_CATEGORIES:-}"
+RTB_RELEASE="${RTB_RELEASE:-}"
 # Where julia-ci stages its tarballs, the promoted nightlies, and julia-pr's staging for
 # stacked pull requests; the same lookup as the TTFX job
 RTB_BASE_STAGING_BUCKET="${RTB_BASE_STAGING_BUCKET:-julialang-ephemeral-ci}"
@@ -98,15 +101,31 @@ github_repo() {
 }
 RTB_GITHUB_REPO="${RTB_GITHUB_REPO:-$(github_repo)}"
 
-echo "--- Download the julia build under test (${SHORT_COMMIT})"
-buildkite-agent artifact download --step "build_${TRIPLET}" "${UPLOAD_FILENAME}.tar.gz" .
-install_julia "${UPLOAD_FILENAME}.tar.gz" head
+if [[ -n "${RTB_RELEASE}" ]]; then
+    PUBLISHED_NIGHTLIES_URL="${RTB_NIGHTLIES_URL}"
+    # shellcheck source=SCRIPTDIR/../published_julia.sh
+    source .buildkite/utilities/published_julia.sh
+    published=0
+    download_published_julia "${RTB_RELEASE}" "${RTB_DIR}/release.tar.gz" || published=$?
+    case "${published}" in
+        0) ;;
+        2) exit 0 ;;
+        *) exit 1 ;;
+    esac
+    install_julia "${RTB_DIR}/release.tar.gz" head
+else
+    echo "--- Download the julia build under test (${SHORT_COMMIT})"
+    buildkite-agent artifact download --step "build_${TRIPLET}" "${UPLOAD_FILENAME}.tar.gz" .
+    install_julia "${UPLOAD_FILENAME}.tar.gz" head
+fi
 HEAD_JULIA="${ARMS_DIR}/head/bin/julia"
 
 MODE="standalone"
 ARMS=( "--arm=head=${HEAD_JULIA}" )
 MERGE_BASE=""
-if [[ "${BUILDKITE_PIPELINE_SLUG:-}" == "julia-pr" && "${BUILDKITE_PULL_REQUEST:-false}" != "false" ]]; then
+if [[ -n "${RTB_RELEASE}" ]]; then
+    : # a release stands alone
+elif [[ "${BUILDKITE_PIPELINE_SLUG:-}" == "julia-pr" && "${BUILDKITE_PULL_REQUEST:-false}" != "false" ]]; then
     BASE_BRANCH="${BUILDKITE_PULL_REQUEST_BASE_BRANCH:-master}"
     echo "--- Find the merge-base with ${BASE_BRANCH}"
     git fetch --no-tags --quiet "${BUILDKITE_REPO}" "refs/heads/${BASE_BRANCH}"
@@ -182,7 +201,7 @@ echo "+++ Report"
 PERF_REF=""
 if [[ "${BUILDKITE_PIPELINE_SLUG:-}" == "julia-pr" && "${BUILDKITE_PULL_REQUEST:-false}" != "false" ]]; then
     PERF_REF="${BUILDKITE_PULL_REQUEST}"
-elif [[ "${BUILDKITE_PIPELINE_SLUG:-}" == "julia-ci" ]]; then
+elif [[ "${BUILDKITE_PIPELINE_SLUG:-}" == "julia-ci" && -z "${RTB_RELEASE}" ]]; then
     PERF_REF="$(git rev-parse HEAD)"
 fi
 compare_args=( "${RTB_DIR}/out" )
