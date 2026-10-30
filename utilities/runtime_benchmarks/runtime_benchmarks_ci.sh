@@ -40,7 +40,9 @@ mkdir -p "${RTB_DIR}"
 upload_results() {
     echo "--- Upload results"
     local pattern
-    for pattern in "runtime-benchmarks/out/*.json" "runtime-benchmarks/out/*.md" "runtime-benchmarks/out/logs/*.log" "runtime-benchmarks/*.log"; do
+    for pattern in "runtime-benchmarks/out/*.json" "runtime-benchmarks/out/*.md" "runtime-benchmarks/out/logs/*.log" \
+                   "runtime-benchmarks/out/confirm/*.json" "runtime-benchmarks/out/confirm/*.md" "runtime-benchmarks/out/confirm/logs/*.log" \
+                   "runtime-benchmarks/*.log"; do
         if compgen -G "${pattern}" >/dev/null; then
             buildkite-agent artifact upload "${pattern}" || true
         fi
@@ -194,6 +196,43 @@ set +e
 "${HEAD_JULIA}" --startup-file=no "${RTB_DIR}/suite/compare.jl" "${compare_args[@]}"
 verdict=$?
 set -e
+
+# A regression on a pull request is measured again with a control arm: the master build
+# before the merge-base. Two master builds differ in code placement as well, so a change
+# stands only when head also differs that way from the control.
+if [[ "${verdict}" == 1 && "${BUILDKITE_PIPELINE_SLUG:-}" == "julia-pr" && -n "${MERGE_BASE}" ]]; then
+    echo "--- Confirm the regressions against the master build before the merge-base"
+    flagged="$("${HEAD_JULIA}" --startup-file=no "${RTB_DIR}/suite/tools/flagged.jl" "${RTB_DIR}/out")"
+    flagged_categories="$(sed -n 1p <<< "${flagged}")"
+    flagged_filter="$(sed -n 2p <<< "${flagged}")"
+    control="$(nearest_built_commit "${MERGE_BASE}^" 2>/dev/null || true)"
+    if [[ -z "${flagged_filter}" || -z "${control}" ]] || ! fetch_base_build "${control}" "${RTB_DIR}/control.tar.gz"; then
+        echo "No control build to confirm against; keeping the verdict"
+    else
+        install_julia "${RTB_DIR}/control.tar.gz" control
+        confirm_args=( --blocks="${RTB_BLOCKS}" --threads="${RTB_THREADS}" --out="${RTB_DIR}/out/confirm" --filter="${flagged_filter}" )
+        for c in ${flagged_categories}; do
+            confirm_args+=( --category="${c}" )
+        done
+        set +e
+        "${HEAD_JULIA}" --startup-file=no "${RTB_DIR}/suite/bench.jl" "${ARMS[0]}" "--arm=control=${ARMS_DIR}/control/bin/julia" "${ARMS[1]}" \
+            "${confirm_args[@]}" 2>&1 | tee -a "${RTB_DIR}/benchmark.log"
+        "${HEAD_JULIA}" --startup-file=no "${RTB_DIR}/suite/compare.jl" "${RTB_DIR}/out/confirm" --control=control "${compare_args[@]:1}"
+        confirmed=$?
+        set -e
+        # An incomplete confirmation confirms nothing; the first verdict stands
+        if [[ "${confirmed}" != 2 ]]; then
+            verdict="${confirmed}"
+            mv "${RTB_DIR}/out/report.md" "${RTB_DIR}/out/report-first.md"
+            {
+                cat "${RTB_DIR}/out/confirm/report.md"
+                printf '\n<details><summary>The comparison that flagged them</summary>\n\n'
+                cat "${RTB_DIR}/out/report-first.md"
+                printf '\n</details>\n'
+            } > "${RTB_DIR}/out/report.md"
+        fi
+    fi
+fi
 annotate() {
     buildkite-agent annotate --context "runtime-benchmarks-${TRIPLET}" --style "$1" < "${RTB_DIR}/out/report.md" || true
 }

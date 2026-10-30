@@ -35,8 +35,16 @@ alternating order, `RTB_BLOCKS` (3) blocks; the `parallel` category gets `RTB_TH
 benchmarking, a master build about 3. `compare.jl` reports a benchmark only when every
 block agrees beyond its tolerance (3% for cycles, 6% for time, wider where a benchmark
 sets its own) and the arms do not overlap; a category's geometric mean moving 1.5% in
-every block also counts. The job fails on a regression, and posts the report as an
-annotation when there are differences or when it measured a build alone.
+every block also counts. A cycles change that the instruction counts do not explain must
+exceed 15%: two builds place code differently even when nothing the benchmarks run has
+changed, and that alone moves some benchmarks by up to 12%.
+
+On a pull request, regressions are measured again with a third arm, the master build
+before the merge-base (`tools/flagged.jl` in the suite picks the flagged benchmarks and
+the whole of any flagged category). A regression stands only when head also differs that
+way from this control; otherwise two master builds differ as much and the report lists it
+as dropped. The job fails on a regression, and posts the report as an annotation when
+there are differences or when it measured a build alone.
 
 Hardware counters: without root the driver reads the calling thread's cycles and
 instructions (`thread_selfcounts`); with root it also records branch and L1D misses
@@ -51,4 +59,5 @@ choice.
 | `runtime-benchmarks/out/results-meta.json` | the builds, the machine, the settings, the suite commit, failed processes |
 | `runtime-benchmarks/out/report.md`, `compare.json` | the report and, on pull requests, the per-benchmark and per-category verdicts |
 | `runtime-benchmarks/out/logs/*.log` | the output of every benchmark process |
+| `runtime-benchmarks/out/confirm/` | the same for the confirmation run with the control arm, when there was one; `out/report-first.md` is the report of the first comparison |
 | `runtime-benchmarks/benchmark.log` | the orchestrator's log |
