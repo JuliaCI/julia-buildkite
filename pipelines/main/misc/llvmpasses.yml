@@ -3,9 +3,9 @@ steps:
     steps:
       - label: "llvmpasses"
         key: "llvmpasses"
-        # Wait until `build-x86_64-linux-gnu` is finished, so that we only see build errors once
+        # Reuse the assert build (`FORCE_ASSERTIONS=1 LLVM_ASSERTIONS=1`) instead of building again
         depends_on:
-          - "build_x86_64-linux-gnu"
+          - "build_x86_64-linux-gnuassert"
         plugins:
           - JuliaCI/julia#v1:
               # Drop default "registries" directory, so it is not persisted from execution to execution
@@ -19,18 +19,20 @@ steps:
               workspaces:
                 - "/cache/repos:/cache/repos"
         commands: |
-          echo "--- make release"
-          # Enable Julia assertions: FORCE_ASSERTIONS=1
-          # Enable LLVM assertions:  LLVM_ASSERTIONS=1
-          export MAKE_ASSERT_FLAGS="FORCE_ASSERTIONS=1 LLVM_ASSERTIONS=1"
-          make -j$${JULIA_CPU_THREADS:?} release JULIA_PRECOMPILE=0 $${MAKE_ASSERT_FLAGS:?}
-          echo "--- make src/install-analysis-deps"
-          make --output-sync -j$${JULIA_CPU_THREADS:?} -C src install-analysis-deps $${MAKE_ASSERT_FLAGS:?}
+          # Download pre-built assert julia, extract into `usr/`
+          buildkite-agent artifact download --step "build_x86_64-linux-gnuassert" 'julia-*-linuxassert-x86_64.tar.gz' .
+          mkdir -p usr
+          tar -C usr --strip-components=1 -zxf julia-*-linuxassert-x86_64.tar.gz
+          rm -f julia-*-linuxassert-x86_64.tar.gz
+
           echo "+++ make test/llvmpasses"
-          make --output-sync -j$${JULIA_CPU_THREADS:?} -C test/llvmpasses $${MAKE_ASSERT_FLAGS:?}
+          # Installs `opt`, `FileCheck`, `lit`, etc. from the assert LLVM JLLs (download only).
+          # `libjulia-codegen` (the `opt` pass plugin) lives in `usr/lib/julia` in a binary-dist.
+          export LD_LIBRARY_PATH="$$(pwd)/usr/lib/julia$${LD_LIBRARY_PATH:+:$$LD_LIBRARY_PATH}"
+          make --output-sync -j$${JULIA_CPU_THREADS:?} -C test/llvmpasses LLVM_ASSERTIONS=1
         timeout_in_minutes: 60
         agents:
-          queue: "build"
+          queue: "test"
           sandbox_capable: "true"
           os: "linux"
           arch: "x86_64"
