@@ -125,7 +125,16 @@ elif [[ -n "${JULIA_CI_BUILD_MODE-}" ]]; then
 else
     echo "--- Build Julia"
     echo "Note: The log stream is filtered. [buildroot] replaces pwd $(pwd)"
-    ${MAKE} "${MFLAGS[@]}" 2>&1 | filter_buildroot
+    BUILD_TARGETS=( default )
+    PRECOMPILE_THREADS="${JULIA_PRECOMPILE_THREADS}"
+    # Where Julia can build the bounds-checked stdlib caches without the normal ones,
+    # precompile both at the same time; the companion archive below then only packages
+    # them. Both precompile processes get their own jobserver, so split the budget.
+    if [[ "${HAS_CHECKBOUNDS_PKGIMAGES}" == "true" ]] && grep -q '^stdlibs-cache-checkbounds:' Makefile; then
+        BUILD_TARGETS+=( stdlibs-cache-checkbounds )
+        PRECOMPILE_THREADS=$(( JULIA_CPU_THREADS > 1 ? JULIA_CPU_THREADS / 2 : 1 ))
+    fi
+    JULIA_PRECOMPILE_THREADS="${PRECOMPILE_THREADS}" ${MAKE} "${MFLAGS[@]}" "${BUILD_TARGETS[@]}" 2>&1 | filter_buildroot
 fi
 
 

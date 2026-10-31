@@ -220,13 +220,15 @@ for name in sys.argv[1:]:
     def __exit__(self, *args):
         self.doCleanups()
 
-    def test_build_companion_after_macos_app_packaging(self):
-        self.fixtures("macos")
+    def mock_build(self, platform, makefile=""):
+        self.fixtures(platform)
         self.write(self.work / "VERSION", "1.14.0")
+        self.write(self.work / "Makefile", makefile)
         (self.work / "usr/bin").mkdir(parents=True)
         shutil.copy(self.bin / "julia", self.work / "usr/bin/julia")
         with (self.utils / "build_envs.sh").open("a") as f:
             f.write("export MAKE=make MAKE_FLAGS= JULIA_CPU_TARGET=generic EXPECTED_WORD_SIZE=64 JULIA_BINARYDIST_FILENAME=julia-build\n")
+            f.write("export JULIA_CPU_THREADS=8\n")
         for tool in ("git", "cc", "ld"):
             self.write(self.bin / tool, "#!/usr/bin/env bash\nexit 0\n")
         self.python(self.bin / "make", '''
@@ -235,6 +237,8 @@ args = sys.argv[1:]
 assert args[-1] != "JULIA_CHECK_BOUNDS_PKGIMAGES=1"
 assert "JULIA_CHECK_BOUNDS_PKGIMAGES=0" in args
 stage = pathlib.Path(os.environ["FIXTURE_STAGE"])
+with open(stage / "make-calls", "a") as f:
+    f.write(os.environ.get("JULIA_PRECOMPILE_THREADS", "") + " " + " ".join(args) + "\\n")
 if "binary-dist" in args or "contrib/mac/app" in args:
     for p in pathlib.Path(".").glob("julia-*.tar.gz"):
         p.unlink()
@@ -242,14 +246,34 @@ if "binary-dist" in args or "contrib/mac/app" in args:
     if "contrib/mac/app" in args:
         shutil.copytree("app/Julia-1.14.app", "contrib/mac/app/dmg/Julia-1.14.app")
 elif "checkbounds-pkgimages" in args:
-    assert pathlib.Path("contrib/mac/app/dmg/Julia-1.14.app").is_dir()
+    if os.environ["OS"] == "macos":
+        assert pathlib.Path("contrib/mac/app/dmg/Julia-1.14.app").is_dir()
     shutil.copy(stage / "julia-fixture.checkbounds.tar.gz", "julia-build.checkbounds.tar.gz")
 ''')
         self.run_script("build_julia.sh")
         for location in ("artifacts", "staging"):
             self.assertTrue((self.output / location / "julia-fixture.tar.gz").is_file())
             self.assertTrue((self.output / location / "julia-fixture.checkbounds.tar.gz").is_file())
+        return (self.stage / "make-calls").read_text().splitlines()
+
+    def test_build_companion_after_macos_app_packaging(self):
+        self.mock_build("macos", "checkbounds-pkgimages:\n")
         self.assertTrue((self.output / "staging/julia-fixture.app.tar.gz").is_file())
+
+    def test_build_companion_concurrently(self):
+        calls = self.mock_build("linux", "checkbounds-pkgimages:\nstdlibs-cache-checkbounds:\n")
+        main = [c for c in calls if c.split()[-1] in ("default", "stdlibs-cache-checkbounds")]
+        self.assertEqual(len(main), 1)
+        self.assertTrue(main[0].startswith("4 "))
+        self.assertTrue(main[0].endswith(" default stdlibs-cache-checkbounds"))
+        # the later steps get the whole precompile budget again
+        self.assertTrue(all(c.startswith("8 ") for c in calls if c is not main[0]))
+
+    def test_build_companion_serially_without_target(self):
+        calls = self.mock_build("linux", "checkbounds-pkgimages:\n")
+        main = [c for c in calls if c.split()[-1] == "default"]
+        self.assertEqual(len(main), 1)
+        self.assertTrue(main[0].startswith("8 "))
 
     def test_missing_companion_fails_publish(self):
         self.fixtures("linux")
