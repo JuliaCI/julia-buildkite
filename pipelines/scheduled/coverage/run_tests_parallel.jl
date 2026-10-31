@@ -19,7 +19,25 @@ else
     """
 end
 
-cmd = `$(Base.julia_cmd()) --code-coverage=lcov-%p.info -e $(script)`
+# Leave the test suites' own files uninstrumented: instrumented code is optimized
+# differently, so tests of inference and inlining would see other code than in
+# normal CI. Julia versions without the option instrument everything.
+coverage_exclude = String[]
+if hasfield(Base.JLOptions, :coverage_exclude)
+    share = normpath(Sys.BINDIR, "..", "share", "julia")
+    for root in (pwd(), share), dir in (["test"], ["Compiler", "test"], ["JuliaSyntax", "test"], ["JuliaLowering", "test"])
+        push!(coverage_exclude, joinpath(root, dir...))
+    end
+    stdlib_dir = joinpath(share, "stdlib", "v$(VERSION.major).$(VERSION.minor)")
+    for name in readdir(stdlib_dir)
+        push!(coverage_exclude, joinpath(stdlib_dir, name, "test"))
+    end
+    filter!(isdir, coverage_exclude)
+end
+exclude_flag = isempty(coverage_exclude) ? `` :
+    `--code-coverage-exclude=$(join(coverage_exclude, Sys.iswindows() ? ';' : ':'))`
+
+cmd = `$(Base.julia_cmd()) --code-coverage=lcov-%p.info $exclude_flag -e $(script)`
 
 @info "Running command" cmd
 p = run(pipeline(cmd; stdin, stdout, stderr); wait = false)
