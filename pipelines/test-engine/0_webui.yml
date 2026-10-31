@@ -1,0 +1,64 @@
+# This file records the steps configured in the julia-test-engine pipeline's
+# webUI; modifying this file has no effect -- paste it into the webUI when
+# it changes.
+#
+# julia-test-engine uploads the build pipelines' test results to Buildkite
+# Test Engine. The build pipelines trigger one build here per test job, as
+# soon as that job has finished (the "Test Engine" group rendered by
+# utilities/render_launch_pipeline.py); the job here downloads the test
+# job's results.tar.gz artifact and posts it with the suite token, which
+# the julia-oidc-test-engine IAM role reads from SSM. The token never
+# reaches a build pipeline job: a pull request runs attacker-controlled
+# code there.
+#
+# SECURITY: pull requests trigger this pipeline, so everything a trigger
+# can set -- branch, commit, message, env and meta-data of the triggered
+# build -- is attacker-controlled, and this job must give none of it a
+# way to run code:
+#   * No git checkout and no plugins. The agent's own checkout would run
+#     git under the trigger's env (GIT_CONFIG_* runs commands) on a
+#     trigger-chosen commit (repository hooks), and the external-buildkite
+#     plugin takes its repo URL and version from build meta-data before
+#     its own config, so a trigger could point it at any repository. The
+#     script is cloned from the `main` branch of julia-buildkite by the
+#     command below, and nothing else is run.
+#   * The job env is allowlisted by the agent, since bash, git and curl
+#     all take instructions from the environment (BASH_ENV, GIT_CONFIG_*,
+#     CURL_HOME). Only TEST_* may come from the trigger; the script also
+#     takes no endpoint or account from the env.
+# So the pipeline MUST be configured in Buildkite with:
+#   * Trigger builds after pushing code: OFF
+#   * Build pull requests: OFF (including from third-party forked
+#     repositories)
+#   * Its own agents, on queue "test-engine" and used by nothing else,
+#     started with
+#       --skip-checkout
+#       --no-local-hooks
+#       --enable-environment-variable-allowlist
+#       --allowed-environment-variables '^TEST_(STEP_KEY|BRANCH|COMMIT|MESSAGE)$'
+#     (Buildkite-set variables are always passed.) One job at a time, and
+#     ideally a fresh agent per job. They need buildkite-agent, git, curl
+#     7.86+ and tar.
+# The IAM role trusts this pipeline's UUID and the step key
+# `upload_test_results` only, and can read nothing but the Test Engine
+# token (ops/terraform/test_engine.tf). The repository setting of the
+# pipeline is never checked out; JuliaLang/julia keeps the build links
+# meaningful.
+#
+# If the agents live in another cluster than julia-pr / julia-ci, Buildkite
+# rules must let those pipelines trigger builds here and let this pipeline
+# read their artifacts. See ops/README.md.
+steps:
+  - group: "Test Engine"
+    steps:
+      - label: ":bar_chart: upload test results"
+        # The step key IS this job's OIDC identity.
+        key: "upload_test_results"
+        timeout_in_minutes: 30
+        commands: |
+          cd "$$(mktemp -d)"
+          git clone --quiet --depth 1 --branch main --single-branch https://github.com/JuliaCI/julia-buildkite
+          bash julia-buildkite/utilities/upload_test_results.sh
+        agents:
+          queue: "test-engine"
+          os: "linux"
