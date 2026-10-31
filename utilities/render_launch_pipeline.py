@@ -37,10 +37,13 @@ The result is grouped into one `group:` per label: Build, Check, Test,
 Allow Fail, JuliaSyntax, JuliaC.
 """
 
+import functools
+import json
 import os
 import re
 import subprocess
 import sys
+import urllib.request
 
 # Directory of the .buildkite checkout root (this file lives in
 # <root>/utilities/render_launch_pipeline.py).
@@ -361,6 +364,11 @@ TEST_STATIC = [
     "test_revise.yml",
 ]
 
+# Buildkite job priorities; a higher one takes the next free agent first.
+HIGH_PRIORITY, NORMAL_PRIORITY, LOW_PRIORITY = 1, 0, -1
+HIGH_PRIORITY_LABEL = "high priority CI"
+LOW_PRIORITY_LABEL = "low priority CI"
+
 
 # --------------------------------------------------------------------------
 # group emission (text)
@@ -425,6 +433,44 @@ def build_group_text():
     return emit_group("Build", "\n".join(c for c in chunks if c))
 
 
+def log(msg):
+    # stdout is the rendered pipeline
+    sys.stderr.write(msg + "\n")
+
+
+def github_repo():
+    """The GitHub repository this build is of: julia, or julia-buildkite for
+    the self-test pipeline."""
+    m = re.search(r"github\.com[:/](.+?)(?:\.git)?/?$", os.environ.get("BUILDKITE_REPO", ""))
+    return m.group(1) if m else "JuliaLang/julia"
+
+
+def pr_has_label(label):
+    """Whether the pull request has `label`. Buildkite records the labels when
+    it creates a build, and a rebuild from its UI keeps those of the build it
+    repeats, so a label missing there is looked up on GitHub."""
+    if label in os.environ.get("BUILDKITE_PULL_REQUEST_LABELS", "").split(","):
+        return True
+    return label in github_pr_labels()
+
+
+@functools.cache
+def github_pr_labels():
+    """The pull request's labels on GitHub, read once per render."""
+    url = (f"https://api.github.com/repos/{github_repo()}/issues/"
+           f"{os.environ['BUILDKITE_PULL_REQUEST']}/labels?per_page=100")
+    request = urllib.request.Request(url, headers={"Accept": "application/vnd.github+json"})
+    if os.environ.get("GITHUB_TOKEN"):
+        request.add_header("Authorization", f"Bearer {os.environ['GITHUB_TOKEN']}")
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            return frozenset(l.get("name") for l in json.load(response))
+    except (OSError, ValueError) as e:
+        log(f"Could not read the pull request's labels from GitHub ({e}); "
+            "going by the labels Buildkite recorded")
+        return frozenset()
+
+
 def check_group_text():
     chunks = []
     for rel in CHECK_STATIC:
@@ -454,6 +500,47 @@ def allow_fail_group_text():
     return emit_group("Allow Fail", "\n".join(c for c in chunks if c))
 
 
+def is_release_build():
+    """Whether this julia-ci build is a release build: a push to a release-*
+    branch, the tag build itself, or a build created with branch=v<version>."""
+    if os.environ.get("BUILDKITE_PIPELINE_SLUG") != "julia-ci":
+        return False
+    if os.environ.get("BUILDKITE_BRANCH", "").startswith("release-"):
+        return True
+    return any(re.match(r"v[0-9]", os.environ.get(var, ""))
+               for var in ("BUILDKITE_TAG", "BUILDKITE_BRANCH"))
+
+
+def ci_priority():
+    """The Buildkite job priority of this build: high, normal or low. A pull
+    request to julia or julia-buildkite can pick its tier with a label.
+    Otherwise release builds and pull requests into a release-* branch
+    (backports) run ahead of master and other pull requests in the shared
+    queues."""
+    if (os.environ.get("BUILDKITE_PIPELINE_SLUG") in ("julia-pr", "julia-buildkite-ci")
+            and os.environ.get("BUILDKITE_PULL_REQUEST", "false") != "false"):
+        if pr_has_label(HIGH_PRIORITY_LABEL):
+            return HIGH_PRIORITY
+        if pr_has_label(LOW_PRIORITY_LABEL):
+            return LOW_PRIORITY
+    if is_release_build():
+        return HIGH_PRIORITY
+    if os.environ.get("BUILDKITE_PULL_REQUEST_BASE_BRANCH", "").startswith("release-"):
+        return HIGH_PRIORITY
+    return NORMAL_PRIORITY
+
+
+def pipeline_header():
+    """The start of the rendered pipeline. A top-level `priority` only covers
+    the steps of its own upload, so the launcher jobs also get it as
+    JULIA_CI_PRIORITY, for the pipelines they upload."""
+    priority = ci_priority()
+    return (f"priority: {priority}\n"
+            "env:\n"
+            f'  JULIA_CI_PRIORITY: "{priority}"\n'
+            "steps:\n")
+
+
 # Trailing barrier + trigger of the trusted julia-publish pipeline (inlined
 # verbatim so the wait reliably barriers all dynamically-uploaded jobs).
 TRAILER = '''\
@@ -465,6 +552,12 @@ TRAILER = '''\
       commit: "${BUILDKITE_COMMIT}"
       branch: "${BUILDKITE_BRANCH}"
       message: "publish: ${BUILDKITE_MESSAGE}"'''
+
+
+def trailer():
+    """The barrier and publish trigger. The julia-publish build takes this
+    build's priority."""
+    return TRAILER + f'\n      env:\n        JULIA_CI_PRIORITY: "{ci_priority()}"'
 
 
 def main():
@@ -485,10 +578,10 @@ def main():
     # into either group, re-add the corresponding `blocks.append(...)` from
     # `main` (the juliasyntax.* / juliac/ YAMLs are already present in-tree).
 
-    sys.stdout.write("steps:\n")
+    sys.stdout.write(pipeline_header())
     sys.stdout.write("\n".join(blocks))
     sys.stdout.write("\n")
-    sys.stdout.write(TRAILER)
+    sys.stdout.write(trailer())
     sys.stdout.write("\n")
 
 
