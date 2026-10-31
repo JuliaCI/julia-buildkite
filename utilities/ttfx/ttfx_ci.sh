@@ -174,6 +174,11 @@ BASE_NOTE=""
 # commit stands in for the merge-base, so the comparison path is exercised too. Either
 # way, a base that is a [ci skip] commit gives way to its nearest ancestor that was built.
 MERGE_BASE=""
+# The self-test compares two julia master commits, which no pull request here changes: a
+# regression between them, or a parent without a build, exits SELF_TEST_INCONCLUSIVE, on
+# which ttfx_macos.yml soft-fails. Anything else (a broken script or tool) still fails.
+SELF_TEST=false
+SELF_TEST_INCONCLUSIVE=75
 if [[ -n "${TTFX_RELEASE}" ]]; then
     : # a release stands alone
 elif [[ "${TTFX_BASE}" == "commit" ]]; then
@@ -189,7 +194,12 @@ elif [[ "${BUILDKITE_PIPELINE_SLUG:-}" == "julia-pr" && "${BUILDKITE_PULL_REQUES
 elif [[ "${BUILDKITE_PIPELINE_SLUG:-}" == julia-buildkite* ]]; then
     BASE_BRANCH="master"
     MERGE_BASE="$(git rev-parse HEAD^)"
+    SELF_TEST=true
     echo "--- Self-test: comparing against the parent commit ${MERGE_BASE}"
+fi
+base_unavailable_status=1
+if [[ "${SELF_TEST}" == true ]]; then
+    base_unavailable_status="${SELF_TEST_INCONCLUSIVE}"
 fi
 if [[ -n "${MERGE_BASE}" ]]; then
     MODE="compare"
@@ -220,7 +230,7 @@ if [[ -n "${MERGE_BASE}" ]]; then
                 if (( $(date +%s) >= deadline )); then
                     echo "^^^ +++"
                     echo "The ${BASE_BRANCH} build of the merge-base ${MERGE_BASE:0:10} was not ready after ${TTFX_BASE_WAIT_MINUTES} minutes (state: ${state}); retry this job once it is" >&2
-                    exit 1
+                    exit "${base_unavailable_status}"
                 fi
                 echo "$(date -u +%H:%M:%S)  build of ${MERGE_BASE:0:10} not staged yet (${state}); waiting"
                 sleep 60
@@ -230,7 +240,7 @@ if [[ -n "${MERGE_BASE}" ]]; then
                 # none: not coming
                 echo "^^^ +++"
                 echo "No ${BASE_BRANCH} build of the merge-base ${MERGE_BASE:0:10} to compare against (its build: ${state})" >&2
-                exit 1
+                exit "${base_unavailable_status}"
                 ;;
         esac
     done
@@ -307,6 +317,10 @@ case "${verdict}" in
         ;;
     1)
         annotate "error"
+        # ttfx_compare.jl also exits 1 when it throws; only a finished comparison has a verdict
+        if [[ "${SELF_TEST}" == true ]] && grep -q '"verdict": "regression"' "${TTFX_DIR}/compare.json" 2>/dev/null; then
+            exit "${SELF_TEST_INCONCLUSIVE}"
+        fi
         exit 1
         ;;
     *)
