@@ -50,7 +50,7 @@ A second `julia-ci` schedule, Saturday nights with `TTFX_RELEASE=latest`, builds
 nothing and measures the newest stable release, the LTS and the next release's nightly on the
 TTFX tasks instead, as references for the master series (see `utilities/ttfx/README.md`).
 
-Pull requests with the `needs full CI` label also run the scheduled workloads.
+Pull requests with the `needs extended CI` label also run the scheduled workloads.
 Coverage data is collected but not uploaded to Codecov or Coveralls.
 
 The x86-64 Linux assertion build is tested under rr (with the `rr` and

@@ -28,7 +28,8 @@ def render(*args, source=None, **build_env):
     env = os.environ.copy()
     for var in ("BUILDKITE_SOURCE", "BUILDKITE_PIPELINE_SLUG", "BUILDKITE_TAG",
                 "BUILDKITE_BRANCH", "NOGPL_ONLY", "OPT_ONLY", "OPT_TESTS_ALLOW_FAIL",
-                "ONLY_TRIPLETS", "TTFX_RELEASE"):
+                "ONLY_TRIPLETS", "TTFX_RELEASE", "BUILDKITE_PULL_REQUEST",
+                "BUILDKITE_PULL_REQUEST_BASE_BRANCH", "BUILDKITE_PULL_REQUEST_LABELS"):
         env.pop(var, None)
     if source is not None:
         env["BUILDKITE_SOURCE"] = source
@@ -401,6 +402,60 @@ class RenderLaunchPipelineTests(unittest.TestCase):
                 render(**build_env)
             self.assertIn("ONLY_TRIPLETS: no jobs for", cm.exception.stderr)
 
+    def test_priority(self):
+        header = "priority: {0}\nenv:\n  JULIA_CI_PRIORITY: \"{0}\"\nsteps:\n"
+        for priority, build_env in (
+                (0, {"BUILDKITE_PIPELINE_SLUG": "julia-ci", "BUILDKITE_BRANCH": "master"}),
+                (0, {"BUILDKITE_PIPELINE_SLUG": "julia-pr", "BUILDKITE_PULL_REQUEST": "1",
+                     "BUILDKITE_PULL_REQUEST_BASE_BRANCH": "master"}),
+                (0, {"BUILDKITE_PIPELINE_SLUG": "julia-buildkite-ci", "BUILDKITE_BRANCH": "main",
+                     "BUILDKITE_PULL_REQUEST": "false"}),
+                (1, {"BUILDKITE_PIPELINE_SLUG": "julia-ci", "BUILDKITE_BRANCH": "release-1.14"}),
+                (1, {"BUILDKITE_PIPELINE_SLUG": "julia-ci", "BUILDKITE_TAG": "v1.14.0"}),
+                (1, {"BUILDKITE_PIPELINE_SLUG": "julia-pr", "BUILDKITE_PULL_REQUEST": "1",
+                     "BUILDKITE_PULL_REQUEST_BASE_BRANCH": "release-1.14"}),
+                (0, {"BUILDKITE_PIPELINE_SLUG": "julia-buildkite-ci", "BUILDKITE_PULL_REQUEST": "1",
+                     "BUILDKITE_PULL_REQUEST_BASE_BRANCH": "main"}),
+                (1, {"BUILDKITE_PIPELINE_SLUG": "julia-buildkite-ci", "BUILDKITE_PULL_REQUEST": "1",
+                     "BUILDKITE_PULL_REQUEST_BASE_BRANCH": "main",
+                     "BUILDKITE_PULL_REQUEST_LABELS": "high priority CI"}),
+                (-1, {"BUILDKITE_PIPELINE_SLUG": "julia-buildkite-ci", "BUILDKITE_PULL_REQUEST": "1",
+                      "BUILDKITE_PULL_REQUEST_BASE_BRANCH": "main",
+                      "BUILDKITE_PULL_REQUEST_LABELS": "low priority CI"}),
+                (1, {"BUILDKITE_PIPELINE_SLUG": "julia-pr", "BUILDKITE_PULL_REQUEST": "1",
+                     "BUILDKITE_PULL_REQUEST_BASE_BRANCH": "master",
+                     "BUILDKITE_PULL_REQUEST_LABELS": "high priority CI"}),
+                (-1, {"BUILDKITE_PIPELINE_SLUG": "julia-pr", "BUILDKITE_PULL_REQUEST": "1",
+                      "BUILDKITE_PULL_REQUEST_BASE_BRANCH": "master",
+                      "BUILDKITE_PULL_REQUEST_LABELS": "low priority CI"}),
+                # a label wins over the rules, and high over low
+                (-1, {"BUILDKITE_PIPELINE_SLUG": "julia-pr", "BUILDKITE_PULL_REQUEST": "1",
+                      "BUILDKITE_PULL_REQUEST_BASE_BRANCH": "release-1.14",
+                      "BUILDKITE_PULL_REQUEST_LABELS": "low priority CI"}),
+                (1, {"BUILDKITE_PIPELINE_SLUG": "julia-pr", "BUILDKITE_PULL_REQUEST": "1",
+                     "BUILDKITE_PULL_REQUEST_BASE_BRANCH": "master",
+                     "BUILDKITE_PULL_REQUEST_LABELS": "low priority CI,high priority CI"})):
+            with self.subTest(env=build_env):
+                output = render(**build_env)
+                self.assertTrue(output.startswith(header.format(priority)))
+
+        # julia-publish builds get it from their trigger.
+        output = render(BUILDKITE_PIPELINE_SLUG="julia-ci", BUILDKITE_TAG="v1.14.0")
+        publish = output[output.index('group: "Publish"'):]
+        self.assertEqual(publish.count('JULIA_CI_PRIORITY: "1"'),
+                         publish.count('trigger: "julia-publish"'))
+
+        # The pipelines that launcher jobs upload take it from the environment.
+        for rel in ("main/misc/juliasyntax.test.yml", "main/misc/juliac/test_juliac_linux.yml",
+                    "main/misc/juliac/test_juliac_macos.yml",
+                    "main/misc/juliac/test_juliac_windows.yml", "main/misc/ttfx/ttfx_macos.yml",
+                    "main/misc/deploy_docs.yml", "publish/launch.yml"):
+            with open(os.path.join(ROOT, "pipelines", rel)) as f:
+                lines = [l for l in f if not l.startswith("#")]
+            self.assertEqual(lines[0], "priority: ${JULIA_CI_PRIORITY:-0}\n", rel)
+        with open(os.path.join(ROOT, "pipelines", "promote", "launch.yml")) as f:
+            self.assertIn("\npriority: 1\n", f.read())
+
     def test_rr_only_outside_pull_requests(self):
         # pull requests test the assertion build without rr; the rr jobs are skipped
         output = render()
@@ -518,6 +573,52 @@ class InterpolateTests(unittest.TestCase):
         for text in ("${FOO:0:2}", "${FOO/a/b}", "${FOO:=d}"):
             with self.assertRaisesRegex(ValueError, "unsupported"):
                 self.interpolate(text, {"FOO": "x"}, "test")
+
+
+class LabelTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        sys.path.insert(0, os.path.dirname(RENDERER))
+        import render_launch_pipeline
+        cls.rlp = render_launch_pipeline
+
+    def test_label_added_after_the_build_was_created(self):
+        import io
+        import json
+        from unittest import mock
+        rlp = self.rlp
+        env = {"BUILDKITE_PULL_REQUEST": "63807", "BUILDKITE_PULL_REQUEST_LABELS": "bugfix",
+               "BUILDKITE_REPO": "https://github.com/JuliaLang/julia.git"}
+        urls = []
+
+        def github(labels):
+            def urlopen(request, timeout):
+                urls.append(request.full_url)
+                return io.BytesIO(json.dumps([{"name": n} for n in labels]).encode())
+            return urlopen
+        rlp.github_pr_labels.cache_clear()
+        with mock.patch.dict(os.environ, env):
+            with mock.patch("urllib.request.urlopen", github(["bugfix", "high priority CI"])):
+                self.assertTrue(rlp.pr_has_label("high priority CI"))
+            self.assertEqual(urls, ["https://api.github.com/repos/JuliaLang/julia/issues/63807/labels?per_page=100"])
+            rlp.github_pr_labels.cache_clear()
+            with mock.patch("urllib.request.urlopen", github(["bugfix"])):
+                self.assertFalse(rlp.pr_has_label("high priority CI"))
+
+            # julia-buildkite's own pull requests are looked up there
+            rlp.github_pr_labels.cache_clear()
+            urls.clear()
+            with mock.patch.dict(os.environ, {"BUILDKITE_REPO": "git@github.com:JuliaCI/julia-buildkite.git"}), \
+                    mock.patch("urllib.request.urlopen", github(["high priority CI"])):
+                self.assertTrue(rlp.pr_has_label("high priority CI"))
+            self.assertEqual(urls, ["https://api.github.com/repos/JuliaCI/julia-buildkite/issues/63807/labels?per_page=100"])
+
+            def unreachable(request, timeout):
+                raise OSError("no network")
+            rlp.github_pr_labels.cache_clear()
+            with mock.patch("urllib.request.urlopen", unreachable), \
+                    mock.patch.object(rlp, "log"):
+                self.assertFalse(rlp.pr_has_label("high priority CI"))
 
 
 if __name__ == "__main__":

@@ -1,3 +1,4 @@
+priority: ${JULIA_CI_PRIORITY:-0}
 steps:
   - group: "JuliaSyntax"
     steps:

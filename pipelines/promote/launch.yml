@@ -3,6 +3,8 @@
 # bucket into the release bucket's layout, updates the checksum files and
 # latest pointers, and purges the CDN. No signing happens here -- the
 # artifacts were signed by julia-publish; this step only re-maps them.
+# Promotion only ever runs for a release, so it is always high priority.
+priority: 1
 steps:
   - group: "Promote"
     steps:
