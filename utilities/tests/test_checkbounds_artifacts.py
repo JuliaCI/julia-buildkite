@@ -257,8 +257,12 @@ elif "checkbounds-pkgimages" in args:
         return (self.stage / "make-calls").read_text().splitlines()
 
     def test_build_companion_after_macos_app_packaging(self):
-        self.mock_build("macos", "checkbounds-pkgimages:\n")
+        calls = self.mock_build("macos", "checkbounds-pkgimages:\n")
         self.assertTrue((self.output / "staging/julia-fixture.app.tar.gz").is_file())
+        # the .app rule runs binary-dist itself, so binary-dist must not also run on its own
+        dist = [c for c in calls if "binary-dist" in c.split() or "contrib/mac/app" in c]
+        self.assertEqual(len(dist), 1)
+        self.assertIn("contrib/mac/app", dist[0])
 
     def test_build_companion_concurrently(self):
         calls = self.mock_build("linux", "checkbounds-pkgimages:\nstdlibs-cache-checkbounds:\n")
