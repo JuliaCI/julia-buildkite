@@ -161,7 +161,20 @@ echo "Note: The log stream is filtered. [buildroot] replaces pwd $(pwd)"
 ${MAKE} "${MFLAGS[@]}" build-stats 2>&1 | filter_buildroot
 
 echo "--- Create build artifacts"
-${MAKE} "${MFLAGS[@]}" binary-dist
+if [[ "${OS}" == macos* ]]; then
+    # On macOS, also assemble the unsigned Julia.app (see the staging step below). The
+    # contrib/mac/app rule runs binary-dist and unpacks its tarball into the .app,
+    # so build both with that one call: running binary-dist first made the .app rule
+    # install everything and build the HTML docs a second time. Pass the same MFLAGS as
+    # the main build (esp. TAGGED_RELEASE_BANNER), otherwise build_h.jl regenerates with a
+    # different banner and forces a full system-image rebuild. The rule's target is the .app
+    # directory, so remove any earlier one, or make would skip it and binary-dist with it.
+    rm -rf "contrib/mac/app/dmg/${MAC_APP_NAME?}"
+    MACOS_CODESIGN_IDENTITY="" ${MAKE} "${MFLAGS[@]}" -C contrib/mac/app \
+        "APP_NAME=${MAC_APP_NAME?}" "dmg/${MAC_APP_NAME}"
+else
+    ${MAKE} "${MFLAGS[@]}" binary-dist
+fi
 
 # Rename the build artifact in case we want to name it differently, as is the case on `musl`.
 if [[ "${JULIA_BINARYDIST_FILENAME}.tar.gz" != "${UPLOAD_FILENAME}.tar.gz" ]]; then
@@ -184,20 +197,14 @@ source .buildkite/utilities/upload_to_s3.sh
 # The staging buckets disable object ACLs (public read via bucket policy)
 UPLOAD_TO_S3_ACL=none upload_to_s3 "${UPLOAD_FILENAME}.tar.gz" "${STAGING_TARGET}.tar.gz"
 
-# macOS: assemble the Julia.app here and stage it too. The build runs on a Mac,
+# macOS: stage the Julia.app assembled above too. The build runs on a Mac,
 # so contrib/mac/app's tooling (osacompile, etc.) is available; the trusted
 # publish step then only has to codesign + repackage the .app into the signed
 # .dmg -- it needs no app-building tools and no Mac. The .app is staged
 # UNSIGNED (MACOS_CODESIGN_IDENTITY is unset) under a separate key; the tree
 # tarball above is unchanged (test jobs still consume it).
 if [[ "${OS}" == macos* ]]; then
-    echo "--- [mac] Assemble the unsigned Julia.app"
-    # Pass the same MFLAGS as the main build (esp. TAGGED_RELEASE_BANNER): the
-    # contrib/mac/app rule re-runs binary-dist, and without the matching flags
-    # build_h.jl regenerates with a different banner, going stale and forcing a
-    # full system-image rebuild. With them it collapses to a fast re-install+re-tar.
-    MACOS_CODESIGN_IDENTITY="" ${MAKE} "${MFLAGS[@]}" -C contrib/mac/app \
-        "APP_NAME=${MAC_APP_NAME?}" "dmg/${MAC_APP_NAME}"
+    echo "--- [mac] Pack the unsigned Julia.app"
     tar zcf "${UPLOAD_FILENAME}.app.tar.gz" -C contrib/mac/app/dmg "${MAC_APP_NAME}"
     echo "--- [mac] Stage the unsigned .app to s3://${STAGING_TARGET}.app.tar.gz"
     UPLOAD_TO_S3_ACL=none upload_to_s3 "${UPLOAD_FILENAME}.app.tar.gz" "${STAGING_TARGET}.app.tar.gz"
