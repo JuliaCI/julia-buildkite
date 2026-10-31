@@ -1,6 +1,6 @@
-# ROOTFS_IMAGE_NAME    TRIPLET                        ARCH           ARCH_ROOTFS    MAKE_FLAGS                                                                              TIMEOUT       ROOTFS_TAG    ROOTFS_HASH
-package_linux          powerpc64le-linux-gnu          powerpc64le    powerpc64le    .                                                                                       .             v6.00         a7e3fe07d581d5c97e2c7aca85b2273597f21c0b
-package_linux          powerpc64le-linux-gnuassert    powerpc64le    powerpc64le    FORCE_ASSERTIONS=1,LLVM_ASSERTIONS=1                                                    .             v6.00         a7e3fe07d581d5c97e2c7aca85b2273597f21c0b
+# ROOTFS_IMAGE_NAME    TRIPLET                        ARCH           ARCH_ROOTFS    MAKE_FLAGS                                                                              TIMEOUT       ROOTFS_TAG    ROOTFS_HASH    SCHED_CPUS    SCHED_THREADS    SCHED_MEM_GIB
+package_linux          powerpc64le-linux-gnu          powerpc64le    powerpc64le    .                                                                                       .             v6.00         a7e3fe07d581d5c97e2c7aca85b2273597f21c0b    4    8    12
+package_linux          powerpc64le-linux-gnuassert    powerpc64le    powerpc64le    FORCE_ASSERTIONS=1,LLVM_ASSERTIONS=1                                                    .             v6.00         a7e3fe07d581d5c97e2c7aca85b2273597f21c0b    4    8    12
 
 # These special lines allow us to embed default values for the columns above.
 # Any column without a default mapping here will simply substitute a `.` to the empty string

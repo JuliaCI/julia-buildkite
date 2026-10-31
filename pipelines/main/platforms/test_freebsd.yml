@@ -30,6 +30,9 @@ steps:
         commands: "bash .buildkite/utilities/test_julia.sh"
         agents:
           queue: "test"
+          sched_cpus: "8"
+          sched_threads: "8"
+          sched_mem_gib: "32"
           os: "freebsd"
           arch: "${ARCH}"
         env:

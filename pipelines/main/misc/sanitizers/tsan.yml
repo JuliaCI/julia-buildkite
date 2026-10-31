@@ -23,6 +23,9 @@ steps:
         VERBOSE=1 contrib/tsan/build.sh ./tmp/test-tsan -j$${JULIA_CPU_THREADS:?} julia-src-debug
       agents:
         queue: "build"
+        sched_cpus: "2"
+        sched_threads: "16"
+        sched_mem_gib: "40"
         sandbox_capable: "true"
         os: "linux"
         arch: "x86_64"

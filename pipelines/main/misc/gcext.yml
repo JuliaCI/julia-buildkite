@@ -36,6 +36,9 @@ steps:
         soft_fail: ${ALLOW_FAIL?}
         agents:
           queue: "test"
+          sched_cpus: "1"
+          sched_threads: "1"
+          sched_mem_gib: "8"
           sandbox_capable: "true"
           os: "linux"
           arch: "x86_64"

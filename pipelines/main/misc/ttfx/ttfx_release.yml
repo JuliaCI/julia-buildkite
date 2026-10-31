@@ -20,6 +20,9 @@ steps:
         timeout_in_minutes: 120
         agents:
           queue: "test"
+          sched_cpus: "4"
+          sched_threads: "4"
+          sched_mem_gib: "16"
           os: "macos"
           arch: "aarch64"
         env:
@@ -40,6 +43,9 @@ steps:
         timeout_in_minutes: 120
         agents:
           queue: "test"
+          sched_cpus: "4"
+          sched_threads: "4"
+          sched_mem_gib: "16"
           os: "macos"
           arch: "aarch64"
         env:
@@ -59,6 +65,9 @@ steps:
         timeout_in_minutes: 120
         agents:
           queue: "test"
+          sched_cpus: "4"
+          sched_threads: "4"
+          sched_mem_gib: "16"
           os: "macos"
           arch: "aarch64"
         env:

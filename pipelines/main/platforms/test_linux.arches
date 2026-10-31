@@ -1,9 +1,9 @@
-# ROOTFS_IMAGE_NAME    TRIPLET                    ARCH           ARCH_ROOTFS    TIMEOUT    USE_RR     ROOTFS_TAG    ROOTFS_HASH    SKIP_PR
-tester_linux           x86_64-linux-gnu           x86_64         x86_64         .          .          v8.5         0180f0aba045c63c44e4732b7981716aa77eaf71    .
-tester_linux           x86_64-linux-gnuassert     x86_64         x86_64         .          .          v8.5         0180f0aba045c63c44e4732b7981716aa77eaf71    .
-tester_linux           x86_64-linux-gnuassert     x86_64         x86_64         360        rr         v8.5         0180f0aba045c63c44e4732b7981716aa77eaf71    yes
-tester_linux           x86_64-linux-gnuassert     x86_64         x86_64         165        rr-net     v8.5         0180f0aba045c63c44e4732b7981716aa77eaf71    yes
-tester_linux           x86_64-linux-gnummtkconcurrent x86_64     x86_64         165        .          v8.5         0180f0aba045c63c44e4732b7981716aa77eaf71    .
+# ROOTFS_IMAGE_NAME    TRIPLET                    ARCH           ARCH_ROOTFS    TIMEOUT    USE_RR     ROOTFS_TAG    ROOTFS_HASH    SKIP_PR    SCHED_MEM_GIB
+tester_linux           x86_64-linux-gnu           x86_64         x86_64         .          .          v8.5         0180f0aba045c63c44e4732b7981716aa77eaf71    .    .
+tester_linux           x86_64-linux-gnuassert     x86_64         x86_64         .          .          v8.5         0180f0aba045c63c44e4732b7981716aa77eaf71    .    .
+tester_linux           x86_64-linux-gnuassert     x86_64         x86_64         360        rr         v8.5         0180f0aba045c63c44e4732b7981716aa77eaf71    yes    .
+tester_linux           x86_64-linux-gnuassert     x86_64         x86_64         165        rr-net     v8.5         0180f0aba045c63c44e4732b7981716aa77eaf71    yes    .
+tester_linux           x86_64-linux-gnummtkconcurrent x86_64     x86_64         165        .          v8.5         0180f0aba045c63c44e4732b7981716aa77eaf71    .    96
 
 # The rr jobs run only on master and release builds; pull requests test the assertion
 # build without rr.
