@@ -1,10 +1,10 @@
 steps:
   - group: "Coverage"
-    # Scheduled (julia-ci) builds, plus "needs full CI"-labeled PRs. Only
+    # Scheduled (julia-ci) builds, plus "needs extended CI"-labeled PRs. Only
     # julia-ci holds the codecov / coveralls bearer tokens; PR builds run
     # the same coverage collection but skip the uploads (the lcov tarball
     # is still available as a buildkite artifact).
-    if: (build.source == "schedule") || (build.pull_request.labels includes "needs full CI")
+    if: (build.source == "schedule") || (build.pull_request.labels includes "needs extended CI")
     notify:
       - github_commit_status:
           context: "Coverage"
