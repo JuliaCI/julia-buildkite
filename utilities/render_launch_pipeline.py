@@ -52,10 +52,13 @@ build + test jobs (see publish_group_text).
 """
 
 import argparse
+import functools
+import json
 import os
 import re
 import subprocess
 import sys
+import urllib.request
 
 # Directory of the .buildkite checkout root (this file lives in
 # <root>/utilities/render_launch_pipeline.py).
@@ -466,6 +469,11 @@ TEST_STATIC = [
     "test_revise.yml",
 ]
 
+# Buildkite job priorities; a higher one takes the next free agent first.
+HIGH_PRIORITY, NORMAL_PRIORITY, LOW_PRIORITY = 1, 0, -1
+HIGH_PRIORITY_LABEL = "high priority CI"
+LOW_PRIORITY_LABEL = "low priority CI"
+
 # Built by the schedule (as nightlies) and by release tags (as releases).
 NOGPL_GROUP = ("no_GPL", "false", [
     ("build_linux.no_gpl.arches", "build_linux.yml"),
@@ -570,6 +578,44 @@ def build_group_text():
     return emit_group("Build", "\n".join(c for c in chunks if c))
 
 
+def log(msg):
+    # stdout is the rendered pipeline
+    sys.stderr.write(msg + "\n")
+
+
+def github_repo():
+    """The GitHub repository this build is of: julia, or julia-buildkite for
+    the self-test pipeline."""
+    m = re.search(r"github\.com[:/](.+?)(?:\.git)?/?$", os.environ.get("BUILDKITE_REPO", ""))
+    return m.group(1) if m else "JuliaLang/julia"
+
+
+def pr_has_label(label):
+    """Whether the pull request has `label`. Buildkite records the labels when
+    it creates a build, and a rebuild from its UI keeps those of the build it
+    repeats, so a label missing there is looked up on GitHub."""
+    if label in os.environ.get("BUILDKITE_PULL_REQUEST_LABELS", "").split(","):
+        return True
+    return label in github_pr_labels()
+
+
+@functools.cache
+def github_pr_labels():
+    """The pull request's labels on GitHub, read once per render."""
+    url = (f"https://api.github.com/repos/{github_repo()}/issues/"
+           f"{os.environ['BUILDKITE_PULL_REQUEST']}/labels?per_page=100")
+    request = urllib.request.Request(url, headers={"Accept": "application/vnd.github+json"})
+    if os.environ.get("GITHUB_TOKEN"):
+        request.add_header("Authorization", f"Bearer {os.environ['GITHUB_TOKEN']}")
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            return frozenset(l.get("name") for l in json.load(response))
+    except (OSError, ValueError) as e:
+        log(f"Could not read the pull request's labels from GitHub ({e}); "
+            "going by the labels Buildkite recorded")
+        return frozenset()
+
+
 def check_group_text():
     chunks = []
     for rel in CHECK_STATIC:
@@ -634,6 +680,7 @@ def publish_trigger_text(target, depends_on, scheduled):
         f'          message: "publish {target}: ${{BUILDKITE_MESSAGE}}"',
         "          env:",
         f'            PUBLISH_TARGET: "{target}"',
+        f'            JULIA_CI_PRIORITY: "{ci_priority()}"',
     ))
     if scheduled:
         lines.append('            PUBLISH_SCHEDULED: "true"')
@@ -688,6 +735,36 @@ def is_release_build():
                for var in ("BUILDKITE_TAG", "BUILDKITE_BRANCH"))
 
 
+def ci_priority():
+    """The Buildkite job priority of this build: high, normal or low. A pull
+    request to julia or julia-buildkite can pick its tier with a label.
+    Otherwise release builds and pull requests into a release-* branch
+    (backports) run ahead of master and other pull requests in the shared
+    queues."""
+    if (os.environ.get("BUILDKITE_PIPELINE_SLUG") in ("julia-pr", "julia-buildkite-ci")
+            and os.environ.get("BUILDKITE_PULL_REQUEST", "false") != "false"):
+        if pr_has_label(HIGH_PRIORITY_LABEL):
+            return HIGH_PRIORITY
+        if pr_has_label(LOW_PRIORITY_LABEL):
+            return LOW_PRIORITY
+    if is_release_build():
+        return HIGH_PRIORITY
+    if os.environ.get("BUILDKITE_PULL_REQUEST_BASE_BRANCH", "").startswith("release-"):
+        return HIGH_PRIORITY
+    return NORMAL_PRIORITY
+
+
+def pipeline_header():
+    """The start of the rendered pipeline. A top-level `priority` only covers
+    the steps of its own upload, so the launcher jobs also get it as
+    JULIA_CI_PRIORITY, for the pipelines they upload."""
+    priority = ci_priority()
+    return (f"priority: {priority}\n"
+            "env:\n"
+            f'  JULIA_CI_PRIORITY: "{priority}"\n'
+            "steps:\n")
+
+
 def nogpl_triplets():
     return upload_triplets(NOGPL_UPLOAD_ARCHES, SCHEDULED_PLATFORMS)
 
@@ -738,7 +815,7 @@ def only_triplets_text(only):
         blocks.append(publish_group_text(selected))
     # drop the groups that have none of the selected platforms
     blocks = [b for b in blocks if not b.endswith("    steps:")]
-    return "steps:\n" + "\n".join(blocks) + "\n"
+    return pipeline_header() + "\n".join(blocks) + "\n"
 
 
 def main():
@@ -746,7 +823,7 @@ def main():
     # TTFX_RELEASE (set by the weekly julia-ci schedule, or on a build created
     # by hand) measures a published release on the TTFX tasks; nothing is built.
     if os.environ.get("TTFX_RELEASE"):
-        sys.stdout.write("steps:\n")
+        sys.stdout.write(pipeline_header())
         sys.stdout.write(verbatim_group_text(os.path.join(MISC, "ttfx", "ttfx_release.yml")))
         sys.stdout.write("\n")
         return
@@ -761,7 +838,7 @@ def main():
             blocks.append(verbatim_group_text(os.path.join(MISC, "ttfx", "ttfx_opt.yml")))
             triplets = upload_triplets(SCHEDULE_UPLOAD_ARCHES, SCHEDULED_PLATFORMS)
             blocks.append(publish_group_text(triplets, scheduled=True))
-        sys.stdout.write("steps:\n")
+        sys.stdout.write(pipeline_header())
         sys.stdout.write("\n".join(blocks))
         sys.stdout.write("\n")
         return
@@ -775,7 +852,7 @@ def main():
             schedule_group_text(label, arches, allow_fail),
             publish_group_text(nogpl_triplets()),
         ]
-        sys.stdout.write("steps:\n")
+        sys.stdout.write(pipeline_header())
         sys.stdout.write("\n".join(blocks))
         sys.stdout.write("\n")
         return
@@ -787,7 +864,7 @@ def main():
         blocks = [schedule_group_text(label, arches, allow_fail)
                   for label, allow_fail, arches in groups]
         blocks.append(publish_group_text(opt_triplets()))
-        sys.stdout.write("steps:\n")
+        sys.stdout.write(pipeline_header())
         sys.stdout.write("\n".join(blocks))
         sys.stdout.write("\n")
         return
@@ -844,7 +921,7 @@ def main():
         triplets += nogpl_triplets() + opt_triplets() + riscv64_triplets()
     blocks.append(publish_group_text(triplets, docs=True))
 
-    sys.stdout.write("steps:\n")
+    sys.stdout.write(pipeline_header())
     sys.stdout.write("\n".join(blocks))
     sys.stdout.write("\n")
 

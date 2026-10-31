@@ -8,6 +8,7 @@
 # build for the per-commit products (HTML docs; source dists on release
 # tags). A build with no PUBLISH_TARGET publishes everything: the manual
 # re-run path (ops/README.md).
+priority: ${JULIA_CI_PRIORITY:-0}
 steps:
   - group: "Publish"
     steps:
