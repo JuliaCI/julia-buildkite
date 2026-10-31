@@ -65,9 +65,10 @@ to the merge-base with its target branch (`PR_GATED_FILES` and
   run only when it changes `JuliaSyntax/`.
 
 `julia-ci` runs every job, so what a pull request skips is still tested on
-master. Pull requests with the `needs full CI` label, or that change
-`.buildkite-external-version`, run every job. The label counts on a rebuild
-too: when Buildkite did not record it, the launch step asks GitHub.
+master. Pull requests into a `release-*` branch (backports), with the
+`needs full CI` label, or that change `.buildkite-external-version`, run
+every job. The label counts on a rebuild too: when Buildkite did not record
+it, the launch step asks GitHub.
 
 The TTFX and runtime benchmark jobs gate themselves in their own launch steps, by
 their own path lists and labels (`needs TTFX check`, `needs runtime benchmarks`;

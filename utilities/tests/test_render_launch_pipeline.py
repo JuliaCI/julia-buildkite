@@ -688,6 +688,15 @@ class PullRequestGatingTests(unittest.TestCase):
             rlp.pr_changed_paths.cache_clear()
             self.assertIsNone(rlp.pr_changed_paths())
         rlp.pr_changed_paths.cache_clear()
+        # A backport
+        env = {"BUILDKITE_PIPELINE_SLUG": "julia-pr", "BUILDKITE_PULL_REQUEST": "123",
+               "BUILDKITE_PULL_REQUEST_BASE_BRANCH": "release-1.14",
+               "BUILDKITE_PULL_REQUEST_LABELS": "bugfix"}
+        with mock.patch.dict(os.environ, env), \
+                mock.patch.object(rlp, "pr_has_label", lambda label: False), \
+                mock.patch.object(rlp, "log"):
+            self.assertIsNone(rlp.pr_changed_paths())
+        rlp.pr_changed_paths.cache_clear()
         # Not a pull request
         with mock.patch.dict(os.environ, {"BUILDKITE_PIPELINE_SLUG": "julia-ci"}):
             self.assertIsNone(rlp.pr_changed_paths())

@@ -664,14 +664,20 @@ def github_pr_labels():
 def pr_changed_paths():
     """The paths a julia-pr pull request changes relative to the merge-base
     with its target branch. None runs every job: not a julia-pr pull request,
-    the FULL_CI_LABEL, a new julia-buildkite version, or no merge-base found."""
+    a backport, the FULL_CI_LABEL, a new julia-buildkite version, or no
+    merge-base found."""
     if (os.environ.get("BUILDKITE_PIPELINE_SLUG") != "julia-pr"
             or os.environ.get("BUILDKITE_PULL_REQUEST", "false") == "false"):
+        return None
+    base_branch = os.environ.get("BUILDKITE_PULL_REQUEST_BASE_BRANCH") or "master"
+    # A release branch is tested far less than master, so a skipped job could
+    # hide a problem until the release.
+    if base_branch.startswith("release-"):
+        log(f"The pull request is into {base_branch}; running every job")
         return None
     if pr_has_label(FULL_CI_LABEL):
         log(f"The pull request has the '{FULL_CI_LABEL}' label; running every job")
         return None
-    base_branch = os.environ.get("BUILDKITE_PULL_REQUEST_BASE_BRANCH") or "master"
     try:
         git("fetch", "--no-tags", "--quiet", os.environ["BUILDKITE_REPO"],
             f"refs/heads/{base_branch}")
