@@ -1,6 +1,7 @@
 # Launched by the julia-publish pipeline. A single trusted step signs and
 # promotes every staged build to its final release location, then deploys
 # docs. This is the only place release secrets (KMS signing keys) are used.
+priority: ${JULIA_CI_PRIORITY:-0}
 steps:
   - group: "Publish"
     steps:
