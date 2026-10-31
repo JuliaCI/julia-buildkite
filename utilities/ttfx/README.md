@@ -110,7 +110,9 @@ the job runs the pull request's own code, so it holds no GitHub token.
 
 In this repository's own self-test pipeline the commit under test is a julia master
 commit, and its parent stands in for the merge-base (or, past `[ci skip]` commits, its
-nearest built ancestor), so the same path runs there.
+nearest built ancestor), so the same path runs there. No pull request here changes those
+commits, so a regression between them, or a parent without a build, soft-fails the job
+(exit status 75). A failing script or `ttfx_compare.jl` still fails it.
 
 ## Absolute mode: master and release branches (julia-ci)
 

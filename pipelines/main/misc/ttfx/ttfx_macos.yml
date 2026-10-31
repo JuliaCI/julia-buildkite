@@ -16,6 +16,10 @@ steps:
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
         commands: "bash .buildkite/utilities/ttfx/ttfx_ci.sh"
         timeout_in_minutes: ${TIMEOUT?}
+        # ttfx_ci.sh exits 75 only in the julia-buildkite self-test, for a result that no
+        # change to this repository can fix
+        soft_fail:
+          - exit_status: 75
         agents:
           queue: "test"
           os: "macos"
