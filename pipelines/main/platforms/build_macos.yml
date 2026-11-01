@@ -27,6 +27,8 @@ steps:
         commands: "bash .buildkite/utilities/build_julia.sh"
         agents:
           queue: "build"
+          # No sched_* tags: macOS jobs always get the whole host, and its width is
+          # a per-host fact in the scheduler's config.
           os: "macos"
           arch: "${ARCH?}"
         env:
