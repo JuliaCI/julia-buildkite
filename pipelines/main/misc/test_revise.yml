@@ -39,8 +39,10 @@ steps:
         soft_fail: ${ALLOW_FAIL?}
         agents:
           queue: "test"
+          # Charged for one busy CPU; compilers and precompilation run wider
+          # when CPUs are free.
           sched_cpus: "1"
-          sched_threads: "1"
+          sched_threads: "8"
           sched_mem_gib: "8"
           sandbox_capable: "true"
           os: "linux"

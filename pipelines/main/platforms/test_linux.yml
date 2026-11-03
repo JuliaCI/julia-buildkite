@@ -45,7 +45,9 @@ steps:
         commands: "bash .buildkite/utilities/test_julia.sh"
         agents:
           queue: "test"
-          sched_cpus: "${SCHED_CPUS:-12}"
+          # Charged at typical use (12 workers average about 7.5 busy CPUs); the
+          # 12 threads let the workers run wider while CPUs are free.
+          sched_cpus: "${SCHED_CPUS:-8}"
           sched_threads: "${SCHED_THREADS:-12}"
           sched_mem_gib: "${SCHED_MEM_GIB:-64}"
           sandbox_capable: "true"

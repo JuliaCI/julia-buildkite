@@ -79,7 +79,8 @@ steps:
           fi
         agents:
           queue: "test"
-          sched_cpus: "12"
+          # As the Linux test suites: charged at typical use, 12 workers wide.
+          sched_cpus: "8"
           sched_threads: "12"
           sched_mem_gib: "64"
           # Only run on `sandbox.jl` machines (not `docker`-isolated ones) since we need nestable sandboxing
