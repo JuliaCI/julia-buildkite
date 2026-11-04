@@ -35,9 +35,9 @@ if hasfield(Base.JLOptions, :coverage_exclude)
     filter!(isdir, coverage_exclude)
 end
 exclude_flag = isempty(coverage_exclude) ? `` :
-    `--code-coverage-exclude=$(join(coverage_exclude, Sys.iswindows() ? ';' : ':'))`
+    `--code-coverage=-$(join(coverage_exclude, Sys.iswindows() ? ';' : ':'))`
 
-cmd = `$(Base.julia_cmd()) --code-coverage=lcov-%p.info $exclude_flag -e $(script)`
+cmd = `$(Base.julia_cmd()) --code-coverage=all --code-coverage=lcov-%p.info $exclude_flag -e $(script)`
 
 @info "Running command" cmd
 p = run(pipeline(cmd; stdin, stdout, stderr); wait = false)
