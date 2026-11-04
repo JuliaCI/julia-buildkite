@@ -41,8 +41,9 @@ steps:
         agents:
           queue: "build"
           sched_cpus: "4"
-          sched_threads: "16"
-          sched_mem_gib: "40"
+          sched_cpus_limit: "16"
+          sched_mem_gib: "12"
+          sched_mem_limit_gib: "40"
           # Only run on `sandbox.jl` machines (not `docker`-isolated ones) since we need nestable sandboxing
           sandbox_capable: "true"
           os: "linux"

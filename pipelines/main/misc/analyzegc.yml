@@ -27,8 +27,9 @@ steps:
         agents:
           queue: "test"
           sched_cpus: "12"
-          sched_threads: "12"
-          sched_mem_gib: "16"
+          sched_cpus_limit: "12"
+          sched_mem_gib: "12"
+          sched_mem_limit_gib: "16"
           sandbox_capable: "true"
           os: "linux"
           arch: "x86_64"

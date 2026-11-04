@@ -19,8 +19,9 @@ steps:
           # Sized for the Linux and Windows rows; the macOS rows ignore these
           # and get the whole host.
           sched_cpus: "1"
-          sched_threads: "1"
-          sched_mem_gib: "8"
+          sched_cpus_limit: "1"
+          sched_mem_gib: "4"
+          sched_mem_limit_gib: "8"
           os: "{{matrix.agent_os}}"
           arch: "{{matrix.agent_arch}}"
         matrix:
@@ -122,8 +123,9 @@ steps:
         agents:
           queue: "test"
           sched_cpus: "1"
-          sched_threads: "1"
-          sched_mem_gib: "8"
+          sched_cpus_limit: "1"
+          sched_mem_gib: "4"
+          sched_mem_limit_gib: "8"
           os: "{{matrix.agent_os}}"
           arch: "{{matrix.agent_arch}}"
         matrix:

@@ -26,7 +26,7 @@ steps:
         agents:
           queue: "build"
           sched_cpus: "4"
-          sched_threads: "8"
+          sched_cpus_limit: "8"
           sched_mem_gib: "32"
           os: "freebsd"
           arch: "${ARCH?}"

@@ -31,7 +31,7 @@ steps:
           queue: "test"
           # Parallelism not measured yet
           sched_cpus: "4"
-          sched_threads: "4"
+          sched_cpus_limit: "4"
           sched_mem_gib: "16"
           os: "windows"
           arch: "${ARCH}"

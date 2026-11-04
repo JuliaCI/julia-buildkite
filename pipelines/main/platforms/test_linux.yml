@@ -45,11 +45,13 @@ steps:
         commands: "bash .buildkite/utilities/test_julia.sh"
         agents:
           queue: "test"
-          # Charged at typical use (12 workers average about 7.5 busy CPUs); the
-          # 12 threads let the workers run wider while CPUs are free.
+          # Requests are typical use (12 workers average about 7.5 busy CPUs;
+          # memory is the 95th percentile of the jobs' peaks), limits the most
+          # they may use: 12 CPUs while CPUs are free, and `memory.max`.
           sched_cpus: "${SCHED_CPUS:-8}"
-          sched_threads: "${SCHED_THREADS:-12}"
-          sched_mem_gib: "${SCHED_MEM_GIB:-64}"
+          sched_cpus_limit: "${SCHED_CPUS_LIMIT:-12}"
+          sched_mem_gib: "${SCHED_MEM_GIB:-36}"
+          sched_mem_limit_gib: "${SCHED_MEM_LIMIT_GIB:-64}"
           sandbox_capable: "true"
           os: "linux"
           arch: "${ARCH?}"

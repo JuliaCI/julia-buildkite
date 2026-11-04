@@ -95,7 +95,7 @@ steps:
           # (37 min at 1 CPU vs 13.5 at 12): charge it for its typical use, let it
           # run as wide as the test suites.
           sched_cpus: "2"
-          sched_threads: "12"
+          sched_cpus_limit: "12"
           sched_mem_gib: "16"
           sandbox_capable: "true"
           doctest_capable: "true"

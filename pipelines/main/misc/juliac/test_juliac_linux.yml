@@ -42,11 +42,12 @@ steps:
         soft_fail: ${ALLOW_FAIL?}
         agents:
           queue: "test"
-          # Mostly serial with parallel precompile bursts; at 4 threads the
-          # aarch64 job timed out on armageddon.
+          # Mostly serial with parallel precompile bursts; limited to 4 CPUs,
+          # the aarch64 job timed out on armageddon.
           sched_cpus: "4"
-          sched_threads: "8"
-          sched_mem_gib: "16"
+          sched_cpus_limit: "8"
+          sched_mem_gib: "12"
+          sched_mem_limit_gib: "16"
           sandbox_capable: "true"
           os: "linux"
           arch: "${ARCH?}"
