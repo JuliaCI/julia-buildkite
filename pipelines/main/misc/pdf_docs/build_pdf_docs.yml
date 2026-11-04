@@ -46,6 +46,12 @@ steps:
         timeout_in_minutes: 120
         agents:
           queue: "test"
+          # Mostly one busy CPU, which is what it is charged; compilers and
+          # precompilation may run on up to 8.
+          sched_cpus: "1"
+          sched_cpus_limit: "8"
+          sched_mem_gib: "4"
+          sched_mem_limit_gib: "8"
           sandbox_capable: "true"
           os: "linux"
           arch: "x86_64"

@@ -29,5 +29,7 @@ steps:
         soft_fail: ${ALLOW_FAIL?}
         agents:
           queue: "test"
+          # No sched_* tags: the host's default size for Windows tests (6 vCPUs)
+          # ran it in 21 min, 4 vCPUs in 34.
           os: "windows"
           arch: "${ARCH}"
