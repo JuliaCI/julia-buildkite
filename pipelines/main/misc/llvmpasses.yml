@@ -35,7 +35,7 @@ steps:
           queue: "test"
           sched_cpus: "2"
           sched_cpus_limit: "8"
-          sched_mem_gib: "11"
+          sched_mem_gib: "4"
           sched_mem_limit_gib: "16"
           sandbox_capable: "true"
           os: "linux"
