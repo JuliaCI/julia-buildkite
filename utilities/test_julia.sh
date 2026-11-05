@@ -179,8 +179,11 @@ else
     fi
 fi
 
-# Add external stdlibs to skip to the main skip list
-TESTS_TO_SKIP+=("${EXTERNAL_STDLIB_SKIP_LIST[@]}")
+# The skip list only trims `all`. A job that names its tests (the i686 `net` group, `rr-net`)
+# exists to run exactly those, and skipping them would leave it testing nothing.
+if [[ "${TESTS_TO_RUN[*]}" == "all" ]]; then
+    TESTS_TO_SKIP+=("${EXTERNAL_STDLIB_SKIP_LIST[@]}")
+fi
 
 # Build our `TESTS` string
 # `--ci` asserts that networking is available
