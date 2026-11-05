@@ -48,7 +48,7 @@ MFLAGS=()
 #fi
 
 # Always use this much parallelism
-MFLAGS+=( "-j${JULIA_CPU_THREADS}")
+MFLAGS+=( "-j${JULIA_CPU_THREADS:?}")
 
 # Add a few default flags to our make flags:
 MFLAGS+=( "VERBOSE=1" )
