@@ -21,12 +21,23 @@ struct BughuntBuildInfo
     artifacts::Vector{BuildkiteArtifact}
 end
 
+# Buildkite normalizes plugin references into fully-qualified names, e.g. a
+# `JuliaCI/sandbox#v2` reference in our pipeline `.yml` files shows up in
+# `BUILDKITE_PLUGINS` as `github.com/JuliaCI/sandbox-buildkite-plugin#v2`.
+# Reduce such a name down to just the short plugin name (e.g. `sandbox`) so that
+# we're insensitive to the host, the owning organization and the version.
+function plugin_shortname(plugin_name)
+    name = first(split(String(plugin_name), "#"))
+    return replace(basename(name), r"-buildkite-plugin$" => "")
+end
+
 function get_rootfs_data(env)
-    plugins = JSON3.read(env["BUILDKITE_PLUGINS"])
+    plugins = JSON3.read(get(env, "BUILDKITE_PLUGINS", "[]"))
     for plugin in plugins
         for (plugin_name, plugin_values) in plugin
+            shortname = plugin_shortname(plugin_name)
             # If we find a `sandbox` plugin, extract that information here
-            if occursin("staticfloat/sandbox-buildkite-plugin", String(plugin_name))
+            if shortname == "sandbox"
                 rootfs_url = get(plugin_values, "rootfs_url", nothing)
                 rootfs_treehash = get(plugin_values, "rootfs_treehash", nothing)
                 rootfs_uid = get(plugin_values, "uid", Sandbox.getuid())
@@ -45,7 +56,7 @@ function get_rootfs_data(env)
                     "gid" => rootfs_gid,
                 )
             end
-            if occursin("docker", String(plugin_name))
+            if shortname == "docker"
                 image = get(plugin_values, "image", nothing)
                 if image === nothing
                     @error("Plugin values:", plugin_values)
@@ -245,7 +256,7 @@ function collect_resources(build_info::BughuntBuildInfo, prefix::String;
 
         @sync begin
             # If we're a sandbox build, collect the rootfs:
-            if build_info.rootfs_data["type"] == "sandbox"
+            if get(build_info.rootfs_data, "type", "") == "sandbox"
                 Base.errormonitor(@async begin
                     treehash = Base.SHA1(build_info.rootfs_data["treehash"])
                     if !Pkg.Artifacts.artifact_exists(treehash)
@@ -311,7 +322,7 @@ function collect_resources(build_info::BughuntBuildInfo, prefix::String;
 end
 
 function SandboxConfig(build_info::BughuntBuildInfo, prefix::String)
-    if build_info.rootfs_data["type"] != "sandbox"
+    if get(build_info.rootfs_data, "type", "") != "sandbox"
         throw(ArgumentError("Invalid job rootfs; no sandbox rootfs data found!"))
     end
 
@@ -354,7 +365,7 @@ struct DockerConfig
 end
 
 function DockerConfig(build_info::BughuntBuildInfo, prefix::String)
-    if build_info.rootfs_data["type"] != "docker"
+    if get(build_info.rootfs_data, "type", "") != "docker"
         throw(ArgumentError("Invalid job rootfs; no docker rootfs data found!"))
     end
 

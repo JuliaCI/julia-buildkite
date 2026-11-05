@@ -13,4 +13,6 @@ Sandbox = "9307e30f-c43e-9ca7-d17c-c2dc59df670d"
 Scratch = "6c6a2e73-6563-6170-7368-637461726353"
 
 [compat]
+# `HTTP.download`, used by `buildkite_api.jl`, does not exist in HTTP 2
+HTTP = "1"
 JLLPrefixes = "0.3"
