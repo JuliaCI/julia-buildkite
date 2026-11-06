@@ -25,4 +25,6 @@ steps:
         env:
           JULIA_SHELL: "/bin/bash"
           TRIPLET: "${TRIPLET?}"
+          # The step's width follows the host's memory grant (utilities/width.sh).
+          MEM_PER_THREAD_GIB: "2.5"
           BUILDKITE_CANCEL_SIGNAL: "SIGQUIT"
