@@ -20,6 +20,8 @@ steps:
         agents:
           queue: "test"
           os: "macos"
+          # Timings are only comparable on one CPU model; other Macs also serve "test".
+          cpu: "apple-m2"
           arch: "${ARCH}"
         env:
           TRIPLET: "${TRIPLET?}"
