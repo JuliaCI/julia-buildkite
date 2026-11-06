@@ -43,9 +43,10 @@ steps:
         agents:
           queue: "test"
           # Mostly serial with parallel precompile bursts. At 4 CPUs wide, the
-          # aarch64 job timed out on armageddon.
+          # aarch64 job timed out on armageddon; at 8 wide, x86_64 ran 25-35%
+          # longer than at 12, with its bursts pinned at the limit.
           sched_cpus: "4"
-          sched_cpus_limit: "8"
+          sched_cpus_limit: "12"
           sched_mem_gib: "7"
           sched_mem_limit_gib: "16"
           sandbox_capable: "true"
