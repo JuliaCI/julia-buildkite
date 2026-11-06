@@ -157,6 +157,8 @@ steps:
           # a per-host fact in the scheduler's config.
           os: "macos"
           arch: "aarch64"
+          # The suite with coverage peaks at ~26 GiB: keep it off the 8 GiB M1s.
+          cpu: "apple-m2"
         env:
           JULIA_SHELL: "/bin/bash"
           # Set build number for Coveralls parallel mode
