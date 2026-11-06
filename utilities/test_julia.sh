@@ -7,6 +7,10 @@
 #  - USE_RR
 set -euo pipefail
 
+# Settle the job's width before anything derives a value from JULIA_CPU_THREADS.
+# shellcheck source=SCRIPTDIR/width.sh
+source .buildkite/utilities/width.sh
+
 # First, get things like `SHORT_COMMIT`, `JULIA_CPU_TARGET`, `UPLOAD_TARGETS`, etc...
 # shellcheck source=SCRIPTDIR/build_envs.sh
 source .buildkite/utilities/build_envs.sh
@@ -73,6 +77,9 @@ fi
 
 #Always set the max rss so that if tests add large global variables (which they do) we don't make the GC's life too hard
 export JULIA_TEST_MAXRSS_MB=3800
+if [[ -n "${MEM_PER_THREAD_GIB:-}" ]]; then
+    JULIA_TEST_MAXRSS_MB="$(awk -v per="${MEM_PER_THREAD_GIB}" 'BEGIN { print int(per * 1024) }')"
+fi
 
 if [[ "${ARCH}" == "i686" ]]; then
     # Assume that we only have 3.5GB available to a single process, and that a single

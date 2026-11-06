@@ -6,6 +6,10 @@
 #  - MAKE_FLAGS
 set -euo pipefail
 
+# Settle the job's width before anything derives a value from JULIA_CPU_THREADS.
+# shellcheck source=SCRIPTDIR/width.sh
+source .buildkite/utilities/width.sh
+
 # First, get things like `SHORT_COMMIT`, `JULIA_CPU_TARGET`, `UPLOAD_TARGETS`, etc...
 # shellcheck source=SCRIPTDIR/build_envs.sh
 source .buildkite/utilities/build_envs.sh
