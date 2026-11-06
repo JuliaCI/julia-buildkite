@@ -20,11 +20,11 @@ steps:
         commands: "bash .buildkite/utilities/test_julia.sh"
         agents:
           queue: "test"
-          # No sched_* tags: macOS jobs always get the whole host, and its width is
-          # a per-host fact in the scheduler's config.
           os: "macos"
           arch: "${ARCH}"
         env:
           JULIA_SHELL: "/bin/bash"
           TRIPLET: "${TRIPLET?}"
+          # The step's width follows the host's memory grant (utilities/width.sh).
+          MEM_PER_THREAD_GIB: "2.5"
           BUILDKITE_CANCEL_SIGNAL: "SIGQUIT"
