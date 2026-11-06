@@ -34,7 +34,8 @@ class CheckboundsArtifactsTests(unittest.TestCase):
                     "PUBLISH_SKIP_WINDOWS_SIGN": "1", "BUILDKITE_BRANCH": "v1.14.0",
                     "BUILDKITE_COMMIT": "a" * 40, "BUILDKITE_JOB_ID": "fixture",
                     "BUILDKITE_TIMEOUT": "90", "BUILDKITE_PIPELINE_SLUG": "fixture"}
-        for script in ("upload_julia.sh", "promote_release.sh", "test_julia.sh", "build_julia.sh", "word.sh"):
+        for script in ("upload_julia.sh", "promote_release.sh", "test_julia.sh", "build_julia.sh", "word.sh",
+                       "width.sh"):
             shutil.copy(ROOT / "utilities" / script, self.utils / script)
         self.write(self.utils / "build_envs.sh", '''
 export UPLOAD_FILENAME=julia-fixture JULIA_INSTALL_DIR=julia-fixture
