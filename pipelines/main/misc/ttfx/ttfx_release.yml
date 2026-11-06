@@ -21,6 +21,8 @@ steps:
         agents:
           queue: "test"
           os: "macos"
+          # Timings are only comparable on one CPU model; other Macs also serve "test".
+          cpu: "apple-m2"
           arch: "aarch64"
         env:
           TRIPLET: "aarch64-apple-darwin"
@@ -41,6 +43,8 @@ steps:
         agents:
           queue: "test"
           os: "macos"
+          # Timings are only comparable on one CPU model; other Macs also serve "test".
+          cpu: "apple-m2"
           arch: "aarch64"
         env:
           TRIPLET: "aarch64-apple-darwin"
@@ -60,6 +64,8 @@ steps:
         agents:
           queue: "test"
           os: "macos"
+          # Timings are only comparable on one CPU model; other Macs also serve "test".
+          cpu: "apple-m2"
           arch: "aarch64"
         env:
           TRIPLET: "aarch64-apple-darwin"
