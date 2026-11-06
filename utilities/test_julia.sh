@@ -248,26 +248,34 @@ if compgen -G "${JULIA_INSTALL_DIR}/share/julia/test/results*.json"; then
     if [[ "${BUILDKITE_PIPELINE_SLUG:-}" != "julia-ci" ]]; then
         echo "No analytics token available to this pipeline, skipping Test Analytics upload"
     elif command -v aws >/dev/null 2>&1; then
-        (
+        # `set -e` is off inside a `( ... ) ||` subshell, so every step checks its own status.
+        # A failure warns on the build page; it never fails the test job.
+        if ! (
             # Subshell so the OIDC credential env doesn't outlive the upload.
             # shellcheck source=SCRIPTDIR/aws_oidc.sh
-            source .buildkite/utilities/aws_oidc.sh tokens
+            source .buildkite/utilities/aws_oidc.sh tokens || exit 1
             export AWS_EC2_METADATA_DISABLED=true
-            BUILDKITE_ANALYTICS_TOKEN="$(MSYS2_ARG_CONV_EXCL='*' MSYS_NO_PATHCONV=1 \
-                aws ssm get-parameter --with-decryption \
-                --name /julia-ci/tokens/buildkite_analytics_token \
-                --query Parameter.Value --output text)"
+            if ! BUILDKITE_ANALYTICS_TOKEN="$(MSYS2_ARG_CONV_EXCL='*' MSYS_NO_PATHCONV=1 \
+                    aws ssm get-parameter --with-decryption \
+                    --name /julia-ci/tokens/buildkite_analytics_token \
+                    --query Parameter.Value --output text)" || [[ -z "${BUILDKITE_ANALYTICS_TOKEN}" ]]; then
+                echo "Could not fetch the Test Analytics token"
+                exit 1
+            fi
 
+            failed=0
             shopt -s nullglob
             for file in "${JULIA_INSTALL_DIR}"/share/julia/test/results*.json; do
                 echo "Uploading ${file} to Test Analytics..."
                 # We can't use the test-collector plugin because it doesn't
                 # let us attach more than one results file to a job.
-                curl \
+                # curl exits 0 on HTTP errors, so check the status code it writes after the body.
+                if ! response="$(curl \
                   -X POST \
                   --silent \
                   --show-error \
                   --max-time 300 \
+                  -w '\n%{http_code}' \
                   -H "Authorization: Token token=\"${BUILDKITE_ANALYTICS_TOKEN}\"" \
                   -F "data=@\"${file}\"" \
                   -F "format=json" \
@@ -279,10 +287,23 @@ if compgen -G "${JULIA_INSTALL_DIR}/share/julia/test/results*.json"; then
                   -F "run_env[number]=\"${BUILDKITE_BUILD_NUMBER}\"" \
                   -F "run_env[job_id]=\"${BUILDKITE_JOB_ID}\"" \
                   -F "run_env[message]=\"${BUILDKITE_MESSAGE}\"" \
-                  https://analytics-api.buildkite.com/v1/uploads
-                echo ""
+                  https://analytics-api.buildkite.com/v1/uploads)"; then
+                    failed=1
+                    continue
+                fi
+                status="${response##*$'\n'}"
+                echo "${response%$'\n'*}"
+                if [[ "${status}" != 2?? ]]; then
+                    echo "Upload rejected with HTTP ${status}"
+                    failed=1
+                fi
             done
-        ) || echo "WARNING: Test Analytics upload failed (non-fatal)"
+            exit "${failed}"
+        ); then
+            echo "WARNING: Test Analytics upload failed (non-fatal)"
+            buildkite-agent annotate --style warning --context test-analytics --append \
+                "Test Analytics upload failed in \`${BUILDKITE_LABEL:-this job}\`; see its log. The results are missing from the suite.<br>" || true
+        fi
     else
         echo "aws CLI not available; skipping Test Analytics upload"
     fi
