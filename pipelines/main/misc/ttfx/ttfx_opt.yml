@@ -20,7 +20,7 @@ steps:
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
         commands: "bash .buildkite/utilities/ttfx/ttfx_ci.sh"
         # Two arms, as on a pull request
-        timeout_in_minutes: 240
+        timeout_in_minutes: 180
         soft_fail: true
         agents:
           queue: "test"

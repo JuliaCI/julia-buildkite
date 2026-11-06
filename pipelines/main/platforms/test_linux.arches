@@ -2,7 +2,7 @@
 tester_linux           x86_64-linux-gnu           x86_64         x86_64         .          .          v8.5         0180f0aba045c63c44e4732b7981716aa77eaf71    .    .    .    .    .
 tester_linux           x86_64-linux-gnuassert     x86_64         x86_64         .          .          v8.5         0180f0aba045c63c44e4732b7981716aa77eaf71    .    .    .    .    .
 tester_linux           x86_64-linux-gnuassert     x86_64         x86_64         360        rr         v8.5         0180f0aba045c63c44e4732b7981716aa77eaf71    yes    .    .    .    .
-tester_linux           x86_64-linux-gnuassert     x86_64         x86_64         165        rr-net     v8.5         0180f0aba045c63c44e4732b7981716aa77eaf71    yes    2    6    4    16
+tester_linux           x86_64-linux-gnuassert     x86_64         x86_64         105        rr-net     v8.5         0180f0aba045c63c44e4732b7981716aa77eaf71    yes    2    6    4    16
 tester_linux           x86_64-linux-gnummtkconcurrent x86_64     x86_64         165        .          v8.5         0180f0aba045c63c44e4732b7981716aa77eaf71    .    .    .    56    96
 
 # The rr jobs run only on master and release builds; pull requests test the assertion
