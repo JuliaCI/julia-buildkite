@@ -7,4 +7,4 @@ macos      aarch64-apple-darwin     aarch64       .
 # The whole suite, two precompiles of every task on a pull request (one per arm), takes
 # about an hour, and a pull request job may first wait up to
 # TTFX_BASE_WAIT_MINUTES (20) for the master build of its merge-base.
-#default TIMEOUT 240
+#default TIMEOUT 180

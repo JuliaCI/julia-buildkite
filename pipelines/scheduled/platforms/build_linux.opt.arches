@@ -7,6 +7,6 @@ package_linux          aarch64-linux-gnuopt   aarch64   aarch64        opt      
 # Any column without a default mapping here will simply substitute a `.` to the empty string
 
 # Allow time for the instrumented and optimized LLVM and Julia builds.
-# The aarch64 override allows headroom for shared CI hosts: a host run took
-# ~95 min at -j24; agent cpusets provide about 16 cores. Revisit after CI runs.
-#default TIMEOUT 360
+# The aarch64 override is because that job takes up to 5 hours on the shared CI hosts,
+# and the others take up to 3.
+#default TIMEOUT 270

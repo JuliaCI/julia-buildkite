@@ -27,7 +27,7 @@ steps:
               gid: 1000
               workspaces:
                 - "/cache/repos:/cache/repos"
-        timeout_in_minutes: 720 # 12h
+        timeout_in_minutes: 360 # 6h
         commands: |
           echo "--- Obtain coverage tokens"
           # Coverage tokens are fetched from SSM Parameter Store with this
@@ -102,7 +102,7 @@ steps:
               # Drop default "registries" directory, so it is not persisted from execution to execution
               persist_depot_dirs: packages,artifacts,compiled
               version: '1.11' # GREP_ME: Keep this updated. Do not set it to '1' or 'stable' or 'latest'.
-        timeout_in_minutes: 360 # 6h
+        timeout_in_minutes: 240 # 4h
         commands: |
           echo "--- Obtain coverage tokens"
           # Coverage tokens are fetched from SSM Parameter Store with this
@@ -232,7 +232,7 @@ steps:
                 - "BUILDKITE_PULL_REQUEST"
                 - "BUILDKITE_BUILD_NUMBER"
                 - "BUILDKITE_PIPELINE_SLUG"
-        timeout_in_minutes: 720 # 12h
+        timeout_in_minutes: 360 # 6h
         agents:
           queue: "test"
           sched_cpus: "6"

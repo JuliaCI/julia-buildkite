@@ -87,7 +87,7 @@ steps:
         env:
           # Give a fake documenter key to get Documenter to try and deploy for us
           DOCUMENTER_KEY: ""
-        timeout_in_minutes: 45
+        timeout_in_minutes: 60
         agents:
           queue: "test"
           # Documenter runs single-threaded, but precompiling the docs environment

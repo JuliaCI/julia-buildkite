@@ -15,7 +15,7 @@ steps:
             gid: 1000
             workspaces:
               - "/cache/repos:/cache/repos"
-      timeout_in_minutes: 120
+      timeout_in_minutes: 90
       if: | # We only run the `tsan` job on Julia 1.8 and later.
         (build.branch != "release-1.6") && (build.branch != "release-1.7")
       commands: |

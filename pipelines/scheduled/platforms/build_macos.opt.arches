@@ -1,10 +1,10 @@
 # OS       TRIPLET                    ARCH          JULIA_CI_BUILD_MODE    MAKE_FLAGS                                TIMEOUT
 macos      x86_64-apple-darwinopt     x86_64        opt                    JL_CFLAGS=-Werror,JL_CXXFLAGS=-Werror     .
-macos      aarch64-apple-darwinopt    aarch64       opt                    JL_CFLAGS=-Werror,JL_CXXFLAGS=-Werror     .
+macos      aarch64-apple-darwinopt    aarch64       opt                    JL_CFLAGS=-Werror,JL_CXXFLAGS=-Werror     150
 
 # These special lines allow us to embed default values for the columns above.
 # Any column without a default mapping here will simply substitute a `.` to the empty string
 
-# This builds LLVM twice and Julia twice: about an hour with 8 cores of an M1, and
-# three hours on the 6-core Intel Mac minis.
+# This builds LLVM twice and Julia twice: up to 75 minutes on Apple silicon, and up to
+# 5 hours on the 6-core Intel Mac minis.
 #default TIMEOUT 360

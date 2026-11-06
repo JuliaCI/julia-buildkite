@@ -144,7 +144,7 @@ class RenderLaunchPipelineTests(unittest.TestCase):
         # sandbox images: aggregate job counts alone cannot catch a wrong arch.
         for job, image, tag, treehash, timeout, soft_fail in (
             ("build", "package_linux", "v8.8", "52b733db5ed13474c82a64dcacfef1291b5c7725", 420, "false"),
-            ("test", "tester_linux", "v8.5", "c5927d46d70cb83c9baa94c0886c049998beb7cc", 255, "true"),
+            ("test", "tester_linux", "v8.5", "c5927d46d70cb83c9baa94c0886c049998beb7cc", 165, "true"),
         ):
             with self.subTest(job=job):
                 match = re.search(
@@ -207,7 +207,7 @@ class RenderLaunchPipelineTests(unittest.TestCase):
             output, re.M | re.S,
         ).group()
         self.assertIn('image: "juliapackaging/package-windows-x86_64:v8.10"', build)
-        self.assertIn('timeout_in_minutes: 600', build)
+        self.assertIn('timeout_in_minutes: 270', build)
         self.assertIn('soft_fail: false', build)
         self.assertIn('TRIPLET: "x86_64-w64-mingw32opt"', build)
         self.assertIn('JULIA_CI_BUILD_MODE: "opt"', build)
