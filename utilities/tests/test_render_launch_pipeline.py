@@ -9,6 +9,9 @@ import unittest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 RENDERER = os.path.join(ROOT, "utilities", "render_launch_pipeline.py")
+# Pull request labels are read from GitHub; a closed port makes the renderer
+# fall back to the labels in the environment, without the network.
+os.environ["GITHUB_API_URL"] = "http://127.0.0.1:9"
 
 # The per-commit published platforms (pipelines/main/platforms/upload_*.arches).
 PUBLISHED_TRIPLETS = [
@@ -62,6 +65,11 @@ OPT_TRIPLETS = (
     "x86_64-w64-mingw32opt",
 )
 ALL_OPT_TRIPLETS = sorted(OPT_TRIPLETS + ("i686-linux-gnuopt",))
+
+
+# A pull request with the `needs extended CI` label
+EXTENDED_PR = {"BUILDKITE_PULL_REQUEST": "123",
+               "BUILDKITE_PULL_REQUEST_LABELS": "bugfix,needs extended CI"}
 
 
 def publish_group(output):
@@ -222,9 +230,9 @@ class RenderLaunchPipelineTests(unittest.TestCase):
         self.assertIn('soft_fail: true', test)
 
     def test_optimized_i686_jobs(self):
-        for args, source in (((), "schedule"), (("--scheduled-workloads",), None)):
-            with self.subTest(args=args, source=source):
-                output = render(*args, source=source)
+        for source, build_env in (("schedule", {}), (None, EXTENDED_PR)):
+            with self.subTest(source=source, env=build_env):
+                output = render(source=source, **build_env)
                 jobs = {}
                 for block in output.split("      - label: ")[1:]:
                     key = re.search(r'^        key: "([^"]+)"$', block, re.M)
@@ -527,8 +535,8 @@ class RenderLaunchPipelineTests(unittest.TestCase):
         # The master job's `TTFX` status is on the same commit
         self.assertNotIn("github_commit_status", step)
         # Not on labeled pull requests, nor on per-commit builds
-        for args, source in ((("--scheduled-workloads",), None), ((), None)):
-            self.assertNotIn("TTFX opt", render(*args, source=source))
+        for build_env in (EXTENDED_PR, {}):
+            self.assertNotIn("TTFX opt", render(**build_env))
 
     def test_publish_dependencies_exist(self):
         for source, build_env in ((None, {}), ("schedule", {}),
@@ -547,25 +555,20 @@ class RenderLaunchPipelineTests(unittest.TestCase):
             self.assertTrue(deps)
             self.assertLessEqual(deps, keys)
 
-    def test_labeled_pr_mode_emits_scheduled_workloads_without_publish(self):
-        output = render("--scheduled-workloads")
+    def test_extended_ci_label_adds_scheduled_workloads_and_coverage(self):
+        output = render(**EXTENDED_PR)
 
-        for group in ("Source Build", "Source Tests (Allow Fail)", "no_GPL"):
+        for group in ("Build", "Source Build", "Source Tests (Allow Fail)", "no_GPL", "Coverage"):
             self.assertEqual(output.count(f'group: "{group}"'), 1)
-        self.assertNotIn('group: "Build"', output)
-        self.assertNotIn('group: "Publish"', output)
-        self.assertNotIn('trigger: "julia-publish"', output)
-        self.assertNotIn("PUBLISH_NOGPL", output)
         for triplet in OPT_TRIPLETS:
             self.assertIn(f'key: "build_{triplet}"', output)
             self.assertIn(f'key: "test_{triplet}"', output)
+        # Only the per-commit platforms are published, and only from julia-ci
+        self.assertEqual(publish_group(output), publish_group(render()))
+        self.assertNotIn("PUBLISH_NOGPL", output)
 
-    def test_scheduled_workloads_option_never_publishes(self):
-        output = render("--scheduled-workloads", source="schedule")
-
-        self.assertIn('group: "Source Build"', output)
-        self.assertNotIn('group: "Publish"', output)
-        self.assertNotIn('trigger: "julia-publish"', output)
+        for group in ("Source Build", "Coverage"):
+            self.assertNotIn(f'group: "{group}"', render())
 
 
 class InterpolateTests(unittest.TestCase):
@@ -709,7 +712,8 @@ class PullRequestGatingTests(unittest.TestCase):
         from unittest import mock
         rlp = self.rlp
         env = {"BUILDKITE_PULL_REQUEST": "63807", "BUILDKITE_PULL_REQUEST_LABELS": "bugfix",
-               "BUILDKITE_REPO": "https://github.com/JuliaLang/julia.git"}
+               "BUILDKITE_REPO": "https://github.com/JuliaLang/julia.git",
+               "GITHUB_API_URL": "https://api.github.com"}
         urls = []
 
         def github(labels):
@@ -739,6 +743,13 @@ class PullRequestGatingTests(unittest.TestCase):
             with mock.patch("urllib.request.urlopen", unreachable), \
                     mock.patch.object(rlp, "log"):
                 self.assertFalse(rlp.pr_has_label("needs full CI"))
+                self.assertTrue(rlp.pr_has_label("bugfix"))
+
+            # GitHub wins over the recorded labels, so a removed label counts as gone
+            rlp.github_pr_labels.cache_clear()
+            with mock.patch("urllib.request.urlopen", github([])):
+                self.assertFalse(rlp.pr_has_label("bugfix"))
+            rlp.github_pr_labels.cache_clear()
 
 
 if __name__ == "__main__":

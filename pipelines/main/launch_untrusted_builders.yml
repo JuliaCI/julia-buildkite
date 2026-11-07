@@ -31,7 +31,8 @@
 #     Julia < 1.12, and is a no-op on current master (1.14).
 #
 # Schedule builds emit the scheduled workload groups; coverage remains a
-# separate upload so it does not delay publishing.
+# separate upload so it does not delay publishing. Pull requests with the
+# `needs extended CI` label get both in this upload, without publishing.
 #
 # Yes, this is creating another layer of indirection; the flow now looks like:
 #
@@ -59,20 +60,6 @@ steps:
       queue: "launch"
       os: "linux"
       arch: "x86_64" # prevent from running on PiBots
-
-  - label: ":rocket: Launch scheduled workloads"
-    if: build.pull_request.labels includes "needs extended CI"
-    plugins:
-      - JuliaCI/external-buildkite#v1:
-          version: "./.buildkite-external-version"
-          repo_url: "https://github.com/JuliaCI/julia-buildkite"
-    commands: |
-      python3 .buildkite/utilities/render_launch_pipeline.py --scheduled-workloads > pipeline.scheduled.generated.yml
-      buildkite-agent pipeline upload pipeline.scheduled.generated.yml
-    agents:
-      queue: "launch"
-      os: "linux"
-      arch: "x86_64"
 
   # The julia-publish triggers are emitted by render_launch_pipeline.py as a
   # final `Publish` group in the SAME `pipeline upload` as the jobs they

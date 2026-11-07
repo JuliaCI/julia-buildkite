@@ -74,7 +74,8 @@ The TTFX and runtime benchmark jobs gate themselves in their own launch steps, b
 their own path lists and labels (`needs TTFX check`, `needs runtime benchmarks`;
 see `utilities/ttfx/README.md` and `utilities/runtime_benchmarks/README.md`).
 
-Pull requests with the `needs extended CI` label also run the scheduled workloads.
+Pull requests with the `needs extended CI` label also run the scheduled workloads
+and coverage; like `needs full CI`, the label counts on a rebuild too.
 Coverage data is collected but not uploaded to Codecov or Coveralls.
 
 The x86-64 Linux assertion build is tested under rr (with the `rr` and
