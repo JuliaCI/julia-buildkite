@@ -81,6 +81,21 @@ fi
 IFS=',' read -ra ARCHES_FLAGS <<<"${MAKE_FLAGS}"
 MFLAGS+=( "${ARCHES_FLAGS[@]}" )
 
+# Only the tarballs julia-publish ships carry the HTML manual. Pull request builds,
+# and variants with no row in any upload_*.arches file (profiling, MMTk), skip
+# building it (JULIA_INSTALL_DOCS=0; older Julia trees ignore the flag). The doctest
+# job still builds the manual on every pipeline.
+SHIPS_HTML_DOCS=false
+if [[ "${BUILDKITE_PIPELINE_SLUG-}" != "julia-pr" ]] &&
+   awk -v t="${TRIPLET}" '!/^#/ { for (i = 1; i <= NF; i++) if ($i == t) found = 1 }
+                             END { exit !found }' \
+       .buildkite/pipelines/*/platforms/upload_*.arches; then
+    SHIPS_HTML_DOCS=true
+fi
+if [[ "${SHIPS_HTML_DOCS}" != "true" ]]; then
+    MFLAGS+=( "JULIA_INSTALL_DOCS=0" )
+fi
+
 # Official distributions, including releases, provide these in a companion archive.
 # Keep this after ARCHES_FLAGS so a build cannot accidentally bundle them as well.
 MFLAGS+=( "JULIA_CHECK_BOUNDS_PKGIMAGES=0" )
