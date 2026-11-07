@@ -34,14 +34,12 @@ JULIA_CPU_TARGETS=()
 case "${ARCH?}" in
     x86_64)
         JULIA_CPU_TARGETS+=(
-            # Absolute base x86_64 feature set
-            "generic"
-            # Add sandybridge level (without xsaveopt) and that clones all functions
-            "sandybridge,-xsaveopt,clone_all"
+            # Base x86_64 feature set: sandybridge (AVX), without xsaveopt
+            "sandybridge,-xsaveopt"
             # Add haswell level (without rdrnd) that is a diff of the sandybridge level
-            "haswell,-rdrnd,base(1)"
+            "haswell,-rdrnd,base(0)"
             # A common baseline for modern x86-64 server CPUs
-            "x86-64-v4,-rdrnd,base(1)"
+            "x86-64-v4,-rdrnd,base(0)"
         )
         ;;
     i686)
