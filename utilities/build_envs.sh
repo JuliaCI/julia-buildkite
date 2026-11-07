@@ -14,6 +14,17 @@ else
 fi
 export MAKE
 
+# Whether TRIPLET has a row in any `<kind>_*.arches` file of any pipeline, for
+# each <kind> given (e.g. `triplet_in_arches upload test`).
+triplet_in_arches() {
+    local files=() kind
+    for kind in "$@"; do
+        files+=( .buildkite/pipelines/*/platforms/"${kind}"_*.arches )
+    done
+    awk -v t="${TRIPLET}" '!/^#/ { for (i = 1; i <= NF; i++) if ($i == t) found = 1 }
+                              END { exit !found }' "${files[@]}"
+}
+
 # Apply fixups to our environment for when we're running on julia-buildkite pipeline
 if buildkite-agent meta-data exists BUILDKITE_JULIA_BRANCH; then
     # `BUILDKITE_BRANCH` should refer to `julia.git`, not `julia-buildkite.git`
@@ -23,8 +34,11 @@ fi
 
 # Older Julia trees bundle these caches and have no companion archive target.
 # Detect the capability instead of assuming it from the Julia version.
+# Variants that are neither shipped nor tested (profiling, powerpc64le assert)
+# skip precompiling the stdlibs a second time. Tested ones keep it, since
+# test/runtests.jl would otherwise build the missing caches in the test job.
 HAS_CHECKBOUNDS_PKGIMAGES=false
-if grep -q '^checkbounds-pkgimages:' Makefile; then
+if grep -q '^checkbounds-pkgimages:' Makefile && triplet_in_arches upload test; then
     HAS_CHECKBOUNDS_PKGIMAGES=true
 fi
 export HAS_CHECKBOUNDS_PKGIMAGES
