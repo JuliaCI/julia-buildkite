@@ -11,7 +11,8 @@ steps:
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
           - JuliaCI/julia#v1:
               # Drop default "registries" directory, so it is not persisted from execution to execution
-              persist_depot_dirs: packages,artifacts,compiled
+              # `texmf-cache` holds the LuaTeX font cache (see TEXMFCACHE below).
+              persist_depot_dirs: packages,artifacts,compiled,texmf-cache
               version: '1.11' # GREP_ME: Keep this updated. Do not set it to '1' or 'stable' or 'latest'.
           - JuliaCI/sandbox#v2:
               rootfs_url: https://github.com/JuliaCI/rootfs-images/releases/download/v6.00/latex.x86_64.tar.gz
@@ -36,6 +37,11 @@ steps:
           export DOCUMENTER_LATEX_DEBUG="$$(pwd)/latex-debug-logs"
           mkdir -p $${DOCUMENTER_LATEX_DEBUG:?}
           echo "DOCUMENTER_LATEX_DEBUG is $${DOCUMENTER_LATEX_DEBUG:?}"
+          # The rootfs ships no luaotfload font names database, so the first
+          # lualatex run rebuilt it on every job. Keep the cache in the depot.
+          export TEXMFCACHE="$${JULIA_DEPOT_PATH%%:*}/texmf-cache"
+          mkdir -p "$${TEXMFCACHE:?}"
+          echo "TEXMFCACHE is $${TEXMFCACHE:?}"
 
           echo "--- Build the PDF"
           ./julia .buildkite/pipelines/main/misc/pdf_docs/make.jl
