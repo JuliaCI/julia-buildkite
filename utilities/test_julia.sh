@@ -119,6 +119,11 @@ if [[ "${USE_RR-}" == "rr" ]] || [[ "${USE_RR-}" == "rr-net" ]]; then
 
     # Do not run Pkg or JuliaLowering stdlib tests on rr.
     TESTS_TO_SKIP+=( Pkg JuliaLowering_stdlibs )
+    # The longest tests under rr (20-57 min each), which set the length of the
+    # whole job. Only where a non-rr job runs them on the same binary.
+    if [[ "${TRIPLET}" == "x86_64-linux-gnuassert" ]]; then
+        TESTS_TO_SKIP+=( compileall cmdlineargs JuliaLowering sorting Compiler/AbstractInterpreter )
+    fi
 
     # rr: all tests EXCEPT the network-related tests
     # rr-net: ONLY the network-related tests
