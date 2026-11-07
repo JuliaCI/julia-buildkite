@@ -14,6 +14,17 @@ else
 fi
 export MAKE
 
+# Whether TRIPLET has a row in any `<kind>_*.arches` file of any pipeline, for
+# each <kind> given (e.g. `triplet_in_arches upload test`).
+triplet_in_arches() {
+    local files=() kind
+    for kind in "$@"; do
+        files+=( .buildkite/pipelines/*/platforms/"${kind}"_*.arches )
+    done
+    awk -v t="${TRIPLET}" '!/^#/ { for (i = 1; i <= NF; i++) if ($i == t) found = 1 }
+                              END { exit !found }' "${files[@]}"
+}
+
 # Apply fixups to our environment for when we're running on julia-buildkite pipeline
 if buildkite-agent meta-data exists BUILDKITE_JULIA_BRANCH; then
     # `BUILDKITE_BRANCH` should refer to `julia.git`, not `julia-buildkite.git`
