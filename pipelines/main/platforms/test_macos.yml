@@ -6,7 +6,7 @@ steps:
         depends_on:
           - "build_${TRIPLET?}"
         plugins:
-          - JuliaCI/coreupload#v2:
+          - JuliaCI/coreupload#v2.8:
               core_pattern: "**/*.core"
               compressor: "zstd"
               create_bundle: "true"
