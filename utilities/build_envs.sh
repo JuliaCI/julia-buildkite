@@ -23,8 +23,14 @@ fi
 
 # Older Julia trees bundle these caches and have no companion archive target.
 # Detect the capability instead of assuming it from the Julia version.
+# Only the variants julia-publish ships (a row in some upload_*.arches file) carry
+# the companion archive; the others (profiling, MMTk) skip precompiling the stdlibs
+# a second time, and their test jobs skip installing it.
 HAS_CHECKBOUNDS_PKGIMAGES=false
-if grep -q '^checkbounds-pkgimages:' Makefile; then
+if grep -q '^checkbounds-pkgimages:' Makefile &&
+   awk -v t="${TRIPLET}" '!/^#/ { for (i = 1; i <= NF; i++) if ($i == t) found = 1 }
+                             END { exit !found }' \
+       .buildkite/pipelines/*/platforms/upload_*.arches; then
     HAS_CHECKBOUNDS_PKGIMAGES=true
 fi
 export HAS_CHECKBOUNDS_PKGIMAGES
