@@ -216,7 +216,16 @@ fi
 
 # Show our core dump file pattern and size limit if we're going to be recording them
 if [[ -z "${USE_RR-}" ]]; then
-    ulimit -c unlimited
+    if [[ "${OS}" == windows* ]]; then
+        ulimit -c unlimited
+    else
+        # shellcheck source=SCRIPTDIR/core_dumps.sh
+        source .buildkite/utilities/core_dumps.sh
+        limit_core_dumps
+        reap_core_dumps &
+        CORE_REAPER_PID="$!"
+        echo "Core dumps kept:           the first ${MAX_CORE_DUMPS}, while ${CORE_DUMP_RESERVE_GIB} GiB of disk space is free"
+    fi
     if [[ "${OS}" == linux* || "${OS}" == "musl" ]]; then
         echo "Core dump pattern:         $(cat /proc/sys/kernel/core_pattern)"
     elif [[ "${OS}" == macos* || "${OS}" == "freebsd" ]]; then
@@ -232,6 +241,10 @@ if ${JULIA_CMD_FOR_TESTS:?} --color=yes -e "Base.runtests(\"${TESTS:?}\"; ncores
   exitVal=0
 else
   exitVal=1
+fi
+if [[ -n "${CORE_REAPER_PID:-}" ]]; then
+    kill "${CORE_REAPER_PID}" 2>/dev/null || true
+    wait "${CORE_REAPER_PID}" 2>/dev/null || true
 fi
 
 echo "--- Upload results.json report"
