@@ -35,9 +35,9 @@ paths in `paths.txt`; when nothing there changed it prints why and uploads no jo
 target branch cannot be fetched or the merge-base found, the job runs rather than being
 skipped on a guess. The `TTFX` commit status is the job's own, so a pull request that is
 not measured shows none. Buildkite records the labels when it creates a build, and a rebuild
-from the Buildkite UI keeps those of the build it repeats, so when the label is not among
-them the launch step asks GitHub for the pull request's current labels. Adding the label and
-rebuilding is therefore enough. If GitHub cannot be reached, the paths decide.
+from the Buildkite UI keeps those of the build it repeats, so the launch step asks GitHub
+for the pull request's current labels. Adding the label and rebuilding is therefore enough.
+If GitHub cannot be reached, it goes by the labels Buildkite recorded.
 
 ## Comparison mode: pull requests (julia-pr)
 

@@ -21,6 +21,8 @@ import unittest
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 RENDERER = os.path.join(ROOT, "utilities", "render_launch_pipeline.py")
 AGENT = os.environ.get("BUILDKITE_AGENT_BIN") or shutil.which("buildkite-agent")
+# Read the pull request labels from the environment, not from GitHub
+os.environ["GITHUB_API_URL"] = "http://127.0.0.1:9"
 
 # `--dry-run` refuses to start without these, but never contacts the endpoint
 AGENT_ENV = {
@@ -59,7 +61,8 @@ class PipelineDryRunTests(unittest.TestCase):
     def test_rendered_launch_pipeline(self):
         release = {"BUILDKITE_PIPELINE_SLUG": "julia-ci", "BUILDKITE_BRANCH": "v1.14.0"}
         branch = {"BUILDKITE_PIPELINE_SLUG": "julia-ci", "BUILDKITE_BRANCH": "release-1.14"}
-        for args, build_env in (([], {}), (["--scheduled-workloads"], {}),
+        for args, build_env in (([], {}), ([], {"BUILDKITE_PULL_REQUEST": "123",
+                                       "BUILDKITE_PULL_REQUEST_LABELS": "needs extended CI"}),
                                 ([], release), ([], branch),
                                 ([], {**release, "NOGPL_ONLY": "true"}),
                                 ([], {**release, "OPT_ONLY": "true"}),

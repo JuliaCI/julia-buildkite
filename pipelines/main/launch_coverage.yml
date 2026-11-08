@@ -8,14 +8,14 @@ steps:
   - group: "Upload"
     steps:
       - label: "Launch coverage"
+        # Labeled pull requests get coverage from the main launch step
+        if: build.pull_request.id == null
         plugins:
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
         commands: |
-          # Launch the code coverage job (scheduled julia-ci builds and
-          # "needs extended CI"-labeled PRs; PR builds hold no coverage tokens,
-          # so they collect coverage without uploading it -- see the
+          # Launch the code coverage job (scheduled julia-ci builds; see the
           # conditionals inside)
           buildkite-agent pipeline upload .buildkite/pipelines/scheduled/coverage/coverage.yml
 

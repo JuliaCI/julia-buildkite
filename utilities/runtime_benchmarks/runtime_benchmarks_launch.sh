@@ -25,8 +25,9 @@ if [[ "${BUILDKITE_PIPELINE_SLUG:-}" != "julia-pr" || "${BUILDKITE_PULL_REQUEST:
 fi
 
 # BUILDKITE_PULL_REQUEST_LABELS holds the labels as they were when the build was created,
-# and a rebuild from the Buildkite UI keeps those of the build it repeats. So when the
-# label is not there, ask GitHub for the pull request's labels as they are now.
+# and a rebuild from the Buildkite UI keeps those of the build it repeats. So ask GitHub
+# for the pull request's labels as they are now, and use the recorded ones only when that
+# fails.
 github_repo() {
     local r="${BUILDKITE_REPO:-}"
     r="${r#*github.com}"
@@ -40,21 +41,19 @@ github_repo() {
 }
 
 has_label() {
-    if [[ ",${BUILDKITE_PULL_REQUEST_LABELS:-}," == *",${RTB_LABEL},"* ]]; then
-        return 0
-    fi
     local url
-    url="https://api.github.com/repos/$(github_repo)/issues/${BUILDKITE_PULL_REQUEST}/labels?per_page=100"
+    url="${GITHUB_API_URL:-https://api.github.com}/repos/$(github_repo)/issues/${BUILDKITE_PULL_REQUEST}/labels?per_page=100"
     local auth=()
     if [[ -n "${GITHUB_TOKEN:-}" ]]; then
         auth=(-H "Authorization: Bearer ${GITHUB_TOKEN}")
     fi
     local labels
-    if ! labels="$(curl -fsSL --max-time 30 -H "Accept: application/vnd.github+json" ${auth[@]+"${auth[@]}"} "${url}")"; then
-        echo "Could not read the pull request's labels from GitHub; deciding by the paths it touches"
-        return 1
+    if labels="$(curl -fsSL --max-time 30 -H "Accept: application/vnd.github+json" ${auth[@]+"${auth[@]}"} "${url}")"; then
+        grep -Eq "\"name\": *\"${RTB_LABEL}\"" <<< "${labels}"
+        return
     fi
-    grep -Eq "\"name\": *\"${RTB_LABEL}\"" <<< "${labels}"
+    echo "Could not read the pull request's labels from GitHub; going by the labels Buildkite recorded"
+    [[ ",${BUILDKITE_PULL_REQUEST_LABELS:-}," == *",${RTB_LABEL},"* ]]
 }
 
 if has_label; then

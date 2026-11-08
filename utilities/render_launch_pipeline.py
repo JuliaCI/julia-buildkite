@@ -42,9 +42,9 @@ renders only those; they also add the optimized groups (OPT_ONLY=true
 renders only those), whose tests gate their publish triggers on tags unless
 OPT_TESTS_ALLOW_FAIL=true. ONLY_TRIPLETS=<triplet>[,...] renders only the
 build, test and publish jobs of those platforms, from whichever groups the
-build would otherwise contain. Labeled PRs render the same workload groups as a
-supplemental pipeline, without publish triggers. A julia-pr pull request skips
-the jobs whose paths it does not change (PR_GATED_FILES, PR_GATED_TRIPLETS). Per-commit results are grouped
+build would otherwise contain. Pull requests with the EXTENDED_CI_LABEL add
+the scheduled workload groups and coverage, without publish triggers. A
+julia-pr pull request skips the jobs whose paths it does not change (PR_GATED_FILES, PR_GATED_TRIPLETS). Per-commit results are grouped
 into one `group:` per label: Build, Check, Test, Allow Fail, JuliaSyntax,
 JuliaC, TTFX, Runtime benchmarks, Publish.
 
@@ -52,7 +52,6 @@ The Publish group's triggers each `depends_on` only their own platform's
 build + test jobs (see publish_group_text).
 """
 
-import argparse
 import functools
 import json
 import os
@@ -70,6 +69,7 @@ ARCHES_ENV_SH = os.path.join(UTIL_DIR, "arches_env.sh")
 PLATFORMS = os.path.join(ROOT, "pipelines", "main", "platforms")
 MISC = os.path.join(ROOT, "pipelines", "main", "misc")
 SCHEDULED_PLATFORMS = os.path.join(ROOT, "pipelines", "scheduled", "platforms")
+COVERAGE = os.path.join(ROOT, "pipelines", "scheduled", "coverage", "coverage.yml")
 
 
 # --------------------------------------------------------------------------
@@ -507,6 +507,8 @@ PR_GATED_TRIPLETS = {
 }
 # Runs every job on a pull request
 FULL_CI_LABEL = "needs full CI"
+# Adds the scheduled workloads and coverage to a pull request
+EXTENDED_CI_LABEL = "needs extended CI"
 
 # Buildkite job priorities; a higher one takes the next free agent first.
 HIGH_PRIORITY, NORMAL_PRIORITY, LOW_PRIORITY = 1, 0, -1
@@ -635,18 +637,22 @@ def github_repo():
 
 
 def pr_has_label(label):
-    """Whether the pull request has `label`. Buildkite records the labels when
-    it creates a build, and a rebuild from its UI keeps those of the build it
-    repeats, so a label missing there is looked up on GitHub."""
-    if label in os.environ.get("BUILDKITE_PULL_REQUEST_LABELS", "").split(","):
-        return True
-    return label in github_pr_labels()
+    """Whether the pull request has `label` now. Buildkite records the labels
+    when it creates a build, and a rebuild from its UI keeps those of the build
+    it repeats, so GitHub is asked; the recorded labels are used only when
+    GitHub cannot be reached."""
+    labels = github_pr_labels()
+    if labels is None:
+        labels = os.environ.get("BUILDKITE_PULL_REQUEST_LABELS", "").split(",")
+    return label in labels
 
 
 @functools.cache
 def github_pr_labels():
-    """The pull request's labels on GitHub, read once per render."""
-    url = (f"https://api.github.com/repos/{github_repo()}/issues/"
+    """The pull request's labels on GitHub, read once per render, or None if
+    they could not be read."""
+    api = os.environ.get("GITHUB_API_URL", "https://api.github.com")
+    url = (f"{api}/repos/{github_repo()}/issues/"
            f"{os.environ['BUILDKITE_PULL_REQUEST']}/labels?per_page=100")
     request = urllib.request.Request(url, headers={"Accept": "application/vnd.github+json"})
     if os.environ.get("GITHUB_TOKEN"):
@@ -657,7 +663,7 @@ def github_pr_labels():
     except (OSError, ValueError) as e:
         log(f"Could not read the pull request's labels from GitHub ({e}); "
             "going by the labels Buildkite recorded")
-        return frozenset()
+        return None
 
 
 @functools.cache
@@ -807,16 +813,6 @@ def publish_group_text(triplets, scheduled=False, docs=False):
     return emit_group("Publish", "\n".join(triggers))
 
 
-def parse_args():
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--scheduled-workloads",
-        action="store_true",
-        help="render scheduled workloads without the scheduled publish trigger",
-    )
-    return parser.parse_args()
-
-
 def is_release_build():
     """Whether this julia-ci build is a release build: a push to a release-*
     branch, the tag build itself, or a build created with branch=v<version>
@@ -912,8 +908,12 @@ def only_triplets_text(only):
     return pipeline_header() + "\n".join(blocks) + "\n"
 
 
+def scheduled_workload_blocks():
+    return [schedule_group_text(label, arches, allow_fail)
+            for label, allow_fail, arches in SCHEDULE_GROUPS]
+
+
 def main():
-    args = parse_args()
     # TTFX_RELEASE (set by the weekly julia-ci schedule, or on a build created
     # by hand) measures a published release on the TTFX tasks and the runtime
     # benchmarks; nothing is built.
@@ -924,17 +924,14 @@ def main():
         sys.stdout.write(verbatim_group_text(os.path.join(MISC, "runtime_benchmarks", "runtime_benchmarks_release.yml")))
         sys.stdout.write("\n")
         return
-    is_schedule = os.environ.get("BUILDKITE_SOURCE") == "schedule"
-    if is_schedule or args.scheduled_workloads:
-        blocks = [schedule_group_text(label, arches, allow_fail)
-                  for label, allow_fail, arches in SCHEDULE_GROUPS]
-        if is_schedule and not args.scheduled_workloads:
-            # TTFX of the optimized build against the regular build of the same
-            # commit, for julia-ci-timing; not on labeled pull requests, which
-            # would hold a macOS agent for hours (utilities/ttfx/README.md)
-            blocks.append(verbatim_group_text(os.path.join(MISC, "ttfx", "ttfx_opt.yml")))
-            triplets = upload_triplets(SCHEDULE_UPLOAD_ARCHES, SCHEDULED_PLATFORMS)
-            blocks.append(publish_group_text(triplets, scheduled=True))
+    if os.environ.get("BUILDKITE_SOURCE") == "schedule":
+        blocks = scheduled_workload_blocks()
+        # TTFX of the optimized build against the regular build of the same
+        # commit, for julia-ci-timing; not on labeled pull requests, which
+        # would hold a macOS agent for hours (utilities/ttfx/README.md)
+        blocks.append(verbatim_group_text(os.path.join(MISC, "ttfx", "ttfx_opt.yml")))
+        triplets = upload_triplets(SCHEDULE_UPLOAD_ARCHES, SCHEDULED_PLATFORMS)
+        blocks.append(publish_group_text(triplets, scheduled=True))
         sys.stdout.write(pipeline_header())
         sys.stdout.write("\n".join(blocks))
         sys.stdout.write("\n")
@@ -1024,6 +1021,15 @@ def main():
         label, allow_fail, arches = RISCV64_GROUP
         blocks.append(schedule_group_text(label, arches, allow_fail))
         triplets += nogpl_triplets() + opt_triplets() + riscv64_triplets()
+
+    # Decided here rather than by an `if:` on the step, which sees only the
+    # labels Buildkite recorded, so that a rebuild after adding the label works.
+    if (os.environ.get("BUILDKITE_PULL_REQUEST", "false") != "false"
+            and pr_has_label(EXTENDED_CI_LABEL)):
+        log(f"The pull request has the '{EXTENDED_CI_LABEL}' label; "
+            "adding the scheduled workloads and coverage")
+        blocks.extend(scheduled_workload_blocks())
+        blocks.append(verbatim_group_text(COVERAGE))
     blocks.append(publish_group_text(triplets, docs=True))
 
     sys.stdout.write(pipeline_header())
