@@ -28,3 +28,5 @@ jobs:
           exit "${failures}"
       - name: Test the job width rule
         run: python3 utilities/tests/test_width.py
+      - name: Test the core dump limits
+        run: python3 utilities/tests/test_core_dumps.py
