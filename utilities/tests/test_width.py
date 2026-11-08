@@ -36,7 +36,7 @@ class WidthTests(unittest.TestCase):
         self.bin = self.work / "tools"
         self.bin.mkdir()
         self.log = self.work / "calls.jsonl"
-        for script in ("build_julia.sh", "test_julia.sh", "word.sh", "width.sh"):
+        for script in ("build_julia.sh", "test_julia.sh", "word.sh", "width.sh", "core_dumps.sh"):
             if (ROOT / "utilities" / script).exists():
                 shutil.copy(ROOT / "utilities" / script, self.utils / script)
         self.write(self.utils / "build_envs.sh", '''
