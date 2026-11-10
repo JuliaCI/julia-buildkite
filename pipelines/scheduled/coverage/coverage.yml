@@ -83,7 +83,7 @@ steps:
           # As the Linux test suites: charged at typical use, 12 workers wide.
           sched_cpus: "8"
           sched_cpus_limit: "12"
-          sched_mem_gib: "35"
+          sched_mem_gib: "13"
           sched_mem_limit_gib: "64"
           # Only run on `sandbox.jl` machines (not `docker`-isolated ones) since we need nestable sandboxing
           sandbox_capable: "true"
@@ -301,7 +301,7 @@ steps:
           queue: "test"
           sched_cpus: "1"
           sched_cpus_limit: "1"
-          sched_mem_gib: "4"
+          sched_mem_gib: "2"
           # Only run on `sandbox.jl` machines (not `docker`-isolated ones) since we need nestable sandboxing
           sandbox_capable: "true"
           os: "linux"

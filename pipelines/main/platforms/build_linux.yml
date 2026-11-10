@@ -30,11 +30,11 @@ steps:
         agents:
           queue: "build"
           # Builds are serial for about half their time: charged 4 CPUs, they run
-          # on a cpuset of 16. Memory: the 95th percentile of the builds' peaks,
-          # limited at 40 GiB.
+          # on a cpuset of 16. Memory: the 95th percentile of the builds' mean use
+          # (what they are charged), limited at 40 GiB for their link-time peaks.
           sched_cpus: "${SCHED_CPUS:-4}"
           sched_cpus_limit: "${SCHED_CPUS_LIMIT:-16}"
-          sched_mem_gib: "${SCHED_MEM_GIB:-12}"
+          sched_mem_gib: "${SCHED_MEM_GIB:-3}"
           sched_mem_limit_gib: "${SCHED_MEM_LIMIT_GIB:-40}"
           # Only run on `sandbox.jl` machines (not `docker`-isolated ones) since we need nestable sandboxing
           sandbox_capable: "true"
