@@ -5,7 +5,10 @@
 # assume that all of the tests passed. If you want to know if all of the tests are passing,
 # please look at the status of the `tester_*` jobs (e.g. `tester_linux64`).
 
-const ncores = Sys.CPU_THREADS
+# Every worker carries coverage instrumentation; COVERAGE_MAX_WORKERS caps the
+# width on hosts whose memory doesn't fit one worker per CPU thread.
+const ncores = min(Sys.CPU_THREADS,
+                   parse(Int, get(ENV, "COVERAGE_MAX_WORKERS", string(Sys.CPU_THREADS))))
 @info "" Sys.CPU_THREADS
 @info "" ncores
 
