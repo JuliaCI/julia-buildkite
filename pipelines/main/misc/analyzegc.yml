@@ -26,7 +26,7 @@ steps:
         timeout_in_minutes: 60
         agents:
           queue: "test"
-          sched_cpus: "8"
+          sched_cpus: "6"
           sched_cpus_limit: "12"
           sched_mem_gib: "3"
           sched_mem_limit_gib: "16"

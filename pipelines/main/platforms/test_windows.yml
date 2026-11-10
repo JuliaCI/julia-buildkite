@@ -16,7 +16,7 @@ steps:
           queue: "test"
           sched_cpus: "6"
           sched_cpus_limit: "6"
-          sched_mem_gib: "24"
+          sched_mem_gib: "${SCHED_MEM_GIB:-24}"
           os: "windows"
           arch: "${ARCH}"
         env:
