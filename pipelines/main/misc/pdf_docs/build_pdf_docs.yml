@@ -19,8 +19,9 @@ steps:
               uid: 1000
               gid: 1000
               workspaces:
-                # Include `/cache/repos` so that our `git` version introspection works.
-                - "/cache/repos:/cache/repos"
+                # `/cache` is the job's cache pool (`XDG_CACHE_HOME`). It holds `/cache/repos`
+                # for our `git` version introspection, the depot and the minted cache.
+                - "/cache:/cache"
         commands: |
           echo "--- Download pre-built julia, extract into usr/"
           buildkite-agent artifact download --step "build_x86_64-linux-gnu" 'julia-*-linux-x86_64.tar.gz' .
@@ -37,28 +38,15 @@ steps:
           mkdir -p $${DOCUMENTER_LATEX_DEBUG:?}
           echo "DOCUMENTER_LATEX_DEBUG is $${DOCUMENTER_LATEX_DEBUG:?}"
           # Documenter compiles in a fresh directory, so minted would run pygmentize
-          # for every code block on every job. Keep its cache under the build path,
-          # which the sandbox mounts read-write; the depot is not mounted, so writes
-          # there are dropped with the sandbox overlay. (Julia trees whose
-          # doc/src/assets/preamble.tex predates the variable ignore it.)
-          export JULIA_MINTED_CACHEDIR="$${BUILDKITE_BUILD_PATH:?}/minted-cache"
+          # for every code block on every job. Keep its cache in the job's cache pool,
+          # which the runner evicts. (Julia trees whose doc/src/assets/preamble.tex
+          # predates the variable ignore it.)
+          export JULIA_MINTED_CACHEDIR="$${XDG_CACHE_HOME:?}/minted"
           mkdir -p "$${JULIA_MINTED_CACHEDIR:?}"
           echo "JULIA_MINTED_CACHEDIR is $${JULIA_MINTED_CACHEDIR:?}"
 
           echo "--- Build the PDF"
           ./julia .buildkite/pipelines/main/misc/pdf_docs/make.jl
-
-          echo "--- Drop minted cache entries this build did not use"
-          # minted prunes against the previous run's .aux, which a fresh directory lacks;
-          # Documenter copies the final one into DOCUMENTER_LATEX_DEBUG.
-          aux="$${DOCUMENTER_LATEX_DEBUG:?}/TheJuliaLanguage.aux"
-          if [[ -f "$${aux}" ]]; then
-              keep="$$(mktemp)"
-              grep -o '[0-9A-F]\{64\}\.pygtex' "$${aux}" | sort -u > "$${keep}"
-              [[ -s "$${keep}" ]] && (cd "$${JULIA_MINTED_CACHEDIR:?}" && find . -maxdepth 1 -name '*.pygtex' -printf '%f\n' |
-                  grep -vxFf "$${keep}" | xargs -r rm -f --)
-              rm -f "$${keep}"
-          fi
 
           echo "--- Upload the PDF files as Buildkite artifacts"
           find . -type f -name "*.pdf"
