@@ -20,7 +20,7 @@ steps:
           # and get the whole host.
           sched_cpus: "1"
           sched_cpus_limit: "4"
-          sched_mem_gib: "4"
+          sched_mem_gib: "2"
           sched_mem_limit_gib: "8"
           os: "{{matrix.agent_os}}"
           arch: "{{matrix.agent_arch}}"
@@ -124,7 +124,7 @@ steps:
           queue: "test"
           sched_cpus: "1"
           sched_cpus_limit: "4"
-          sched_mem_gib: "4"
+          sched_mem_gib: "2"
           sched_mem_limit_gib: "8"
           os: "{{matrix.agent_os}}"
           arch: "{{matrix.agent_arch}}"

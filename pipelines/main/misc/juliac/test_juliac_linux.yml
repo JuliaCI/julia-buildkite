@@ -47,7 +47,7 @@ steps:
           # longer than at 12, with its bursts pinned at the limit.
           sched_cpus: "4"
           sched_cpus_limit: "12"
-          sched_mem_gib: "7"
+          sched_mem_gib: "4"
           sched_mem_limit_gib: "16"
           sandbox_capable: "true"
           os: "linux"

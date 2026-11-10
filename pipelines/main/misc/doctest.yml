@@ -96,7 +96,7 @@ steps:
           # on as many CPUs as the test suites.
           sched_cpus: "2"
           sched_cpus_limit: "12"
-          sched_mem_gib: "4"
+          sched_mem_gib: "2"
           sched_mem_limit_gib: "16"
           sandbox_capable: "true"
           doctest_capable: "true"

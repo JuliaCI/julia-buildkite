@@ -25,7 +25,7 @@ steps:
         queue: "build"
         sched_cpus: "2"
         sched_cpus_limit: "16"
-        sched_mem_gib: "5"
+        sched_mem_gib: "2"
         sched_mem_limit_gib: "40"
         sandbox_capable: "true"
         os: "linux"
