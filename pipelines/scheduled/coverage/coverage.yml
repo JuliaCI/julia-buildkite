@@ -158,10 +158,13 @@ steps:
           # a per-host fact in the scheduler's config.
           os: "macos"
           arch: "aarch64"
-          # The suite with coverage peaks at ~26 GiB: keep it off the 8 GiB M1s.
-          cpu: "apple-m2"
+          # Four workers recycled at 2.5 GiB peak at ~13 GiB in use and finish in
+          # ~49 min on a 16 GiB M6 (vs ~83 min unrecycled on a 24 GiB M2).
+          cpu: "apple-m6"
         env:
           JULIA_SHELL: "/bin/bash"
+          COVERAGE_MAX_WORKERS: "4"
+          JULIA_TEST_MAXRSS_MB: "2560"
           # Set build number for Coveralls parallel mode
           COVERALLS_SERVICE_NUMBER: ${BUILDKITE_BUILD_NUMBER}
 
