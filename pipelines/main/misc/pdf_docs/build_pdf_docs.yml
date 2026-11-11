@@ -11,8 +11,7 @@ steps:
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
           - JuliaCI/julia#v1:
               # Drop default "registries" directory, so it is not persisted from execution to execution
-              # `minted-cache` holds highlighted code blocks (see JULIA_MINTED_CACHEDIR below).
-              persist_depot_dirs: packages,artifacts,compiled,minted-cache
+              persist_depot_dirs: packages,artifacts,compiled
               version: '1.11' # GREP_ME: Keep this updated. Do not set it to '1' or 'stable' or 'latest'.
           - JuliaCI/sandbox#v2:
               rootfs_url: https://github.com/JuliaCI/rootfs-images/releases/download/v6.00/latex.x86_64.tar.gz
@@ -20,8 +19,9 @@ steps:
               uid: 1000
               gid: 1000
               workspaces:
-                # Include `/cache/repos` so that our `git` version introspection works.
-                - "/cache/repos:/cache/repos"
+                # `/cache` is the job's cache pool (`XDG_CACHE_HOME`). It holds `/cache/repos`
+                # for our `git` version introspection, the depot and the minted cache.
+                - "/cache:/cache"
         commands: |
           echo "--- Download pre-built julia, extract into usr/"
           buildkite-agent artifact download --step "build_x86_64-linux-gnu" 'julia-*-linux-x86_64.tar.gz' .
@@ -38,26 +38,15 @@ steps:
           mkdir -p $${DOCUMENTER_LATEX_DEBUG:?}
           echo "DOCUMENTER_LATEX_DEBUG is $${DOCUMENTER_LATEX_DEBUG:?}"
           # Documenter compiles in a fresh directory, so minted would run pygmentize
-          # for every code block on every job. Keep its cache in the depot (Julia
-          # trees whose doc/src/assets/preamble.tex predates the variable ignore it).
-          export JULIA_MINTED_CACHEDIR="$${JULIA_DEPOT_PATH%%:*}/minted-cache"
+          # for every code block on every job. Keep its cache in the job's cache pool,
+          # which the runner evicts. (Julia trees whose doc/src/assets/preamble.tex
+          # predates the variable ignore it.)
+          export JULIA_MINTED_CACHEDIR="$${XDG_CACHE_HOME:?}/minted"
           mkdir -p "$${JULIA_MINTED_CACHEDIR:?}"
           echo "JULIA_MINTED_CACHEDIR is $${JULIA_MINTED_CACHEDIR:?}"
 
           echo "--- Build the PDF"
           ./julia .buildkite/pipelines/main/misc/pdf_docs/make.jl
-
-          echo "--- Drop minted cache entries this build did not use"
-          # minted prunes against the previous run's .aux, which a fresh directory lacks;
-          # Documenter copies the final one into DOCUMENTER_LATEX_DEBUG.
-          aux="$${DOCUMENTER_LATEX_DEBUG:?}/TheJuliaLanguage.aux"
-          if [[ -f "$${aux}" ]]; then
-              keep="$$(grep -o '[0-9A-F]\{64\}\.pygtex' "$${aux}" | sort -u)"
-              for f in "$${JULIA_MINTED_CACHEDIR:?}"/*.pygtex; do
-                  [[ -e "$${f}" ]] || continue
-                  grep -qxF "$${f##*/}" <<<"$${keep}" || rm -f "$${f}"
-              done
-          fi
 
           echo "--- Upload the PDF files as Buildkite artifacts"
           find . -type f -name "*.pdf"
