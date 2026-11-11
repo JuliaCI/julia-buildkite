@@ -95,7 +95,10 @@ a load or run difference shows with the GC on only, and that phase's change in G
 is at least half offset by the opposite change in the other phase, the report lists it
 under "GC moved between load and run" and it does not count. Per metric,
 the geometric mean of the ratios over the suite is judged per block against a tighter
-threshold, which catches a small cost spread across every package. Precompile is judged
+threshold, which catches a small cost spread across every package. A suite load or run
+difference that shows with the GC on only, while the suite's GC time moved the other way
+in the other phase, counts only when the geomean of load and run added together changed
+the same way beyond the load threshold. Precompile is judged
 on the blocks that measured it; on a pull request its suite geomean is a single one, of
 each task's fastest head sample over its fastest base sample. Thresholds are the
 `METRICS` table in `ttfx_compare.jl`. A task that fails on head and passes on base is a

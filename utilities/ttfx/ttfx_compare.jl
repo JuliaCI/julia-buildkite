@@ -16,7 +16,8 @@
 # geometric mean over the suite is judged per block with a tighter threshold, which is
 # where a small regression spread over many packages shows up. A load or run difference
 # that only shows with the GC on, and whose extra GC time was taken from the other phase,
-# is a collection that moved between load and run; it is reported but not counted.
+# is a collection that moved between load and run; it is reported but not counted. For the
+# suite, such a difference counts only when load and run added together changed the same way.
 
 include(joinpath(@__DIR__, "ttfx_json.jl"))
 using .TTFXJSON
@@ -154,6 +155,10 @@ function compare_task(name, byarm, base, head, nblocks)
             merge!(out["metrics"][m.key], Dict("gcoff_base" => gb, "gcoff_head" => gh,
                                                 "gcoff_ratios" => gh ./ gb, "gcoff_verdict" => gverdict))
         end
+        if haskey(OTHER_PHASE, m.key)
+            d = gc_delta(b, h, m.key)
+            d === nothing || (out["metrics"][m.key]["gc_delta"] = d)
+        end
         if gverdict == "same" && verdict != "same" && haskey(out["metrics"][m.key], "gcoff_verdict") && gc_moved(b, h, m.key)
             out["metrics"][m.key]["gc_moved"] = true
             push!(out["gc_moved"], m.key)
@@ -169,12 +174,17 @@ end
 # Whether the change in a phase's GC time is mostly offset by the opposite change in the
 # other phase, so the same collections ran but on the other side of the load/run boundary.
 function gc_moved(b, h, key)
-    other = Dict("load" => "run", "run" => "load", "load_stdlibs" => "run_stdlibs", "run_stdlibs" => "load_stdlibs")[key]
-    gcs = [gc_time(r, k) for r in vcat(b, h), k in (key, other)]
-    any(isnothing, gcs) && return false
-    delta(k) = median(Float64[gc_time(r, k) for r in h]) - median(Float64[gc_time(r, k) for r in b])
-    d, o = delta(key), delta(other)
+    d = gc_delta(b, h, key); o = gc_delta(b, h, OTHER_PHASE[key])
+    (d === nothing || o === nothing) && return false
     return d * o < 0 && abs(d + o) <= abs(d) / 2
+end
+
+const OTHER_PHASE = Dict("load" => "run", "run" => "load", "load_stdlibs" => "run_stdlibs", "run_stdlibs" => "load_stdlibs")
+
+# Head minus base median GC time of a phase; nothing when a sample has no phase stats.
+function gc_delta(b, h, key)
+    any(r -> gc_time(r, key) === nothing, vcat(b, h)) && return nothing
+    return median(Float64[gc_time(r, key) for r in h]) - median(Float64[gc_time(r, key) for r in b])
 end
 
 # Robust: the two builds' samples do not overlap, every block agrees beyond the threshold,
@@ -214,8 +224,31 @@ function compare_suite(tasks, nblocks; precompile_once::Bool = false)
         verdict = all(>(1 + m.suite), gs) ? "regression" : all(<(1 - m.suite), gs) ? "improvement" : "same"
         suite[field == "ratios" ? m.key : m.key * "_gcoff"] = Dict("geomeans" => gs, "verdict" => verdict, "n_tasks" => count(has, tasks))
     end
+    # A suite difference that shows with the GC on only, while the GC time moved the other
+    # way in the other phase, is collections moving between load and run. It counts only
+    # when load and run added together changed the same way.
+    for (a, b) in (("load", "run"), ("load_stdlibs", "run_stdlibs"))
+        both = [t for t in tasks if haskey(t["metrics"], a) && haskey(t["metrics"], b)]
+        isempty(both) && continue
+        sum_ratio(t, k) = (t["metrics"][a]["head"][k] + t["metrics"][b]["head"][k]) /
+                          (t["metrics"][a]["base"][k] + t["metrics"][b]["base"][k])
+        gs = [geomean([sum_ratio(t, k) for t in both]) for k in 1:nblocks]
+        thr = only(m.suite for m in METRICS if m.key == a)
+        combined = all(>(1 + thr), gs) ? "regression" : all(<(1 - thr), gs) ? "improvement" : "same"
+        gc_change(k) = sum(t -> get(t["metrics"][k], "gc_delta", 0.0), both)
+        for (k, o) in ((a, b), (b, a))
+            s = get(suite, k, nothing); g = get(suite, k * "_gcoff", nothing)
+            (s === nothing || g === nothing) && continue
+            if s["verdict"] != "same" && g["verdict"] == "same" && combined != s["verdict"] && gc_change(k) * gc_change(o) < 0
+                s["gc_moved"] = true
+                s["combined_geomeans"] = gs
+            end
+        end
+    end
     return suite
 end
+
+counts(s, verdict) = s["verdict"] == verdict && !get(s, "gc_moved", false)
 
 arm_desc(meta, label) = begin
     a = meta === nothing ? nothing : get(get(meta, "arms", Dict()), label, nothing)
@@ -240,8 +273,8 @@ links(opts) = (isempty(opts["url"]) ? "" : " · [job](" * opts["url"] * ")") *
 
 function write_comparison(io, opts, meta, tasks, suite, nblocks)
     base, head = opts["base"], opts["head"]
-    nreg = sum(t -> length(t["regressions"]), tasks; init = 0) + count(s -> s["verdict"] == "regression", values(suite))
-    nimp = sum(t -> length(t["improvements"]), tasks; init = 0) + count(s -> s["verdict"] == "improvement", values(suite))
+    nreg = sum(t -> length(t["regressions"]), tasks; init = 0) + count(s -> counts(s, "regression"), values(suite))
+    nimp = sum(t -> length(t["improvements"]), tasks; init = 0) + count(s -> counts(s, "improvement"), values(suite))
     note = isempty(opts["base-note"]) ? "" : ", " * opts["base-note"]
     link = links(opts)
     header = arm_desc(meta, head) * " vs " * arm_desc(meta, base) * note * " · " * string(length(tasks)) *
@@ -260,14 +293,20 @@ function write_comparison(io, opts, meta, tasks, suite, nblocks)
             join([m.name * " " * pct(m.threshold) for m in METRICS], ", "),
             "); load and run are also judged from the repeats with the GC off (the stdlibs-first load and run with their GC time ",
             "taken out), and either counts (bold marks which), ",
-            "except a difference that shows with the GC on only and whose GC time moved from the other phase.\n")
+            "except a difference that shows with the GC on only and whose GC time moved from the other phase ",
+            "(for the suite: unless load and run added together changed the same way).\n")
     isempty(pnote) || println(io, pnote, "\n")
     println(io, "| suite (geomean over tasks) | change per block | with GC off | threshold |")
     println(io, "|---|---|---|---|")
     for m in METRICS
         haskey(suite, m.key) || continue
         s = suite[m.key]
-        marked(s) = (v = s["verdict"]; c = join(change.(s["geomeans"]), ", "); v == "same" ? c : "**" * c * " " * v * "**")
+        function marked(s)
+            v = s["verdict"]; c = join(change.(s["geomeans"]), ", ")
+            v == "same" && return c
+            get(s, "gc_moved", false) || return "**" * c * " " * v * "**"
+            return c * " (GC moved between load and run, not counted; load+run " * join(change.(s["combined_geomeans"]), ", ") * ")"
+        end
         g = get(suite, m.key * "_gcoff", nothing)
         println(io, "| ", m.name, " (", s["n_tasks"], s["n_tasks"] == 1 ? " task) | " : " tasks) | ", marked(s), " | ",
                 g === nothing ? "–" : marked(g), " | ±", pct(m.suite), " |")
