@@ -62,11 +62,14 @@ end
 # The same phase measured with the GC disabled (see the driver), for load and run;
 # nothing for records from before the driver recorded it. The stdlibs-first run has no
 # GC-off repeat, so its GC time is taken out instead, which is close but not the same.
+# The GC counters are read outside the phase's clocks (the third snapshot comes after
+# `__t3`), so a collection that starts just after the clock stops is counted but not
+# timed and can exceed the phase: such a sample has no GC-off value.
 function value_gcoff(r, key)
     r["status"] == "error" && return nothing
     if key in ("load_stdlibs", "run_stdlibs")
         t = value(r, key); g = gc_time(r, key)
-        return t === nothing || g === nothing ? nothing : t - g
+        return t === nothing || g === nothing || g >= t ? nothing : t - g
     end
     key in ("load", "run") || return nothing
     t = get(r, key * "_times_gcoff", Any[])

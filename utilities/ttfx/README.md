@@ -183,7 +183,9 @@ untimed, and the task runs once, cold: `load_times_stdlibs`, `run_times_stdlibs`
 their stats. They are compared as `load (stdlibs first)` and `run (stdlibs first)`, with
 the thresholds of the normal load and run. There is no GC-off repeat of this run, so each
 phase's GC time is subtracted to stand in for one; they are judged like the GC-off load
-and run, including the check for a collection that moved between them.
+and run, including the check for a collection that moved between them. The GC time is
+read just outside the phase's clocks, so a collection that starts as the clock stops can
+outlast the phase; such a task is not judged with the GC off for that phase.
 `precompile_time_stdlibs` is recorded but not compared: it follows the task's own
 precompile in the same depot, so it is mostly the extensions the stdlibs trigger, and a
 large value means adding them changed the resolved versions. A failure here is kept in `error_stdlibs` and does not
