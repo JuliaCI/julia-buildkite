@@ -32,7 +32,8 @@
 #
 # Schedule builds emit the scheduled workload groups; coverage remains a
 # separate upload so it does not delay publishing. Pull requests with the
-# `needs extended CI` label get both in this upload, without publishing.
+# `needs extended CI` label get both in this upload, without publishing, and
+# those with the `needs coverage CI` label get only coverage.
 #
 # Yes, this is creating another layer of indirection; the flow now looks like:
 #

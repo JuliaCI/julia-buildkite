@@ -570,6 +570,13 @@ class RenderLaunchPipelineTests(unittest.TestCase):
         for group in ("Source Build", "Coverage"):
             self.assertNotIn(f'group: "{group}"', render())
 
+    def test_coverage_ci_label_adds_only_coverage(self):
+        output = render(BUILDKITE_PULL_REQUEST="123",
+                        BUILDKITE_PULL_REQUEST_LABELS="needs coverage CI")
+        self.assertEqual(output.count('group: "Coverage"'), 1)
+        self.assertNotIn('group: "Source Build"', output)
+        self.assertNotIn('group: "Coverage"', render(BUILDKITE_PULL_REQUEST="123"))
+
 
 class InterpolateTests(unittest.TestCase):
     @classmethod
