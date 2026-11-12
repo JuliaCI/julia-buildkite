@@ -25,6 +25,8 @@ TTFX_SNIPPETS_REPO="${TTFX_SNIPPETS_REPO:-https://github.com/tecosaur/Julia-TTFX
 TTFX_SNIPPETS_REF="${TTFX_SNIPPETS_REF:-main}"
 TTFX_BLOCKS="${TTFX_BLOCKS:-2}"
 TTFX_REPEATS="${TTFX_REPEATS:-3}"
+# Runs of `julia -e ''` per arm and block, before the tasks; 0 skips them
+TTFX_STARTUP_RUNS="${TTFX_STARTUP_RUNS:-30}"
 # Also load each task with every stdlib loaded first; "off" skips that run
 TTFX_STDLIBS="${TTFX_STDLIBS:-on}"
 # "on" precompiles each task once per arm, in the first block (ttfx_bench.jl
@@ -273,6 +275,7 @@ fi
     --tasks "${TTFX_DIR}/snippets/tasks" ${bench_args[@]+"${bench_args[@]}"} \
     --depot "${TTFX_DIR}/depot" --workdir "${TTFX_DIR}/work" --logdir "${TTFX_DIR}/logs" \
     --blocks "${TTFX_BLOCKS}" --repeats "${TTFX_REPEATS}" \
+    --startup "${TTFX_STARTUP_RUNS}" --startup-results "${TTFX_DIR}/startup.json" \
     --results "${TTFX_DIR}/results.json" --meta "${TTFX_DIR}/results-meta.json" \
     --tracedir "${TTFX_DIR}/trace" --snippets-commit "${SNIPPETS_COMMIT}" \
     "${ARMS[@]}" 2>&1 | tee "${TTFX_DIR}/benchmark.log"
@@ -285,7 +288,7 @@ if [[ "${BUILDKITE_PIPELINE_SLUG:-}" == "julia-pr" && "${BUILDKITE_PULL_REQUEST:
 elif [[ "${BUILDKITE_PIPELINE_SLUG:-}" == "julia-ci" && -z "${TTFX_RELEASE}" ]]; then
     PERF_REF="$(git rev-parse HEAD)"
 fi
-compare_args=( --results "${TTFX_DIR}/results.json" --meta "${TTFX_DIR}/results-meta.json"
+compare_args=( --results "${TTFX_DIR}/results.json" --startup "${TTFX_DIR}/startup.json" --meta "${TTFX_DIR}/results-meta.json"
                --head head --report "${TTFX_DIR}/report.md" --json "${TTFX_DIR}/compare.json"
                --title "TTFX benchmarks: ${HEAD_NOTE}" --url "${BUILDKITE_BUILD_URL:-}#${BUILDKITE_JOB_ID:-}" )
 if [[ -n "${PERF_REF}" ]]; then

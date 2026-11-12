@@ -3,7 +3,8 @@
 A macOS aarch64 job in the `TTFX` group measures the julia a build produced on the
 [Julia-TTFX-Snippets](https://github.com/tecosaur/Julia-TTFX-Snippets) tasks: for each
 task, precompile time of its packages from a cleared cache, then the task script's load
-time and run time, in fresh processes. The task definitions come from the snippets
+time and run time, in fresh processes. Before the tasks it times julia's own startup, with
+`-e ''` and to the REPL's first prompt. The task definitions come from the snippets
 repository's `main` branch at job time; everything that runs them lives here.
 
 | file | role |
@@ -71,6 +72,15 @@ it took; Julia 1.12 and later) and logging invalidations over the same span (bel
 the traces are the `trace-compile.tar.gz` artifact. The depot
 holds packages and artifacts only; the agent user's own depot is not on the path.
 
+Before the tasks, each arm starts julia `TTFX_STARTUP_RUNS` times (30) per block, the arms
+alternating from run to run: `julia --startup-file=no -e ''`, timed by the driver from
+spawning the process to its exit, and an interactive julia on a pseudo-terminal, timed
+from spawning it to its first `julia> ` prompt (then sent `exit()`, untimed). Each arm's
+first run of a block is not timed, since it pages the build in from disk. The median of a
+block's runs is that block's sample, and the two are compared as the `startup` and
+`startup to REPL prompt` metrics of a task named `julia/startup`, which has no suite
+geomean.
+
 Precompiling is most of the job's time, and on a pull request each task is precompiled
 once per arm, in block 1 (`TTFX_PRECOMPILE_ONCE`, ttfx_bench.jl `--precompile-once`).
 The arm's package images are moved aside after that sample and back into the depot for
@@ -93,7 +103,13 @@ and run with their GC time subtracted), and either counts: a difference that onl
 GC on was GC pauses, one that only shows with it off was hidden by them. The exception is a collection that moved between the phases: when
 a load or run difference shows with the GC on only, and that phase's change in GC time
 is at least half offset by the opposite change in the other phase, the report lists it
-under "GC moved between load and run" and it does not count. Per metric,
+under "GC moved between load and run" and it does not count. A build can also move work
+from startup into the first package load, as one that faults in system image pages on first
+use instead of at startup does. So each task also has `startup+load (cold)`, from spawning the
+process to the end of its load phase, and a load difference whose task's time before
+the first marker changed the opposite way by at least half as much is listed under "Moved
+between startup and load" and does not count, unless startup+load changed the same way.
+The suite's load geomean is treated likewise. Per metric,
 the geometric mean of the ratios over the suite is judged per block against a tighter
 threshold, which catches a small cost spread across every package. A suite load or run
 difference that shows with the GC on only, while the suite's GC time moved the other way
@@ -126,14 +142,18 @@ else:
 
 | artifact | content |
 |---|---|
-| `ttfx/results.json` | records: `arm, package, task, block, order, status, error, precompile_time, load_times, run_times, total_times, load_stats, run_stats, load_times_gcoff, run_times_gcoff, total_times_gcoff, load_stats_gcoff, run_stats_gcoff, gc_after_load, error_gcoff, invalidations, packages_hash, precompile_time_stdlibs, load_times_stdlibs, run_times_stdlibs, total_times_stdlibs, load_stats_stdlibs, run_stats_stdlibs, error_stdlibs` |
+| `ttfx/results.json` | records: `arm, package, task, block, order, status, error, precompile_time, load_times, run_times, total_times, load_stats, run_stats, load_times_gcoff, run_times_gcoff, total_times_gcoff, load_stats_gcoff, run_stats_gcoff, gc_after_load, error_gcoff, invalidations, packages_hash, precompile_time_stdlibs, load_times_stdlibs, run_times_stdlibs, total_times_stdlibs, load_stats_stdlibs, run_stats_stdlibs, error_stdlibs, preload_times` |
+| `ttfx/startup.json` | the startup records: `arm, package, task, block, order, status, error, packages_hash, startup_times, startup_repl_times, error_repl`, every timed run of the block |
 | `ttfx/results-meta.json` | the builds (`arms.<label>`: version, commit, date, CPU threads seen), machine, settings, task list, snippets commit, Buildkite build |
 | `ttfx/report.md`, `ttfx/compare.json` | the report and, on pull requests, the per-task and suite verdicts |
 | `ttfx/benchmark.log` | the driver's log |
 | `ttfx/logs/*.log` | full stdout and stderr of every subprocess that failed |
 | `ttfx/trace-compile.tar.gz` | `trace/<Package>-<Task>-<arm>.log`: the `--trace-compile --trace-compile-timing` lines of one extra run of the task script per task and arm, from its first marker to its last, after the timed runs of block 1 and not timed itself |
 
-`load_times[1]` and `run_times[1]` are the cold numbers; `precompile_time` is one
+`load_times[1]` and `run_times[1]` are the cold numbers; `preload_times` holds, per repeat,
+the time from spawning the process to the script's first marker (the script reports when
+that marker ran, and the processes share the wall clock), so `preload_times[1] +
+load_times[1]` is startup+load; `precompile_time` is one
 sample per record, take the minimum over blocks for a task. On a pull request it is null
 after block 1, as is `precompile_time_stdlibs`, unless the task precompiled again.
 `load_stats` and `run_stats` hold, per repeat, what `@time` reports besides wall time for
@@ -251,7 +271,7 @@ which draws the optimized build next to the master series with the paired differ
 ## Knobs
 
 Environment variables on the job: `TTFX_EXCLUDE` (default `exclude.txt`, or `none`),
-`TTFX_BLOCKS` (2), `TTFX_REPEATS` (3), `TTFX_STDLIBS` (`on`, or `off`), `TTFX_PRECOMPILE_ONCE`
+`TTFX_BLOCKS` (2), `TTFX_REPEATS` (3), `TTFX_STARTUP_RUNS` (30, or 0 to skip), `TTFX_STDLIBS` (`on`, or `off`), `TTFX_PRECOMPILE_ONCE`
 (`on` on pull requests without the `needs TTFX check` label and on the self-test, `off`
 elsewhere), `TTFX_BASE_WAIT_MINUTES` (20),
 `TTFX_SNIPPETS_REPO` and `TTFX_SNIPPETS_REF`, `TTFX_RELEASE` (`latest`, a series such as

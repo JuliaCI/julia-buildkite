@@ -27,6 +27,10 @@
 #                        arm always precompiles first
 #   --repeats N          task script runs per sample; the first is the cold one, later ones
 #                        may hit caches it populated (default 3)
+#   --startup N          before the tasks, time `julia -e ''`, and the REPL to its first prompt,
+#                        N times each per arm and block, the arms alternating from run to run;
+#                        0 skips it (default 30)
+#   --startup-results F  those records (default startup.json)
 #   --timeout S          wall-clock limit per subprocess, seconds (default 1800)
 #   --results FILE       records (default results.json)
 #   --meta FILE          provenance (default results-meta.json)
@@ -36,8 +40,13 @@
 # run_times, total_times, load_stats, run_stats, load_times_gcoff, run_times_gcoff,
 # total_times_gcoff, load_stats_gcoff, run_stats_gcoff, gc_after_load, error_gcoff,
 # invalidations, packages_hash, precompile_time_stdlibs, load_times_stdlibs, run_times_stdlibs,
-# total_times_stdlibs, load_stats_stdlibs, run_stats_stdlibs, error_stdlibs}. `order` is the arm's position
-# within the block.
+# total_times_stdlibs, load_stats_stdlibs, run_stats_stdlibs, error_stdlibs, preload_times}. `order` is the
+# arm's position within the block. `preload_times` is, per repeat, the time from spawning the
+# process to the script's first marker: startup, plus the little the script does before it.
+# Startup records, in their own file: {arm, package = "julia", task = "startup", block,
+# order, status, error, packages_hash = null, startup_times, startup_repl_times, error_repl},
+# every timed run in run order. A REPL failure is kept in `error_repl` and does not affect
+# `status`.
 # A task that fails on any arm finishes the current block, so every arm gets its one try,
 # and skips the remaining blocks: a broken package does not cost the whole ABBA.
 # The task script prints "load, run, total seconds"; the `*_times` arrays keep every
@@ -76,8 +85,8 @@ function parse_args(args)
     opts = Dict{String,Any}(
         "tasks" => nothing, "exclude" => nothing, "depot" => nothing, "workdir" => nothing, "logdir" => nothing,
         "tracedir" => nothing, "stdlibs" => false, "precompile-once" => false,
-        "blocks" => "2", "repeats" => "3", "timeout" => "1800",
-        "results" => "results.json", "meta" => "results-meta.json", "snippets-commit" => "")
+        "blocks" => "2", "repeats" => "3", "timeout" => "1800", "startup" => "30",
+        "startup-results" => "startup.json", "results" => "results.json", "meta" => "results-meta.json", "snippets-commit" => "")
     arms = Arm[]
     i = 1
     while i <= length(args)
@@ -389,7 +398,7 @@ function instrument_task(proj::String)
     let stats(a, b) = (d = Base.GC_Diff(b[1], a[1]);
             "{\\"gc_time\\":\$(d.total_time / 1e9),\\"gc_pauses\\":\$(d.pause),\\"gc_full\\":\$(d.full_sweep),\\"allocd\\":\$(d.allocd)," *
             "\\"compile_time\\":\$((b[2][1] - a[2][1]) / 1e9),\\"recompile_time\\":\$((b[2][2] - a[2][2]) / 1e9)}")
-        println(stdout, "$STATS_PREFIX{\\"gc_off\\":\$__ttfx_gc_off,\\"gc_after_load\\":\$__ttfx_gc_after_load,\\"load\\":",
+        println(stdout, "$STATS_PREFIX{\\"gc_off\\":\$__ttfx_gc_off,\\"gc_after_load\\":\$__ttfx_gc_after_load,\\"t1\\":\$__t1,\\"load\\":",
                 stats(__ttfx_s1, __ttfx_s2), ",\\"run\\":", stats(__ttfx_s2r, __ttfx_s3), "}")
     end
     __ttfx_inv && Main.TTFXInvalidations.stop()
@@ -487,7 +496,7 @@ function measure(arm::Arm, depot::String, proj::String, script::String, repeats:
     trace, inv = tracefile === nothing || isempty(r.load) ? (nothing, nothing) :
         trace_run(arm, env, proj, script, timeout, tracefile, logname)
     return (; status, error = status == "ok" ? nothing : r.err, precompile_time,
-              load_times = r.load, run_times = r.run, total_times = r.total,
+              load_times = r.load, run_times = r.run, total_times = r.total, preload_times = r.preload,
               load_stats = r.load_stats, run_stats = r.run_stats,
               load_times_gcoff = g === nothing ? Float64[] : g.load,
               run_times_gcoff = g === nothing ? Float64[] : g.run,
@@ -531,12 +540,16 @@ function stdlibs_run(arm::Arm, depot::String, env, proj::String, script::String,
     return (; precompile_time = t, r...)
 end
 
-# The task script `repeats` times in fresh processes, stopping at the first failure.
+# The task script `repeats` times in fresh processes, stopping at the first failure. An
+# instrumented script also reports when its first marker ran, which gives the time from
+# spawning the process to it (`preload`). The two processes share the wall clock. In a GC-off
+# run the reported marker was moved later by the collection after load, so that is taken off.
 function run_repeats(task_cmd::Cmd, repeats::Int, timeout::Float64, logname::String)
-    load, run, total, gc_after_load = Float64[], Float64[], Float64[], Float64[]
+    load, run, total, gc_after_load, preload = Float64[], Float64[], Float64[], Float64[], Float64[]
     load_stats, run_stats = Any[], Any[]
     err_msg = ""
     for _ in 1:repeats
+        t0 = time()
         out, err, ok, timed_out = run_timed(task_cmd, timeout)
         m = match(r"([\d.eE+-]+),\s*([\d.eE+-]+),\s*([\d.eE+-]+)\s+seconds", out)
         if m === nothing || !ok
@@ -550,9 +563,106 @@ function run_repeats(task_cmd::Cmd, repeats::Int, timeout::Float64, logname::Str
             st = json_parse(sm.captures[1])
             push!(load_stats, st["load"]); push!(run_stats, st["run"])
             push!(gc_after_load, Float64(st["gc_after_load"]))
+            haskey(st, "t1") && push!(preload, Float64(st["t1"]) - Float64(st["gc_after_load"]) - t0)
         end
     end
-    return (; load, run, total, load_stats, run_stats, gc_after_load, err = err_msg)
+    return (; load, run, total, load_stats, run_stats, gc_after_load, preload, err = err_msg)
+end
+
+median(x) = (s = sort(x); n = length(s); isodd(n) ? s[(n + 1) ÷ 2] : (s[n ÷ 2] + s[n ÷ 2 + 1]) / 2)
+
+# The time from spawning an interactive julia on a pseudo-terminal to its first `julia> `
+# prompt; then it is sent `exit()`, which is not timed. Returns the time, or the failure
+# message with the output so far.
+function repl_startup(arm::Arm, env, timeout::Float64)
+    fdm, fds = Ref{Cint}(), Ref{Cint}()
+    ccall(:openpty, Cint, (Ptr{Cint}, Ptr{Cint}, Ptr{Cvoid}, Ptr{Cvoid}, Ptr{Cvoid}),
+          fdm, fds, C_NULL, C_NULL, C_NULL) == 0 || return "openpty failed: " * Libc.strerror()
+    pty = Base.TTY(RawFD(fdm[]))
+    cmd = addenv(`$(arm.julia) --startup-file=no --history-file=no --color=no --banner=no`, env..., "TERM" => "xterm")
+    seen = ""
+    t0 = time()
+    proc = run(cmd, RawFD(fds[]), RawFD(fds[]), RawFD(fds[]); wait = false)
+    ccall(:close, Cint, (Cint,), fds[])
+    # Closing the terminal ends the read below when julia never prompts
+    timer = Timer(_ -> (process_running(proc) && kill(proc); close(pty)), timeout)
+    t = nothing
+    try
+        while !eof(pty)
+            seen *= String(readavailable(pty))
+            if occursin("julia> ", seen)
+                t = time() - t0
+                break
+            end
+        end
+        if t !== nothing
+            write(pty, "exit()\r")
+            # Julia waits for its output to be read before it exits
+            while !eof(pty)
+                readavailable(pty)
+            end
+        end
+    catch e
+        e isa Base.IOError || rethrow()
+    finally
+        close(timer)
+        process_running(proc) && kill(proc)
+        wait(proc)
+        close(pty)
+    end
+    t !== nothing && success(proc) && return t
+    why = t === nothing ? "no prompt within $(timeout)s" : "exit() failed"
+    return "REPL startup: $why; output: $(repr(seen))"
+end
+
+# `julia -e ''`, and the REPL to its first prompt, in fresh processes, `runs` times each per
+# arm and block. The arms alternate from run to run, so drift lands on both alike. Each
+# arm's first run in a block is not timed: it pages the build in from disk, which a user
+# pays once and not on every start.
+function measure_startup(arms::Vector{Arm}, depot::String, runs::Int, blocks::Int, timeout::Float64)
+    records = Any[]
+    for block in 1:blocks
+        order = isodd(block) ? arms : reverse(arms)
+        times = Dict(arm.label => Float64[] for arm in arms)
+        repl_times = Dict(arm.label => Float64[] for arm in arms)
+        errs = Dict{String,String}()
+        repl_errs = Dict{String,String}()
+        for i in 0:runs, arm in (isodd(i) ? reverse(order) : order)
+            env = arm_env(arm, depot)
+            if !haskey(errs, arm.label)
+                t0 = time()
+                out, err, ok, timed_out = run_timed(addenv(`$(arm.julia) --startup-file=no -e ''`, env...), timeout)
+                t = time() - t0
+                if !ok
+                    errs[arm.label] = failure_message("startup", out, err, timed_out, timeout; logname = "startup-$(arm.label)-b$block")
+                elseif i > 0
+                    push!(times[arm.label], t)
+                end
+            end
+            if !haskey(repl_errs, arm.label)
+                t = repl_startup(arm, env, timeout)
+                if t isa String
+                    repl_errs[arm.label] = t
+                elseif i > 0
+                    push!(repl_times[arm.label], t)
+                end
+            end
+        end
+        for (pos, arm) in enumerate(order)
+            push!(records, (; arm = arm.label, package = "julia", task = "startup", block, order = pos,
+                              status = haskey(errs, arm.label) ? "error" : "ok", error = get(errs, arm.label, nothing),
+                              packages_hash = nothing, startup_times = times[arm.label],
+                              startup_repl_times = repl_times[arm.label], error_repl = get(repl_errs, arm.label, nothing)))
+            summary(t) = @sprintf("median %d ms, min %d ms", round(Int, 1000median(t)), round(Int, 1000minimum(t)))
+            println("  ", lpad(block, 3), "  ", rpad(arm.label, 8), "  -e '': ",
+                    haskey(errs, arm.label) ? "\e[31mFAILED\e[0m: $(errs[arm.label])" : summary(times[arm.label]),
+                    " · to the REPL prompt: ",
+                    haskey(repl_errs, arm.label) ? "\e[31mFAILED\e[0m: $(repl_errs[arm.label])" : summary(repl_times[arm.label]),
+                    " · $runs runs each")
+        end
+        flush(stdout)
+    end
+    return records
 end
 
 # The log shows one row per sample under a header printed once per task. Columns are
@@ -567,6 +677,7 @@ function log_columns(armwidth::Int, instrumented::Bool, stdlibs::Bool)
                ("", "precomp", 8, r -> secs(r.precompile_time)),
                ("cold (ms)", "load", 5, r -> ms(cold(r.load_times))),
                ("cold (ms)", "run", 5, r -> ms(cold(r.run_times)))]
+    instrumented && insert!(cols, 4, ("cold (ms)", "start", 5, r -> ms(cold(r.preload_times))))
     if instrumented
         append!(cols, [("GC off (ms)", "load", 5, r -> ms(cold(r.load_times_gcoff))),
                        ("GC off (ms)", "run", 5, r -> ms(cold(r.run_times_gcoff))),
@@ -631,6 +742,7 @@ function main()
     blocks = parse(Int, opts["blocks"])
     repeats = parse(Int, opts["repeats"])
     timeout = parse(Float64, opts["timeout"])
+    startup_runs = parse(Int, opts["startup"])
     precompile_once = opts["precompile-once"]
     depot = something(opts["depot"], mktempdir(; prefix = "ttfx-depot-"))
     workdir = something(opts["workdir"], mktempdir(; prefix = "ttfx-work-"))
@@ -650,7 +762,7 @@ function main()
               arms = builds,
               arm_order = [arm.label for arm in arms],
               system = system_info(),
-              settings = (; blocks, repeats, timeout_s = timeout, depot, stdlibs = opts["stdlibs"], precompile_once, n_tasks = length(tasks),
+              settings = (; blocks, repeats, startup_runs, timeout_s = timeout, depot, stdlibs = opts["stdlibs"], precompile_once, n_tasks = length(tasks),
                             tasks = [t.package * "/" * t.task for t in tasks],
                             excluded = filter(∉(stale), opts["exclude"] === nothing ? String[] :
                                               [strip(first(split(l, '#'))) for l in eachline(opts["exclude"])])),
@@ -668,6 +780,11 @@ function main()
             precompile_once ? ", precompiled in block 1 only" : "")
     println("Load at start: $(sys.load_avg)")
     flush(stdout)
+
+    if startup_runs > 0
+        println("--- julia startup (julia -e '')")
+        write(opts["startup-results"], json_write(measure_startup(arms, depot, startup_runs, blocks, timeout)) * "\n")
+    end
 
     stashdir = joinpath(workdir, "compiled")
     records = Any[]
@@ -760,7 +877,8 @@ function main()
                          total_times_stdlibs = get(result, :total_times_stdlibs, Float64[]),
                          load_stats_stdlibs = get(result, :load_stats_stdlibs, Any[]),
                          run_stats_stdlibs = get(result, :run_stats_stdlibs, Any[]),
-                         error_stdlibs = get(result, :error_stdlibs, nothing))
+                         error_stdlibs = get(result, :error_stdlibs, nothing),
+                         preload_times = get(result, :preload_times, Float64[]))
                 push!(records, rec)
                 write_results()
                 if rec.status == "ok"
