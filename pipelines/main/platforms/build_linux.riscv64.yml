@@ -29,7 +29,7 @@ steps:
         commands: "bash .buildkite/utilities/build_julia.sh"
         agents:
           queue: "build"
-          sched_cpus: "4"
+          sched_cpus: "${SCHED_CPUS:-2}"
           sched_cpus_limit: "16"
           sched_mem_gib: "3"
           sched_mem_limit_gib: "40"

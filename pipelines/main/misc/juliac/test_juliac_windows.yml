@@ -33,7 +33,10 @@ steps:
         soft_fail: ${ALLOW_FAIL?}
         agents:
           queue: "test"
-          # No sched_* tags: the host's default size for Windows tests (6 vCPUs)
-          # ran it in 21 min, 4 vCPUs in 34.
+          # 6 vCPUs ran it in 21 min, 4 vCPUs in 34, but it averages 3 busy CPUs, so
+          # it is charged 4. Its guest peaks below 8 GiB.
+          sched_cpus: "4"
+          sched_cpus_limit: "6"
+          sched_mem_gib: "12"
           os: "windows"
           arch: "${ARCH}"
