@@ -2,7 +2,7 @@
 # report (the Buildkite annotation) and a JSON summary.
 #
 #   julia --startup-file=no ttfx_compare.jl --results FILE --head LABEL [--base LABEL]
-#         [--meta FILE] [--report FILE] [--json FILE] [--title T] [--url U] [--perf-url U]
+#         [--startup FILE] [--meta FILE] [--report FILE] [--json FILE] [--title T] [--url U] [--perf-url U]
 #         [--base-note N]
 #
 # Exit status: 0 nothing to report, 1 robust regression, 2 unusable data, 3 robust
@@ -24,7 +24,7 @@ using .TTFXJSON
 include(joinpath(@__DIR__, "ttfx_metrics.jl"))
 
 function parse_args(args)
-    opts = Dict{String,Any}("results" => nothing, "meta" => nothing, "head" => nothing, "base" => nothing,
+    opts = Dict{String,Any}("results" => nothing, "startup" => nothing, "meta" => nothing, "head" => nothing, "base" => nothing,
                             "report" => "report.md", "json" => "compare.json", "title" => "TTFX benchmarks",
                             "url" => "", "perf-url" => "", "base-note" => "")
     i = 1
@@ -42,19 +42,25 @@ function parse_args(args)
 end
 
 # One value per metric from a record; nothing when the sample has no such measurement.
+# The startup records hold many runs of `julia -e ''` and of the REPL to its prompt per
+# block, and their median is the sample. Startup+load runs from spawning the task's process to the end of its load phase.
 function value(r, key)
     r["status"] == "error" && return nothing
-    if key == "precompile"
-        return r["precompile_time"]
-    elseif key == "load"
-        return isempty(r["load_times"]) ? nothing : Float64(r["load_times"][1])
-    elseif key == "run"
-        return isempty(r["run_times"]) ? nothing : Float64(r["run_times"][1])
+    first_of(field) = (t = get(r, field, Any[]); isempty(t) ? nothing : Float64(t[1]))
+    if key in ("startup", "startup_repl")
+        t = get(r, key * "_times", Any[])
+        return isempty(t) ? nothing : median(Float64.(t))
+    elseif key == "precompile"
+        return get(r, "precompile_time", nothing)
+    elseif key in ("load", "run")
+        return first_of(key * "_times")
+    elseif key == "startup_load"
+        p = first_of("preload_times"); l = first_of("load_times")
+        return p === nothing || l === nothing ? nothing : p + l
     elseif key in ("load_stdlibs", "run_stdlibs")
-        t = get(r, key[1:end-8] * "_times_stdlibs", Any[])
-        return isempty(t) ? nothing : Float64(t[1])
+        return first_of(key[1:end-8] * "_times_stdlibs")
     else
-        t = r["total_times"]
+        t = get(r, "total_times", Any[])
         return length(t) >= 2 ? minimum(Float64.(t[2:end])) : nothing
     end
 end
@@ -85,9 +91,12 @@ function gc_time(r, key)
     return g === nothing ? nothing : Float64(g)
 end
 
+const STARTUP = "julia/startup"
+
 median(x) = (s = sort(x); n = length(s); isodd(n) ? s[(n + 1) ÷ 2] : (s[n ÷ 2] + s[n ÷ 2 + 1]) / 2)
 geomean(x) = exp(sum(log, x) / length(x))
-fmt(x) = x === nothing ? "–" : x >= 100 ? string(round(Int, x)) : x >= 10 ? string(round(x; digits = 1)) : string(round(x; digits = 2))
+fmt(x) = x === nothing ? "–" : x >= 100 ? string(round(Int, x)) : x >= 10 ? string(round(x; digits = 1)) :
+         x >= 1 ? string(round(x; digits = 2)) : string(round(x; digits = 3))
 fmtr(x) = string(round(x; digits = 3))
 pct(x) = string(round(Int, 100x)) * "%"
 # A head/base ratio as a signed percentage change
@@ -111,7 +120,8 @@ end
 function compare_task(name, byarm, base, head, nblocks)
     b = get(byarm, base, Any[]); h = get(byarm, head, Any[])
     out = Dict{String,Any}("name" => name, "metrics" => Dict{String,Any}(), "note" => nothing,
-                           "regressions" => String[], "improvements" => String[], "gc_moved" => String[])
+                           "regressions" => String[], "improvements" => String[], "gc_moved" => String[],
+                           "startup_moved" => String[])
     # The driver stops a task at its first failure, so a failed task has fewer samples than
     # blocks and possibly none for the arm that never got its turn.
     berrs = [r for r in b if r["status"] != "ok"]; herrs = [r for r in h if r["status"] != "ok"]
@@ -171,8 +181,29 @@ function compare_task(name, byarm, base, head, nblocks)
             push!(out["improvements"], m.key)
         end
     end
+    # A build can move work from startup into the first package load, for example by
+    # faulting in system image pages on first use. Load then looks slower although the
+    # user waits no longer. A load difference counts only if the time before the first
+    # marker did not offset at least half of it, or startup and load together changed the
+    # same way.
+    if haskey(out["metrics"], "load") && haskey(out["metrics"], "startup_load")
+        d = phase_delta(b, h, "load_times"); p = phase_delta(b, h, "preload_times")
+        lm = out["metrics"]["load"]
+        lm["load_delta"] = d; lm["preload_delta"] = p
+        for (field, v) in (("regressions", "regression"), ("improvements", "improvement"))
+            "load" in out[field] || continue
+            if out["metrics"]["startup_load"]["verdict"] != v && d * p < 0 && abs(d + p) <= abs(d) / 2
+                filter!(!=("load"), out[field])
+                lm["startup_moved"] = true
+                push!(out["startup_moved"], "load")
+            end
+        end
+    end
     return out
 end
+
+# Head minus base median of a cold timing field.
+phase_delta(b, h, field) = median(Float64[r[field][1] for r in h]) - median(Float64[r[field][1] for r in b])
 
 # Whether the change in a phase's GC time is mostly offset by the opposite change in the
 # other phase, so the same collections ran but on the other side of the load/run boundary.
@@ -210,6 +241,7 @@ end
 function compare_suite(tasks, nblocks; precompile_once::Bool = false)
     suite = Dict{String,Any}()
     for m in METRICS, field in ("ratios", "gcoff_ratios")
+        m.suite === nothing && continue
         has(t) = haskey(t["metrics"], m.key) && haskey(t["metrics"][m.key], field)
         gs = Float64[]
         if precompile_once && m.key == "precompile"
@@ -248,10 +280,23 @@ function compare_suite(tasks, nblocks; precompile_once::Bool = false)
             end
         end
     end
+    # The suite's load likewise, when the time before the first marker moved the other way
+    # over the suite and startup+load did not change the same way.
+    sl = get(suite, "startup_load", nothing)
+    moved = [t["metrics"]["load"] for t in tasks if haskey(t["metrics"], "load") && haskey(t["metrics"]["load"], "preload_delta")]
+    if sl !== nothing && !isempty(moved) && sum(m -> m["load_delta"], moved) * sum(m -> m["preload_delta"], moved) < 0
+        for k in ("load", "load_gcoff")
+            s = get(suite, k, nothing)
+            if s !== nothing && s["verdict"] != "same" && !get(s, "gc_moved", false) && sl["verdict"] != s["verdict"]
+                s["startup_moved"] = true
+                s["startup_load_geomeans"] = sl["geomeans"]
+            end
+        end
+    end
     return suite
 end
 
-counts(s, verdict) = s["verdict"] == verdict && !get(s, "gc_moved", false)
+counts(s, verdict) = s["verdict"] == verdict && !get(s, "gc_moved", false) && !get(s, "startup_moved", false)
 
 arm_desc(meta, label) = begin
     a = meta === nothing ? nothing : get(get(meta, "arms", Dict()), label, nothing)
@@ -280,7 +325,7 @@ function write_comparison(io, opts, meta, tasks, suite, nblocks)
     nimp = sum(t -> length(t["improvements"]), tasks; init = 0) + count(s -> counts(s, "improvement"), values(suite))
     note = isempty(opts["base-note"]) ? "" : ", " * opts["base-note"]
     link = links(opts)
-    header = arm_desc(meta, head) * " vs " * arm_desc(meta, base) * note * " · " * string(length(tasks)) *
+    header = arm_desc(meta, head) * " vs " * arm_desc(meta, base) * note * " · " * string(count(t -> t["name"] != STARTUP, tasks)) *
              " tasks · " * string(nblocks) * " blocks (ABBA)" * link
     pnote = precompile_note(meta)
     if nreg + nimp == 0
@@ -297,7 +342,8 @@ function write_comparison(io, opts, meta, tasks, suite, nblocks)
             "); load and run are also judged from the repeats with the GC off (the stdlibs-first load and run with their GC time ",
             "taken out), and either counts (bold marks which), ",
             "except a difference that shows with the GC on only and whose GC time moved from the other phase ",
-            "(for the suite: unless load and run added together changed the same way).\n")
+            "(for the suite: unless load and run added together changed the same way), ",
+            "and a load difference offset by the opposite change in startup (unless startup+load changed the same way).\n")
     isempty(pnote) || println(io, pnote, "\n")
     println(io, "| suite (geomean over tasks) | change per block | with GC off | threshold |")
     println(io, "|---|---|---|---|")
@@ -307,15 +353,19 @@ function write_comparison(io, opts, meta, tasks, suite, nblocks)
         function marked(s)
             v = s["verdict"]; c = join(change.(s["geomeans"]), ", ")
             v == "same" && return c
-            get(s, "gc_moved", false) || return "**" * c * " " * v * "**"
-            return c * " (GC moved between load and run, not counted; load+run " * join(change.(s["combined_geomeans"]), ", ") * ")"
+            get(s, "gc_moved", false) &&
+                return c * " (GC moved between load and run, not counted; load+run " * join(change.(s["combined_geomeans"]), ", ") * ")"
+            get(s, "startup_moved", false) &&
+                return c * " (moved between startup and load, not counted; startup+load " * join(change.(s["startup_load_geomeans"]), ", ") * ")"
+            return "**" * c * " " * v * "**"
         end
         g = get(suite, m.key * "_gcoff", nothing)
         println(io, "| ", m.name, " (", s["n_tasks"], s["n_tasks"] == 1 ? " task) | " : " tasks) | ", marked(s), " | ",
                 g === nothing ? "–" : marked(g), " | ±", pct(m.suite), " |")
     end
     for (title, field) in (("Regressions", "regressions"), ("Improvements", "improvements"),
-                           ("GC moved between load and run (not counted)", "gc_moved"))
+                           ("GC moved between load and run (not counted)", "gc_moved"),
+                           ("Moved between startup and load (not counted)", "startup_moved"))
         rows = [(t, k) for t in tasks for k in t[field]]
         isempty(rows) && continue
         println(io, "\n### ", title, "\n")
@@ -326,7 +376,8 @@ function write_comparison(io, opts, meta, tasks, suite, nblocks)
                 println(io, "| ", t["name"], " | | | | ", t["note"], " | |")
             else
                 m = t["metrics"][k]
-                bold(s, v) = v == "same" ? s : "**" * s * "**"
+                moved = get(m, "startup_moved", false)
+                bold(s, v) = v == "same" || moved ? s : "**" * s * "**"
                 normal = bold(join(change.(m["ratios"]), ", "), get(m, "gc_moved", false) ? "same" : m["verdict"])
                 gcoff = haskey(m, "gcoff_ratios") ? bold(join(change.(m["gcoff_ratios"]), ", "), m["gcoff_verdict"]) : "–"
                 println(io, "| ", t["name"], " | ", k, " | ", join(fmt.(m["base"]), ", "), " | ", join(fmt.(m["head"]), ", "),
@@ -340,7 +391,7 @@ end
 function write_summary(io, opts, meta, grouped, head, nblocks)
     println(io, "## ", opts["title"])
     link = links(opts)
-    println(io, arm_desc(meta, head), " · ", length(grouped), " tasks · ", nblocks, " samples", link, "\n")
+    println(io, arm_desc(meta, head), " · ", count(!=(STARTUP), keys(grouped)), " tasks · ", nblocks, " samples", link, "\n")
     println(io, "| task | ", join([m.name * " (s)" for m in METRICS], " | "), " | note |")
     println(io, "|---|", "---|"^length(METRICS), "---|")
     for name in sort!(collect(keys(grouped)))
@@ -357,6 +408,8 @@ end
 function main()
     opts = parse_args(ARGS)
     records = json_parse(read(opts["results"]))
+    # The startup records are compared as one more task
+    opts["startup"] === nothing || !isfile(opts["startup"]) || append!(records, json_parse(read(opts["startup"])))
     meta = opts["meta"] === nothing || !isfile(opts["meta"]) ? nothing : json_parse(read(opts["meta"]))
     head, base = opts["head"], opts["base"]
     nblocks = meta === nothing ? maximum(r["block"] for r in records; init = 1) : meta["settings"]["blocks"]
