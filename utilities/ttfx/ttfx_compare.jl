@@ -18,6 +18,7 @@
 # that only shows with the GC on, and whose extra GC time was taken from the other phase,
 # is a collection that moved between load and run; it is reported but not counted. For the
 # suite, such a difference counts only when load and run added together changed the same way.
+# The stdlibs-first suite counts with its GC time taken out only (see compare_suite).
 
 include(joinpath(@__DIR__, "ttfx_json.jl"))
 using .TTFXJSON
@@ -262,16 +263,15 @@ function compare_suite(tasks, nblocks; precompile_once::Bool = false)
     # A suite difference that shows with the GC on only, while the GC time moved the other
     # way in the other phase, is collections moving between load and run. It counts only
     # when load and run added together changed the same way.
-    for (a, b) in (("load", "run"), ("load_stdlibs", "run_stdlibs"))
-        both = [t for t in tasks if haskey(t["metrics"], a) && haskey(t["metrics"], b)]
-        isempty(both) && continue
-        sum_ratio(t, k) = (t["metrics"][a]["head"][k] + t["metrics"][b]["head"][k]) /
-                          (t["metrics"][a]["base"][k] + t["metrics"][b]["base"][k])
+    both = [t for t in tasks if haskey(t["metrics"], "load") && haskey(t["metrics"], "run")]
+    if !isempty(both)
+        sum_ratio(t, k) = (t["metrics"]["load"]["head"][k] + t["metrics"]["run"]["head"][k]) /
+                          (t["metrics"]["load"]["base"][k] + t["metrics"]["run"]["base"][k])
         gs = [geomean([sum_ratio(t, k) for t in both]) for k in 1:nblocks]
-        thr = only(m.suite for m in METRICS if m.key == a)
+        thr = only(m.suite for m in METRICS if m.key == "load")
         combined = all(>(1 + thr), gs) ? "regression" : all(<(1 - thr), gs) ? "improvement" : "same"
         gc_change(k) = sum(t -> get(t["metrics"][k], "gc_delta", 0.0), both)
-        for (k, o) in ((a, b), (b, a))
+        for (k, o) in (("load", "run"), ("run", "load"))
             s = get(suite, k, nothing); g = get(suite, k * "_gcoff", nothing)
             (s === nothing || g === nothing) && continue
             if s["verdict"] != "same" && g["verdict"] == "same" && combined != s["verdict"] && gc_change(k) * gc_change(o) < 0
@@ -279,6 +279,15 @@ function compare_suite(tasks, nblocks; precompile_once::Bool = false)
                 s["combined_geomeans"] = gs
             end
         end
+    end
+    # The stdlibs-first suite is judged with the GC time taken out only. With every stdlib
+    # loaded the heap sits near a collection trigger, so a small allocation difference moves
+    # one ~25 ms collection into or out of a few-millisecond phase, the same way in every
+    # block, and the geomean weighs that 2-3x ratio like any other task's. The GC-on
+    # geomeans are reported but do not count.
+    for k in ("load_stdlibs", "run_stdlibs")
+        s = get(suite, k, nothing)
+        s === nothing || (s["diagnostic"] = true)
     end
     # The suite's load likewise, when the time before the first marker moved the other way
     # over the suite and startup+load did not change the same way.
@@ -296,7 +305,8 @@ function compare_suite(tasks, nblocks; precompile_once::Bool = false)
     return suite
 end
 
-counts(s, verdict) = s["verdict"] == verdict && !get(s, "gc_moved", false) && !get(s, "startup_moved", false)
+counts(s, verdict) = s["verdict"] == verdict && !get(s, "gc_moved", false) && !get(s, "startup_moved", false) &&
+                     !get(s, "diagnostic", false)
 
 arm_desc(meta, label) = begin
     a = meta === nothing ? nothing : get(get(meta, "arms", Dict()), label, nothing)
@@ -343,7 +353,8 @@ function write_comparison(io, opts, meta, tasks, suite, nblocks)
             "taken out), and either counts (bold marks which), ",
             "except a difference that shows with the GC on only and whose GC time moved from the other phase ",
             "(for the suite: unless load and run added together changed the same way), ",
-            "and a load difference offset by the opposite change in startup (unless startup+load changed the same way).\n")
+            "and a load difference offset by the opposite change in startup (unless startup+load changed the same way). ",
+            "The stdlibs-first suite counts with the GC time taken out only.\n")
     isempty(pnote) || println(io, pnote, "\n")
     println(io, "| suite (geomean over tasks) | change per block | with GC off | threshold |")
     println(io, "|---|---|---|---|")
@@ -357,11 +368,13 @@ function write_comparison(io, opts, meta, tasks, suite, nblocks)
                 return c * " (GC moved between load and run, not counted; load+run " * join(change.(s["combined_geomeans"]), ", ") * ")"
             get(s, "startup_moved", false) &&
                 return c * " (moved between startup and load, not counted; startup+load " * join(change.(s["startup_load_geomeans"]), ", ") * ")"
+            get(s, "diagnostic", false) && return c * " " * v * " with the GC on, not counted"
             return "**" * c * " " * v * "**"
         end
         g = get(suite, m.key * "_gcoff", nothing)
         println(io, "| ", m.name, " (", s["n_tasks"], s["n_tasks"] == 1 ? " task) | " : " tasks) | ", marked(s), " | ",
-                g === nothing ? "–" : marked(g), " | ±", pct(m.suite), " |")
+                g === nothing ? "–" : marked(g) * (g["n_tasks"] == s["n_tasks"] ? "" : " (" * string(g["n_tasks"]) * (g["n_tasks"] == 1 ? " task)" : " tasks)")),
+                " | ±", pct(m.suite), " |")
     end
     for (title, field) in (("Regressions", "regressions"), ("Improvements", "improvements"),
                            ("GC moved between load and run (not counted)", "gc_moved"),
