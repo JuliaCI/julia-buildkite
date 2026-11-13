@@ -11,7 +11,8 @@
 # What gets published is selected by PUBLISH_TARGET, set on the build by the
 # julia-ci trigger (see utilities/render_launch_pipeline.py):
 #   <triplet>  that platform's binaries only. julia-ci fires one such build
-#              per platform as soon as its own build + test jobs are green.
+#              per platform as soon as its own build + test jobs are green
+#              (on release tags, once the whole build is).
 #   docs       the per-commit products only: the release source dists (the
 #              HTML docs are deployed by the sibling deploy_docs step).
 #   unset      everything: every triplet of the arches files below, then
