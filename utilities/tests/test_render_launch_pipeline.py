@@ -615,9 +615,9 @@ class PullRequestGatingTests(unittest.TestCase):
         import render_launch_pipeline
         cls.rlp = render_launch_pipeline
 
-    def render_pr(self, changed):
-        """The pipeline of a pull request that changes `changed` (None: every
-        job runs, as with the `needs full CI` label)."""
+    def render_pr(self, changed, base_branch="master"):
+        """The pipeline of a pull request into `base_branch` that changes
+        `changed` (None: every job runs, as with the `needs full CI` label)."""
         import contextlib
         import io
         from unittest import mock
@@ -629,6 +629,7 @@ class PullRequestGatingTests(unittest.TestCase):
                if k not in ("BUILDKITE_SOURCE", "NOGPL_ONLY", "OPT_ONLY", "ONLY_TRIPLETS",
                             "TTFX_RELEASE", "BUILDKITE_TAG", "BUILDKITE_BRANCH")}
         env["BUILDKITE_PIPELINE_SLUG"] = "julia-pr"
+        env["BUILDKITE_PULL_REQUEST_BASE_BRANCH"] = base_branch
         import tempfile
         cwd = os.getcwd()
         # A julia checkout with JuliaSyntax in it
@@ -677,6 +678,26 @@ class PullRequestGatingTests(unittest.TestCase):
         self.assertIn(job, self.render_pr(None))
         self.assertIn(job, self.render_pr(["doc/src/manual/types.md"]))
         self.assertNotIn(job, self.render_pr(["base/array.jl", "src/gf.c"]))
+
+    def test_juliac_intel_macos(self):
+        tested, skipped = 'JULIAC_INTEL_MACOS: "true"', 'JULIAC_INTEL_MACOS: "false"'
+        for changed in (None, ["deps/jlutilities/juliac/Manifest.toml"], ["test/trim/Hello/src/Hello.jl"],
+                        ["test/trim.jl"], ["Compiler/src/verifytrim.jl"]):
+            output = self.render_pr(changed)
+            self.assertIn(tested, output, changed)
+            self.assertNotIn(skipped, output, changed)
+        output = self.render_pr(["base/array.jl", "src/gf.c", "Compiler/src/optimize.jl"])
+        self.assertIn(skipped, output)
+        self.assertNotIn(tested, output)
+        # The other platforms' JuliaC jobs are launched regardless
+        self.assertIn('group: "JuliaC"', output)
+        # A pull request into a backports branch keeps it, but is otherwise
+        # path-gated as before
+        output = self.render_pr(["base/array.jl"], base_branch="backports-release-1.14")
+        self.assertIn(tested, output)
+        self.assertNotIn(skipped, output)
+        for job in self.NATIVE_JOBS:
+            self.assertNotIn(job, output)
 
     def test_mmtk(self):
         jobs = ('key: "build_x86_64-linux-gnummtkconcurrent"',

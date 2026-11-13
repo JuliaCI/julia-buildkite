@@ -5,6 +5,10 @@ steps:
           context: "JuliaC"
     steps:
       - label: "Launch JuliaC test jobs"
+        env:
+          # render_launch_pipeline.py sets this to "false" on a pull request
+          # into master that changes neither JuliaC nor trimming (JULIAC_PATHS).
+          JULIAC_INTEL_MACOS: "true"
         plugins:
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"
@@ -21,6 +25,14 @@ steps:
               bash .buildkite/utilities/arches_pipeline_upload.sh \
               .buildkite/pipelines/main/misc/juliac/test_juliac_macos.arches \
               .buildkite/pipelines/main/misc/juliac/test_juliac_macos.yml
+          if [[ "$${JULIAC_INTEL_MACOS}" == "true" ]]; then
+            GROUP="JuliaC" \
+                bash .buildkite/utilities/arches_pipeline_upload.sh \
+                .buildkite/pipelines/main/misc/juliac/test_juliac_macos.x86_64.arches \
+                .buildkite/pipelines/main/misc/juliac/test_juliac_macos.yml
+          else
+            echo "Not testing JuliaC on Intel macOS: this pull request into master changes neither JuliaC nor trimming (add the 'needs full CI' label to test it)"
+          fi
           ### Launch Windows JuliaC test jobs:
           GROUP="JuliaC" \
               bash .buildkite/utilities/arches_pipeline_upload.sh \

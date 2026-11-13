@@ -499,6 +499,11 @@ PR_GATED_FILES = {
 }
 # The JuliaSyntax group tests that package on released Julia versions
 JULIASYNTAX_PATHS = re.compile(r"JuliaSyntax/")
+# JuliaC and the trimming tests. Only the Intel macOS JuliaC job is gated on
+# these: it takes up to an hour on the busiest Mac pool, and about half of
+# that pool's time went to it on pull requests into master.
+JULIAC_PATHS = re.compile(
+    r"deps/jlutilities/juliac/|contrib/juliac|test/trim|Compiler/(src|test)/verifytrim\.jl")
 # What decides allocations and write barriers, for the builds with another GC
 GC_PATHS = re.compile(NATIVE_PATHS.pattern + r"|Compiler/")
 PR_GATED_TRIPLETS = {
@@ -994,8 +999,18 @@ def main():
     elif not pr_skips(JULIASYNTAX_PATHS, "JuliaSyntax"):
         blocks.append(verbatim_group_text(os.path.join(MISC, "juliasyntax.launch.yml")))
 
-    # JuliaC: itself a launcher with its own group + notify -- include verbatim.
-    blocks.append(verbatim_group_text(os.path.join(MISC, "juliac", "test_juliac.yml")))
+    # JuliaC: itself a launcher with its own group + notify -- include verbatim,
+    # telling it whether to test on Intel macOS. Pull requests into a release-*
+    # branch run every job; those into a backports-release-* branch are path-
+    # gated like the rest, but JuliaC's maintainers want them to keep this job.
+    juliac = verbatim_group_text(os.path.join(MISC, "juliac", "test_juliac.yml"))
+    base_branch = os.environ.get("BUILDKITE_PULL_REQUEST_BASE_BRANCH", "")
+    if (not base_branch.startswith("backports-release-")
+            and pr_skips(JULIAC_PATHS, "JuliaC on Intel macOS")):
+        enabled = 'JULIAC_INTEL_MACOS: "true"'
+        assert juliac.count(enabled) == 1, f"test_juliac.yml: no single {enabled}"
+        juliac = juliac.replace(enabled, 'JULIAC_INTEL_MACOS: "false"')
+    blocks.append(juliac)
 
     # TTFX: benchmarks the build on the Julia-TTFX-Snippets tasks, against the
     # master build of the merge-base on pull requests, which are measured only
