@@ -26,6 +26,10 @@ steps:
         soft_fail: ${ALLOW_FAIL?}
         agents:
           queue: "build"
+          # More than 6 vCPUs trips the virtio NIC bug on the current images
+          sched_cpus: "3"
+          sched_cpus_limit: "6"
+          sched_mem_gib: "16"
           os: "windows"
           arch: "${ARCH?}"
         env:

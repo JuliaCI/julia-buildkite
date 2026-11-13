@@ -34,6 +34,10 @@ steps:
         timeout_in_minutes: 60
         agents:
           queue: "test"
+          sched_cpus: "2"
+          sched_cpus_limit: "8"
+          sched_mem_gib: "2"
+          sched_mem_limit_gib: "8"
           sandbox_capable: "true"
           os: "linux"
           arch: "x86_64"
