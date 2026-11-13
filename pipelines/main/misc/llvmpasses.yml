@@ -31,6 +31,12 @@ steps:
         timeout_in_minutes: 60
         agents:
           queue: "build"
+          # Builds Julia with assertions before running the passes: about 3 busy
+          # CPUs on average, and as wide as a regular build.
+          sched_cpus: "3"
+          sched_cpus_limit: "16"
+          sched_mem_gib: "3"
+          sched_mem_limit_gib: "40"
           sandbox_capable: "true"
           os: "linux"
           arch: "x86_64"
