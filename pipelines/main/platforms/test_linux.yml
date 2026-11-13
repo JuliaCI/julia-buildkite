@@ -33,6 +33,15 @@ steps:
         commands: "bash .buildkite/utilities/test_julia.sh"
         agents:
           queue: "test"
+          # Requests are typical use, what the job is charged: 12 test workers
+          # average about 7.5 busy CPUs, and memory is the 95th percentile of the
+          # jobs' mean use (their peaks are short and rarely coincide). Limits are
+          # the most they may use: a cpuset of 12 CPUs (and 12 workers), and
+          # `memory.max`, which covers the peaks.
+          sched_cpus: "${SCHED_CPUS:-8}"
+          sched_cpus_limit: "${SCHED_CPUS_LIMIT:-12}"
+          sched_mem_gib: "${SCHED_MEM_GIB:-16}"
+          sched_mem_limit_gib: "${SCHED_MEM_LIMIT_GIB:-64}"
           sandbox_capable: "true"
           os: "linux"
           arch: "${ARCH?}"
