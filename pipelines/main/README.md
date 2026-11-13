@@ -44,7 +44,10 @@ riscv64 Linux on x86-64 hosts that run riscv64 code with qemu-user (agent tag
 `binfmt_riscv64`), and publish it to `julialangnightlies/bin/linux/riscv64/`.
 They also build an optimized one (PGO and ThinLTO), published to
 `.../linuxopt/riscv64/`. There is no riscv64 hardware in the fleet, so neither
-has a test job, and both builds are allowed to fail.
+has a test job, and both builds are allowed to fail. As Buildkite counts a soft
+failure as done, they have no static publish trigger: a build uploads its own
+once it has passed, so a failed or stopped one is not published, and a retry
+that passes is.
 
 A second `julia-ci` schedule, Saturday nights with `TTFX_RELEASE=latest`, builds
 nothing and measures the newest stable release, the LTS and the next release's nightly on the

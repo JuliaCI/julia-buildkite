@@ -48,10 +48,12 @@ into one `group:` per label: Build, Check, Test, Allow Fail, JuliaSyntax,
 JuliaC, TTFX, Publish.
 
 The Publish group's triggers each `depends_on` only their own platform's
-build + test jobs (see publish_group_text).
+build + test jobs; soft-failing builds upload their trigger themselves (see
+publish_group_text).
 """
 
 import argparse
+import base64
 import functools
 import json
 import os
@@ -319,6 +321,7 @@ def load_group_text(path):
 
 BUILD_KEYS = {}   # TRIPLET -> "build_..." key
 TEST_KEYS = {}    # TRIPLET -> ["test_...", ...]
+SOFT_FAIL_BUILDS = set()  # TRIPLETs whose build step is soft_fail
 
 # ONLY_TRIPLETS: the platforms to render jobs for (None renders all of them),
 # and every platform that had a job to render, to report misspelled ones.
@@ -336,12 +339,14 @@ def step_keys(steps_text):
     return _STEP_KEY_RE.findall(steps_text)
 
 
-def record_platform_job(yaml_file, triplet, step_text, where):
+def record_platform_job(yaml_file, triplet, step_text, allow_fail, where):
     keys = step_keys(step_text)
     assert len(keys) == 1, f"{where}: expected one step key, found {keys}"
     if yaml_file.startswith("build_"):
         assert triplet not in BUILD_KEYS, f"{where}: {triplet} built twice"
         BUILD_KEYS[triplet] = keys[0]
+        if allow_fail == "true":
+            SOFT_FAIL_BUILDS.add(triplet)
     elif yaml_file.startswith("test_"):
         TEST_KEYS.setdefault(triplet, []).append(keys[0])
     else:
@@ -371,7 +376,7 @@ def render_arches_group_text(arches_file, yaml_file, group, allow_fail,
         where = f"{yaml_file} [{arch_env.get('TRIPLET', '?')}]"
         rendered = interpolate(template_text, env, where)
         step_text = extract_inner_steps_text(rendered, where)
-        record_platform_job(yaml_file, arch_env["TRIPLET"], step_text, where)
+        record_platform_job(yaml_file, arch_env["TRIPLET"], step_text, allow_fail, where)
         chunks.append(step_text)
     return "\n".join(c for c in chunks if c)
 
@@ -660,7 +665,7 @@ def upload_triplets(arches_files, arches_dir):
             for env in arches_envs(os.path.join(arches_dir, arches))]
 
 
-def publish_trigger_text(target, depends_on, scheduled):
+def publish_trigger_text(target, depends_on, scheduled, step_key=None):
     """One `trigger: julia-publish` step. `target` is what the triggered
     build publishes (its PUBLISH_TARGET: a triplet, or "docs" for the
     per-commit products); it runs once every key in `depends_on` has
@@ -669,9 +674,13 @@ def publish_trigger_text(target, depends_on, scheduled):
     lines = [
         '      - trigger: "julia-publish"',
         f'        label: ":rocket: publish {target}{suffix}"',
+    ]
+    if step_key is not None:
+        lines.append(f'        key: "{step_key}"')
+    lines.extend((
         '        if: pipeline.slug == "julia-ci"',
         "        depends_on:",
-    ]
+    ))
     lines.extend(f'          - "{key}"' for key in depends_on)
     lines.extend((
         "        build:",
@@ -695,12 +704,27 @@ def publish_group_text(triplets, scheduled=False, docs=False):
     old build-wide `wait`. Per-commit builds add a `docs` trigger gated on
     the steps that stage the docs / source dists (source_dist is `if`-gated
     to tags; Buildkite ignores a dependency on an `if`-excluded step). All
-    triggers are `if`-gated to the julia-ci slug."""
+    triggers are `if`-gated to the julia-ci slug.
+
+    A soft-failing (Allow Fail) build satisfies `depends_on` too, so a static
+    trigger would publish a build that failed or was stopped, and would not
+    run again when a retry of it passes. Those builds upload their trigger
+    themselves once they have staged everything (see deferred_trigger_env)."""
     triggers = []
     for triplet in triplets:
         assert triplet in BUILD_KEYS, (
             f"{triplet} is published (upload_*.arches) but has no build job")
-        depends_on = [BUILD_KEYS[triplet]] + TEST_KEYS.get(triplet, [])
+        build_key = BUILD_KEYS[triplet]
+        if triplet in SOFT_FAIL_BUILDS:
+            # Steps that depend on the uploading build also wait for what it
+            # uploads, so a trigger waiting for this build's tests would be a
+            # cycle.
+            assert triplet not in TEST_KEYS, (
+                f"{triplet}: a soft-failing build with tests cannot publish")
+            DEFERRED_TRIGGERS[build_key] = publish_trigger_text(
+                triplet, [build_key], scheduled, step_key=f"publish_{triplet}")
+            continue
+        depends_on = [build_key] + TEST_KEYS.get(triplet, [])
         triggers.append(publish_trigger_text(triplet, depends_on, scheduled))
 
     if docs:
@@ -721,6 +745,34 @@ def parse_args():
         help="render scheduled workloads without the scheduled publish trigger",
     )
     return parser.parse_args()
+
+
+# build step key -> the publish trigger that build uploads when it passes
+DEFERRED_TRIGGERS = {}
+
+
+def deferred_trigger_env(text):
+    """Hand each deferred publish trigger to its build step, as PUBLISH_TRIGGER
+    in its env: the pipeline YAML to upload, base64-encoded so that the
+    launcher's upload leaves the `${BUILDKITE_*}` in it for the build's upload
+    to interpolate (utilities/build_julia.sh)."""
+    lines = text.split("\n")
+    step_start = " " * STEP_INDENT + "- "
+    attr = " " * (STEP_INDENT + 2)
+    for key, trigger in DEFERRED_TRIGGERS.items():
+        encoded = base64.b64encode(f"steps:\n{trigger}\n".encode()).decode()
+        i = lines.index(f'{attr}key: "{key}"')
+        while lines[i] != f"{attr}env:":
+            i += 1
+            assert not lines[i].startswith((step_start, "  - ")), (
+                f"{key}: the build step has no env to hand its publish trigger to")
+        lines.insert(i + 1, f'{attr}  PUBLISH_TRIGGER: "{encoded}"')
+    return "\n".join(lines)
+
+
+def pipeline_text(blocks):
+    """The rendered pipeline of these groups."""
+    return pipeline_header() + deferred_trigger_env("\n".join(blocks)) + "\n"
 
 
 def is_release_build():
@@ -815,7 +867,7 @@ def only_triplets_text(only):
         blocks.append(publish_group_text(selected))
     # drop the groups that have none of the selected platforms
     blocks = [b for b in blocks if not b.endswith("    steps:")]
-    return pipeline_header() + "\n".join(blocks) + "\n"
+    return pipeline_text(blocks)
 
 
 def main():
@@ -838,9 +890,7 @@ def main():
             blocks.append(verbatim_group_text(os.path.join(MISC, "ttfx", "ttfx_opt.yml")))
             triplets = upload_triplets(SCHEDULE_UPLOAD_ARCHES, SCHEDULED_PLATFORMS)
             blocks.append(publish_group_text(triplets, scheduled=True))
-        sys.stdout.write(pipeline_header())
-        sys.stdout.write("\n".join(blocks))
-        sys.stdout.write("\n")
+        sys.stdout.write(pipeline_text(blocks))
         return
 
     # NOGPL_ONLY=true (set when creating the build) builds and publishes only
@@ -852,9 +902,7 @@ def main():
             schedule_group_text(label, arches, allow_fail),
             publish_group_text(nogpl_triplets()),
         ]
-        sys.stdout.write(pipeline_header())
-        sys.stdout.write("\n".join(blocks))
-        sys.stdout.write("\n")
+        sys.stdout.write(pipeline_text(blocks))
         return
 
     # OPT_ONLY=true does the same for the optimized binaries, e.g. to retry
@@ -864,9 +912,7 @@ def main():
         blocks = [schedule_group_text(label, arches, allow_fail)
                   for label, allow_fail, arches in groups]
         blocks.append(publish_group_text(opt_triplets()))
-        sys.stdout.write(pipeline_header())
-        sys.stdout.write("\n".join(blocks))
-        sys.stdout.write("\n")
+        sys.stdout.write(pipeline_text(blocks))
         return
 
     # ONLY_TRIPLETS=<triplet>[,<triplet>...] (set when creating the build)
@@ -921,9 +967,7 @@ def main():
         triplets += nogpl_triplets() + opt_triplets() + riscv64_triplets()
     blocks.append(publish_group_text(triplets, docs=True))
 
-    sys.stdout.write(pipeline_header())
-    sys.stdout.write("\n".join(blocks))
-    sys.stdout.write("\n")
+    sys.stdout.write(pipeline_text(blocks))
 
 
 if __name__ == "__main__":
