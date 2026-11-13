@@ -23,6 +23,15 @@
 # from OIDC web identity (AWS_WEB_IDENTITY_TOKEN_FILE / AWS_ROLE_ARN).
 export AWS_EC2_METADATA_DISABLED=true
 
+# Whether `$1` (a bucket/key or a key) names one of the julia-latest-* or
+# julia-<majmin>-latest-* pointers, the only objects that are overwritten.
+is_latest_pointer() {
+    case "$(basename "$1")" in
+        julia-latest-*|julia-*-latest-*) return 0 ;;
+    esac
+    return 1
+}
+
 # Upload a local file to `s3://${BUCKET}/${KEY}`, write-once per commit.
 #
 # IAM denies unconditional puts, so a build can never overwrite an existing
@@ -38,9 +47,7 @@ upload_to_s3() {
     local key="${target#*/}"
 
     local is_latest=0
-    case "$(basename "${key}")" in
-        julia-latest-*|julia-*-latest-*) is_latest=1 ;;
-    esac
+    is_latest_pointer "${key}" && is_latest=1
 
     if [[ -z "${cache_control}" && "${is_latest}" == "0" && "${UPLOAD_TO_S3_ACL:-public-read}" != "none" ]]; then
         cache_control="public,max-age=2678400"
@@ -131,4 +138,32 @@ upload_to_s3() {
 
     echo "${output}" >&2
     return 1
+}
+
+# Upload `<file> <bucket/key>` pairs, in parallel. The latest pointers are
+# uploaded only once all other uploads succeeded: a version name that refused
+# this build's artifact (e.g. after a release tag was moved to another
+# commit) must not end up next to a pointer that serves it anyway.
+upload_to_s3_all() {
+    local pairs=( "$@" ) pids=() pid ok=1 i
+    local latest_pass
+    for latest_pass in 0 1; do
+        pids=()
+        for (( i = 0; i < ${#pairs[@]}; i += 2 )); do
+            if is_latest_pointer "${pairs[i+1]}"; then
+                [[ "${latest_pass}" == "1" ]] || continue
+            else
+                [[ "${latest_pass}" == "0" ]] || continue
+            fi
+            upload_to_s3 "${pairs[i]}" "${pairs[i+1]}" &
+            pids+=( "$!" )
+        done
+        for pid in ${pids[@]+"${pids[@]}"}; do
+            wait "${pid}" || ok=0
+        done
+        if [[ "${ok}" != "1" ]]; then
+            [[ "${latest_pass}" == "0" ]] && echo "ERROR: an upload failed; not moving the latest pointers" >&2
+            return 1
+        fi
+    done
 }
