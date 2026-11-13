@@ -237,3 +237,25 @@ if [[ "${HAS_CHECKBOUNDS_PKGIMAGES}" == "true" ]]; then
     buildkite-agent artifact upload "${UPLOAD_FILENAME}.checkbounds.tar.gz"
     UPLOAD_TO_S3_ACL=none upload_to_s3 "${UPLOAD_FILENAME}.checkbounds.tar.gz" "${STAGING_TARGET}.checkbounds.tar.gz"
 fi
+
+# A soft-failing build that is published uploads its own publish trigger, now
+# that everything is staged: Buildkite counts a soft failure as done, so a
+# static trigger would publish a build that failed or was stopped, and not
+# one whose retry passed (see publish_group_text in render_launch_pipeline.py).
+if [[ -n "${PUBLISH_TRIGGER:-}" ]]; then
+    echo "--- Upload the publish trigger"
+    MARKER="publish-trigger-uploaded-${TRIPLET}"
+    STATUS=0
+    buildkite-agent meta-data exists "${MARKER}" || STATUS=$?
+    if [[ "${STATUS}" == 0 ]]; then
+        echo "An earlier attempt of this job already uploaded it"
+    elif [[ "${STATUS}" == 100 ]]; then
+        # Should the job die between these two, a retry fails on the trigger's
+        # duplicate key; the trigger itself is in the build already.
+        base64 -d <<<"${PUBLISH_TRIGGER}" | buildkite-agent pipeline upload
+        buildkite-agent meta-data set "${MARKER}" true
+    else
+        echo "ERROR: could not query build meta-data (exit ${STATUS})" >&2
+        exit 1
+    fi
+fi

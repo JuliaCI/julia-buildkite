@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import base64
 import os
 import re
 import subprocess
@@ -82,6 +83,22 @@ def depends_on(*keys):
     return ("        depends_on:\n"
             + "".join(f'          - "{key}"\n' for key in keys)
             + "        build:")
+
+
+def build_step(output, triplet):
+    """The text of a platform's build step."""
+    match = re.search(
+        rf'^      - label: ":[a-z]+: build {triplet}"\n'
+        r'.*?(?=^      - |^  - group:|\Z)', output, re.M | re.S,
+    )
+    assert match, f"no build step for {triplet}"
+    return match.group()
+
+
+def deferred_trigger(output, triplet):
+    """The pipeline a soft-failing build uploads to publish itself, or None."""
+    match = re.search(r'^          PUBLISH_TRIGGER: "([^"]+)"$', build_step(output, triplet), re.M)
+    return base64.b64decode(match.group(1)).decode() if match else None
 
 
 class RenderLaunchPipelineTests(unittest.TestCase):
@@ -178,9 +195,9 @@ class RenderLaunchPipelineTests(unittest.TestCase):
         # One scheduled publish trigger per scheduled upload triplet, each
         # gated on that triplet's own jobs; no docs trigger, no wait barrier.
         publish = publish_group(output)
-        self.assertEqual(publish.count('trigger: "julia-publish"'), 12)
-        self.assertEqual(publish.count('PUBLISH_SCHEDULED: "true"'), 12)
-        self.assertEqual(publish.count('if: pipeline.slug == "julia-ci"'), 12)
+        self.assertEqual(publish.count('trigger: "julia-publish"'), 10)
+        self.assertEqual(publish.count('PUBLISH_SCHEDULED: "true"'), 10)
+        self.assertEqual(publish.count('if: pipeline.slug == "julia-ci"'), 10)
         self.assertNotIn('PUBLISH_TARGET: "docs"', output)
         self.assertNotIn("wait:", output)
         self.assertNotIn("PUBLISH_NOGPL", output)
@@ -191,11 +208,23 @@ class RenderLaunchPipelineTests(unittest.TestCase):
             self.assertIn(depends_on(f"build_{triplet}", f"test_{triplet}"), publish)
         self.assertIn(depends_on("build_i686-linux-gnuopt", "test_i686-linux-gnuopt",
                                  "test_i686-linux-gnuoptnet"), publish)
-        # no-GPL and riscv64 builds have no test jobs: they publish straight after the build
+        # no-GPL builds have no test jobs: they publish straight after the build
         self.assertIn(depends_on("build_x86_64-w64-mingw32nogpl"), publish)
-        self.assertIn(depends_on("build_riscv64-linux-gnu"), publish)
-        self.assertIn(depends_on("build_riscv64-linux-gnuopt"), publish)
         self.assertIn(depends_on("build_aarch64-apple-darwinnogpl"), publish)
+        # The soft-failing riscv64 builds upload their own trigger once they pass
+        for triplet in ("riscv64-linux-gnu", "riscv64-linux-gnuopt"):
+            self.assertNotIn(f'PUBLISH_TARGET: "{triplet}"', publish)
+            trigger = deferred_trigger(output, triplet)
+            self.assertTrue(trigger.startswith('steps:\n      - trigger: "julia-publish"\n'))
+            self.assertIn(f'label: ":rocket: publish {triplet} (scheduled)"', trigger)
+            self.assertIn(f'key: "publish_{triplet}"', trigger)
+            self.assertIn('if: pipeline.slug == "julia-ci"', trigger)
+            self.assertIn(depends_on(f"build_{triplet}"), trigger)
+            self.assertIn('commit: "${BUILDKITE_COMMIT}"', trigger)
+            self.assertIn(f'message: "publish {triplet}: ${{BUILDKITE_MESSAGE}}"', trigger)
+            self.assertIn(f'PUBLISH_TARGET: "{triplet}"', trigger)
+            self.assertIn('PUBLISH_SCHEDULED: "true"', trigger)
+        self.assertEqual(output.count("PUBLISH_TRIGGER:"), 2)
 
     def test_normal_mode_excludes_schedule_groups(self):
         output = render()
@@ -302,12 +331,15 @@ class RenderLaunchPipelineTests(unittest.TestCase):
             self.assertEqual(re.findall(r'group: "(Optimized Tests[^"]*)"', output), [tests])
             self.assertEqual(
                 sorted(re.findall(r'PUBLISH_TARGET: "([^"]+)"', publish)),
-                sorted(PUBLISHED_TRIPLETS + NOGPL_TRIPLETS + ALL_OPT_TRIPLETS
-                       + ["riscv64-linux-gnu", "riscv64-linux-gnuopt", "docs"]),
+                sorted(PUBLISHED_TRIPLETS + NOGPL_TRIPLETS + ALL_OPT_TRIPLETS + ["docs"]),
             )
             self.assertEqual(output.count('group: "RISC-V Build (Allow Fail)"'), 1)
-            self.assertIn(depends_on("build_riscv64-linux-gnu"), publish)
-            self.assertIn(depends_on("build_riscv64-linux-gnuopt"), publish)
+            for triplet in ("riscv64-linux-gnu", "riscv64-linux-gnuopt"):
+                trigger = deferred_trigger(output, triplet)
+                self.assertIn(depends_on(f"build_{triplet}"), trigger)
+                self.assertIn(f'PUBLISH_TARGET: "{triplet}"', trigger)
+                self.assertIn('JULIA_CI_PRIORITY: "1"', trigger)
+                self.assertNotIn("PUBLISH_SCHEDULED", trigger)
             # Each optimized platform's publish waits for its own tests
             self.assertIn(depends_on("build_x86_64-linux-gnuopt", "test_x86_64-linux-gnuopt"), publish)
             self.assertIn(depends_on("build_i686-linux-gnuopt", "test_i686-linux-gnuopt",
@@ -373,9 +405,9 @@ class RenderLaunchPipelineTests(unittest.TestCase):
         groups = r'^  - group: "([^"]+)"'
 
         output = render(ONLY_TRIPLETS="riscv64-linux-gnu", **release)
-        self.assertEqual(re.findall(groups, output, re.M), ["RISC-V Build (Allow Fail)", "Publish"])
-        self.assertEqual(re.findall(r'PUBLISH_TARGET: "([^"]+)"', output), ["riscv64-linux-gnu"])
-        self.assertIn(depends_on("build_riscv64-linux-gnu"), output)
+        self.assertEqual(re.findall(groups, output, re.M), ["RISC-V Build (Allow Fail)"])
+        self.assertIn('PUBLISH_TARGET: "riscv64-linux-gnu"',
+                      deferred_trigger(output, "riscv64-linux-gnu"))
 
         # A platform keeps all of its tests, which still gate its publish,
         # and platforms combine across groups.
@@ -401,6 +433,7 @@ class RenderLaunchPipelineTests(unittest.TestCase):
         # A scheduled platform is built and tested only, outside releases.
         output = render(ONLY_TRIPLETS="riscv64-linux-gnuopt")
         self.assertNotIn('group: "Publish"', output)
+        self.assertIsNone(deferred_trigger(output, "riscv64-linux-gnuopt"))
         self.assertIn('key: "build_riscv64-linux-gnuopt"', output)
         self.assertNotIn('key: "build_riscv64-linux-gnu"', output)
 
@@ -566,6 +599,7 @@ class RenderLaunchPipelineTests(unittest.TestCase):
         # Only the per-commit platforms are published, and only from julia-ci
         self.assertEqual(publish_group(output), publish_group(render()))
         self.assertNotIn("PUBLISH_NOGPL", output)
+        self.assertNotIn("PUBLISH_TRIGGER", output)
 
         for group in ("Source Build", "Coverage"):
             self.assertNotIn(f'group: "{group}"', render())
@@ -576,6 +610,19 @@ class RenderLaunchPipelineTests(unittest.TestCase):
         self.assertEqual(output.count('group: "Coverage"'), 1)
         self.assertNotIn('group: "Source Build"', output)
         self.assertNotIn('group: "Coverage"', render(BUILDKITE_PULL_REQUEST="123"))
+
+
+class DeferredTriggerTests(unittest.TestCase):
+    def test_soft_failing_build_with_tests_cannot_publish(self):
+        # The test, which depends on the build, would also wait for the trigger
+        # the build uploads, which in turn waits for the test.
+        sys.path.insert(0, os.path.dirname(RENDERER))
+        import render_launch_pipeline as r
+        from unittest import mock
+        with mock.patch.multiple(r, BUILD_KEYS={"t": "build_t"}, TEST_KEYS={"t": ["test_t"]},
+                                 SOFT_FAIL_BUILDS={"t"}, DEFERRED_TRIGGERS={}):
+            with self.assertRaises(AssertionError):
+                r.publish_group_text(["t"])
 
 
 class InterpolateTests(unittest.TestCase):
