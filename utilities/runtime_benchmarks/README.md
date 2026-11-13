@@ -32,6 +32,15 @@ TTFX job's (`utilities/ttfx/README.md`), and the build state comes from
 | `julia-ci` (the weekly `TTFX_RELEASE` schedule) | the newest stable release, the LTS, and the next release's nightly | absolute: each release alone, as a reference |
 | `julia-buildkite-ci` (self-test) | every build | comparison: the build against itself (A/A), so any flag is a harness bug |
 
+## Where it runs
+
+Every job, on pull requests, master and the weekly references alike, runs on the M6 Mac
+minis (`cpu: apple-m6`): cycles and wall time are only comparable on one CPU model, and
+the master series on perf.julialang.org is one line. Until November 2026 the jobs ran on
+the M2s, which TTFX keeps busy; the series steps where they moved, and a `runner` note in
+julia-ci-timing's `data/runtime_annotations.json` marks the first build measured on an M6.
+Moving the jobs to other machines again needs such a note too.
+
 ## How it measures
 
 The suite's `bench.jl` runs every (block, category, arm) in a fresh process, the arms in
