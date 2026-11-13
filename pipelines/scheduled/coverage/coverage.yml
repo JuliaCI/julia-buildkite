@@ -154,8 +154,8 @@ steps:
           fi
         agents:
           queue: "test"
-          # No sched_* tags: macOS jobs always get the whole host, and its width is
-          # a per-host fact in the scheduler's config.
+          # No sched_* tags: an untagged macOS job gets the whole host, and its
+          # width is a per-host fact in the scheduler's config.
           os: "macos"
           arch: "aarch64"
           # Four workers recycled at 2.5 GiB peak at ~13 GiB in use and finish in

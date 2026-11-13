@@ -43,5 +43,12 @@ steps:
         soft_fail: ${ALLOW_FAIL?}
         agents:
           queue: "test"
+          # Tagged so that a Mac runs it next to other light jobs instead of
+          # alone (untagged macOS jobs get the whole host). It averages 2.5-3
+          # busy CPUs, wider while precompiling, and peaks at ~6 GiB.
+          sched_cpus: "3"
+          sched_cpus_limit: "6"
+          sched_mem_gib: "4"
+          sched_mem_limit_gib: "8"
           os: "macos"
           arch: "${ARCH}"
