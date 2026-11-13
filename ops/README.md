@@ -68,11 +68,17 @@ publish trigger, exactly like `julia-pr`.
     julia-oidc-stage-pr / julia-oidc-stage-ci, no KMS)
    PRs stop here (juliaup reads               │  julia-ci only: one trigger per
    the -pr bucket).                           ▼  platform, as soon as ITS tests pass
+                                                 (v* tags: once the WHOLE build passed)
                               julia-publish  ──►  publish_<triplet>  (one build per platform)
                                                   publish_docs + deploy_docs  (once per commit)
    (TRUSTED: role julia-oidc-publish, kms:Sign + read julia-ci staging bucket
     ONLY + write final)
    verify_trusted_commit.sh → sign (rcodesign / Trusted Signing / KMS-GPG) → promote → deploy docs
+
+ Release (v*) tag builds publish nothing until every job of the build has
+ passed (soft-failing ones aside): the version names are write-once per
+ commit, so a platform published from a failing build would keep the tag
+ from being moved to a fixed commit without deleting it by hand.
 
  For release (v*) tag builds, julia-ci additionally builds the light/full
  source dists (misc/source_dist.yml) and stages them alongside the

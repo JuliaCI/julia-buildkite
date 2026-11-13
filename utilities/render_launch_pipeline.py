@@ -50,7 +50,8 @@ into one `group:` per label: Build, Check, Test, Allow Fail, JuliaSyntax,
 JuliaC, TTFX, Runtime benchmarks, Publish.
 
 The Publish group's triggers each `depends_on` only their own platform's
-build + test jobs (see publish_group_text).
+build + test jobs, except on release tags, where every trigger waits for the
+whole build (see publish_group_text and release_gate).
 """
 
 import functools
@@ -790,7 +791,7 @@ def publish_trigger_text(target, depends_on, scheduled):
     return "\n".join(lines)
 
 
-def publish_group_text(triplets, scheduled=False, docs=False):
+def publish_group_text(triplets, scheduled=False, docs=False, gate=None):
     """The Publish group: one julia-publish trigger per published platform,
     `depends_on` exactly that platform's build + test jobs, so it is signed
     and promoted as soon as those are green regardless of the rest of the
@@ -798,22 +799,47 @@ def publish_group_text(triplets, scheduled=False, docs=False):
     old build-wide `wait`. Per-commit builds add a `docs` trigger gated on
     the steps that stage the docs / source dists (source_dist is `if`-gated
     to tags; Buildkite ignores a dependency on an `if`-excluded step). All
-    triggers are `if`-gated to the julia-ci slug."""
+    triggers are `if`-gated to the julia-ci slug.
+
+    With `gate` (see release_gate), every trigger instead depends on those
+    keys, plus its own jobs should the gate miss any."""
+    def depends(keys):
+        if gate is None:
+            return keys
+        return gate + [k for k in keys if k not in gate]
+
     triggers = []
     for triplet in triplets:
         assert triplet in BUILD_KEYS, (
             f"{triplet} is published (upload_*.arches) but has no build job")
         depends_on = [BUILD_KEYS[triplet]] + TEST_KEYS.get(triplet, [])
-        triggers.append(publish_trigger_text(triplet, depends_on, scheduled))
+        triggers.append(publish_trigger_text(triplet, depends(depends_on), scheduled))
 
     if docs:
         depends_on = []
         for rel in DOCS_STAGING_FILES:
             _, inner = load_group_text(os.path.join(MISC, rel))
             depends_on.extend(step_keys(inner))
-        triggers.append(publish_trigger_text("docs", depends_on, scheduled))
+        triggers.append(publish_trigger_text("docs", depends(depends_on), scheduled))
 
     return emit_group("Publish", "\n".join(triggers))
+
+
+def release_gate(blocks):
+    """On a release tag build, the keys of every job in `blocks` (the groups
+    the build renders, minus the launchers, whose jobs only exist once they
+    run), for each publish trigger to wait for; None for any other build.
+
+    Publishing claims the version names, which are write-once: an artifact
+    published for a commit cannot be replaced by one of another commit. A
+    platform publishing as soon as its own tests pass would thus pin the tag
+    to its commit even when the build as a whole fails, and moving the tag to
+    a fixed commit would then require deleting what was published by hand.
+    Release branch pushes publish nightlies, under names that are overwritten
+    anyway, so they keep publishing each platform as soon as it is ready."""
+    if not is_release_build() or os.environ.get("BUILDKITE_BRANCH", "").startswith("release-"):
+        return None
+    return [key for block in blocks for key in step_keys(block)]
 
 
 def is_release_build():
@@ -905,7 +931,7 @@ def only_triplets_text(only):
                  f"it has {', '.join(sorted(SEEN_TRIPLETS))}")
     selected = [t for t in triplets if t in ONLY_TRIPLETS]
     if selected:
-        blocks.append(publish_group_text(selected))
+        blocks.append(publish_group_text(selected, gate=release_gate(blocks)))
     # drop the groups that have none of the selected platforms
     blocks = [b for b in blocks if not b.endswith("    steps:")]
     return pipeline_header() + "\n".join(blocks) + "\n"
@@ -945,10 +971,8 @@ def main():
     # (branch=v<version>) without rebuilding everything else.
     if os.environ.get("NOGPL_ONLY") == "true":
         label, allow_fail, arches = NOGPL_GROUP
-        blocks = [
-            schedule_group_text(label, arches, allow_fail),
-            publish_group_text(nogpl_triplets()),
-        ]
+        blocks = [schedule_group_text(label, arches, allow_fail)]
+        blocks.append(publish_group_text(nogpl_triplets(), gate=release_gate(blocks)))
         sys.stdout.write(pipeline_header())
         sys.stdout.write("\n".join(blocks))
         sys.stdout.write("\n")
@@ -960,7 +984,7 @@ def main():
         groups = release_opt_groups() if is_release_build() else OPT_GROUPS
         blocks = [schedule_group_text(label, arches, allow_fail)
                   for label, allow_fail, arches in groups]
-        blocks.append(publish_group_text(opt_triplets()))
+        blocks.append(publish_group_text(opt_triplets(), gate=release_gate(blocks)))
         sys.stdout.write(pipeline_header())
         sys.stdout.write("\n".join(blocks))
         sys.stdout.write("\n")
@@ -982,6 +1006,8 @@ def main():
         test_group_text(),
         allow_fail_group_text(),
     ]
+    # the groups a release tag's publish triggers wait for (see release_gate)
+    gated = list(blocks)
 
     # JuliaSyntax: gated on ./JuliaSyntax/Project.toml existing in the julia
     # checkout (same conditional the old Check step used). Included verbatim
@@ -1018,11 +1044,13 @@ def main():
     triplets = upload_triplets(UPLOAD_ARCHES, PLATFORMS)
     if is_release_build():
         label, allow_fail, arches = NOGPL_GROUP
-        blocks.append(schedule_group_text(label, arches, allow_fail))
-        blocks.extend(schedule_group_text(label, arches, allow_fail)
-                      for label, allow_fail, arches in release_opt_groups())
+        release_blocks = [schedule_group_text(label, arches, allow_fail)]
+        release_blocks.extend(schedule_group_text(label, arches, allow_fail)
+                              for label, allow_fail, arches in release_opt_groups())
         label, allow_fail, arches = RISCV64_GROUP
-        blocks.append(schedule_group_text(label, arches, allow_fail))
+        release_blocks.append(schedule_group_text(label, arches, allow_fail))
+        blocks += release_blocks
+        gated += release_blocks
         triplets += nogpl_triplets() + opt_triplets() + riscv64_triplets()
 
     # Decided here rather than by an `if:` on the step, which sees only the
@@ -1036,7 +1064,7 @@ def main():
         elif pr_has_label(COVERAGE_CI_LABEL):
             log(f"The pull request has the '{COVERAGE_CI_LABEL}' label; adding coverage")
             blocks.append(verbatim_group_text(COVERAGE))
-    blocks.append(publish_group_text(triplets, docs=True))
+    blocks.append(publish_group_text(triplets, docs=True, gate=release_gate(gated)))
 
     sys.stdout.write(pipeline_header())
     sys.stdout.write("\n".join(blocks))
