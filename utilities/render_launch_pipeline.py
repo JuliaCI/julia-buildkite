@@ -383,6 +383,10 @@ def render_arches_group_text(arches_file, yaml_file, group, allow_fail,
         rendered = interpolate(template_text, env, where)
         step_text = extract_inner_steps_text(rendered, where)
         record_platform_job(yaml_file, arch_env["TRIPLET"], step_text, allow_fail, where)
+        if yaml_file.startswith("build_") and step_priority() != ci_priority():
+            first, rest = step_text.split("\n", 1)
+            indent = " " * (STEP_INDENT + 2)
+            step_text = f"{first}\n{indent}priority: {ci_priority()}\n{rest}"
         chunks.append(step_text)
     return "\n".join(c for c in chunks if c)
 
@@ -904,11 +908,25 @@ def ci_priority():
     return NORMAL_PRIORITY
 
 
+def step_priority():
+    """The priority of every step but the Julia builds. A push to master (or to
+    julia-buildkite main) tests after the pull requests; its builds keep
+    ci_priority(), since pull request TTFX and runtime benchmarks wait for the
+    build of their merge base."""
+    if (ci_priority() == NORMAL_PRIORITY
+            and os.environ.get("BUILDKITE_SOURCE") == "webhook"
+            and os.environ.get("BUILDKITE_PULL_REQUEST", "false") == "false"
+            and (os.environ.get("BUILDKITE_PIPELINE_SLUG"), os.environ.get("BUILDKITE_BRANCH"))
+                in (("julia-ci", "master"), ("julia-buildkite-ci", "main"))):
+        return LOW_PRIORITY
+    return ci_priority()
+
+
 def pipeline_header():
     """The start of the rendered pipeline. A top-level `priority` only covers
     the steps of its own upload, so the launcher jobs also get it as
     JULIA_CI_PRIORITY, for the pipelines they upload."""
-    priority = ci_priority()
+    priority = step_priority()
     return (f"priority: {priority}\n"
             "env:\n"
             f'  JULIA_CI_PRIORITY: "{priority}"\n'

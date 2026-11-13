@@ -481,6 +481,33 @@ class RenderLaunchPipelineTests(unittest.TestCase):
                 output = render(**build_env)
                 self.assertTrue(output.startswith(header.format(priority)))
 
+        # A push to master tests after pull requests, but builds and
+        # publishes at the normal priority.
+        for build_env in ({"BUILDKITE_PIPELINE_SLUG": "julia-ci", "BUILDKITE_BRANCH": "master"},
+                          {"BUILDKITE_PIPELINE_SLUG": "julia-buildkite-ci", "BUILDKITE_BRANCH": "main",
+                           "BUILDKITE_PULL_REQUEST": "false"}):
+            with self.subTest(env=build_env):
+                output = render(source="webhook", **build_env)
+                self.assertTrue(output.startswith(header.format(-1)))
+                # each build step, and only those, has its own priority
+                self.assertEqual(output.count("\n        priority: "), output.count('key: "build_'))
+                self.assertEqual(output.count("\n        priority: 0\n"), output.count('key: "build_'))
+                self.assertGreater(output.count('key: "build_'), 0)
+                publish = output[output.index('group: "Publish"'):]
+                self.assertEqual(publish.count('JULIA_CI_PRIORITY: "0"'),
+                                 publish.count('trigger: "julia-publish"'))
+        for build_env in ({"BUILDKITE_BRANCH": "master", "BUILDKITE_SOURCE": "schedule"},
+                          {"BUILDKITE_BRANCH": "master", "BUILDKITE_SOURCE": "ui"},
+                          {"BUILDKITE_BRANCH": "release-1.14", "BUILDKITE_SOURCE": "webhook"}):
+            with self.subTest(env=build_env):
+                output = render(BUILDKITE_PIPELINE_SLUG="julia-ci", **build_env)
+                self.assertNotIn("priority: -1", output)
+                self.assertNotIn("\n        priority: ", output)
+        output = render(source="webhook", BUILDKITE_PIPELINE_SLUG="julia-pr",
+                        BUILDKITE_PULL_REQUEST="1", BUILDKITE_PULL_REQUEST_BASE_BRANCH="master",
+                        BUILDKITE_BRANCH="master")
+        self.assertTrue(output.startswith(header.format(0)))
+
         # julia-publish builds get it from their trigger.
         output = render(BUILDKITE_PIPELINE_SLUG="julia-ci", BUILDKITE_TAG="v1.14.0")
         publish = output[output.index('group: "Publish"'):]
@@ -491,6 +518,7 @@ class RenderLaunchPipelineTests(unittest.TestCase):
         for rel in ("main/misc/juliasyntax.test.yml", "main/misc/juliac/test_juliac_linux.yml",
                     "main/misc/juliac/test_juliac_macos.yml",
                     "main/misc/juliac/test_juliac_windows.yml", "main/misc/ttfx/ttfx_macos.yml",
+                    "main/misc/runtime_benchmarks/runtime_benchmarks_macos.yml",
                     "main/misc/deploy_docs.yml", "publish/launch.yml"):
             with open(os.path.join(ROOT, "pipelines", rel)) as f:
                 lines = [l for l in f if not l.startswith("#")]
