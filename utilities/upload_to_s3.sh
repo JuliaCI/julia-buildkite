@@ -133,6 +133,8 @@ upload_to_s3() {
             return 0
         fi
         echo "ERROR: s3://${target} already exists with DIFFERENT content (from build-commit: ${remote_commit:-unknown}); refusing to overwrite" >&2
+        echo "       It was published from another commit than this build's (${BUILDKITE_COMMIT:-unknown}), e.g. before its release tag was moved." \
+             "Published artifacts are write-once: see \"Moving a release tag after it was published\" in ops/README.md." >&2
         return 1
     fi
 

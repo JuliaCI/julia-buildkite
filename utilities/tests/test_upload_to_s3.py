@@ -112,6 +112,7 @@ class UploadAllTests(FakeAwsTestCase):
                                        FIXTURE_TAKEN_KEY=self.VERSIONED.split("/", 1)[1])
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("refusing to overwrite", result.stderr)
+        self.assertIn("Moving a release tag after it was published", result.stderr)
         self.assertIn("not moving the latest pointers", result.stderr)
         self.assertEqual(puts, [self.VERSIONED.split("/", 1)[1]])
 
