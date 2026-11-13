@@ -43,7 +43,8 @@ renders only those), whose tests gate their publish triggers on tags unless
 OPT_TESTS_ALLOW_FAIL=true. ONLY_TRIPLETS=<triplet>[,...] renders only the
 build, test and publish jobs of those platforms, from whichever groups the
 build would otherwise contain. Pull requests with the EXTENDED_CI_LABEL add
-the scheduled workload groups and coverage, without publish triggers. A
+the scheduled workload groups and coverage, without publish triggers, and
+those with the COVERAGE_CI_LABEL add only coverage. A
 julia-pr pull request skips the jobs whose paths it does not change (PR_GATED_FILES, PR_GATED_TRIPLETS). Per-commit results are grouped
 into one `group:` per label: Build, Check, Test, Allow Fail, JuliaSyntax,
 JuliaC, TTFX, Runtime benchmarks, Publish.
@@ -509,6 +510,8 @@ PR_GATED_TRIPLETS = {
 FULL_CI_LABEL = "needs full CI"
 # Adds the scheduled workloads and coverage to a pull request
 EXTENDED_CI_LABEL = "needs extended CI"
+# Adds only coverage to a pull request
+COVERAGE_CI_LABEL = "needs coverage CI"
 
 # Buildkite job priorities; a higher one takes the next free agent first.
 HIGH_PRIORITY, NORMAL_PRIORITY, LOW_PRIORITY = 1, 0, -1
@@ -1024,12 +1027,15 @@ def main():
 
     # Decided here rather than by an `if:` on the step, which sees only the
     # labels Buildkite recorded, so that a rebuild after adding the label works.
-    if (os.environ.get("BUILDKITE_PULL_REQUEST", "false") != "false"
-            and pr_has_label(EXTENDED_CI_LABEL)):
-        log(f"The pull request has the '{EXTENDED_CI_LABEL}' label; "
-            "adding the scheduled workloads and coverage")
-        blocks.extend(scheduled_workload_blocks())
-        blocks.append(verbatim_group_text(COVERAGE))
+    if os.environ.get("BUILDKITE_PULL_REQUEST", "false") != "false":
+        if pr_has_label(EXTENDED_CI_LABEL):
+            log(f"The pull request has the '{EXTENDED_CI_LABEL}' label; "
+                "adding the scheduled workloads and coverage")
+            blocks.extend(scheduled_workload_blocks())
+            blocks.append(verbatim_group_text(COVERAGE))
+        elif pr_has_label(COVERAGE_CI_LABEL):
+            log(f"The pull request has the '{COVERAGE_CI_LABEL}' label; adding coverage")
+            blocks.append(verbatim_group_text(COVERAGE))
     blocks.append(publish_group_text(triplets, docs=True))
 
     sys.stdout.write(pipeline_header())

@@ -252,8 +252,8 @@ function upload_coverage(fcs)
 
     @info "Coverage upload configuration" platform=platform job_flags=job_flags build_id=build_id job_name=job_name
 
-    # Upload to Codecov if token is available
-    if codecov_token !== nothing
+    # Pull request builds hold no token; Codecov takes their uploads without one.
+    if codecov_token !== nothing || get(ENV, "BUILDKITE_PULL_REQUEST", "false") != "false"
         @info "Uploading to Codecov with parallel job support..."
         codecov_success = retry(Coverage.upload_to_codecov, delays=ExponentialBackOff(n=5))(fcs;
             token=codecov_token,
@@ -268,7 +268,7 @@ function upload_coverage(fcs)
             @error "Failed to upload to Codecov"
         end
     else
-        @warn "CODECOV_TOKEN not found, skipping Codecov upload"
+        @warn "CODECOV_TOKEN not found and not a pull request, skipping Codecov upload"
     end
 
     # Upload to Coveralls if token is available

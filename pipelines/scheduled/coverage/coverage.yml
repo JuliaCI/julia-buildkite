@@ -1,10 +1,10 @@
 steps:
   - group: "Coverage"
-    # Scheduled (julia-ci) builds, plus "needs extended CI"-labeled PRs, for
-    # which the main launch step adds this group itself. Only julia-ci holds
-    # the codecov / coveralls bearer tokens; PR builds run the same coverage
-    # collection but skip the uploads (the lcov tarball is still available as
-    # a buildkite artifact).
+    # Scheduled (julia-ci) builds, plus PRs labeled "needs extended CI" or
+    # "needs coverage CI", for which the main launch step adds this group
+    # itself. Only julia-ci holds the codecov / coveralls bearer tokens; PR
+    # builds upload to Codecov without a token and skip Coveralls (the lcov
+    # tarball is also available as a buildkite artifact).
     # Not on the weekly TTFX release schedule, which measures a release and builds nothing
     if: ((build.source == "schedule") && (build.env("TTFX_RELEASE") == null)) || (build.pull_request.id != null)
     notify:
@@ -34,8 +34,8 @@ steps:
           # Coverage tokens are fetched from SSM Parameter Store with this
           # job's OIDC identity; no static secrets exist in CI config.
           # Only julia-ci holds tokens (PR builds and the julia-buildkite
-          # self-test have no tokens role): collect coverage anyway, skip
-          # the uploads below.
+          # self-test have no tokens role). julia-pr uploads to Codecov
+          # without one; the self-test skips the uploads below.
           if [[ "$${BUILDKITE_PIPELINE_SLUG}" != "julia-ci" ]]; then
             echo "No coverage tokens in this pipeline; coverage uploads will be skipped"
           else
@@ -73,7 +73,7 @@ steps:
           buildkite-agent artifact upload lcov_files.tar.gz
 
           echo "--- Process and upload coverage information"
-          if [[ -n "$${CODECOV_TOKEN:-}" && -n "$${COVERALLS_TOKEN:-}" ]]; then
+          if [[ -n "$${CODECOV_TOKEN:-}" && -n "$${COVERALLS_TOKEN:-}" ]] || [[ "$${BUILDKITE_PIPELINE_SLUG}" == "julia-pr" ]]; then
             ./julia --color=yes .buildkite/pipelines/scheduled/coverage/upload_coverage.jl
           else
             echo "No coverage tokens; skipping upload"
@@ -109,8 +109,8 @@ steps:
           # Coverage tokens are fetched from SSM Parameter Store with this
           # job's OIDC identity; no static secrets exist in CI config.
           # Only julia-ci holds tokens (PR builds and the julia-buildkite
-          # self-test have no tokens role): collect coverage anyway, skip
-          # the uploads below.
+          # self-test have no tokens role). julia-pr uploads to Codecov
+          # without one; the self-test skips the uploads below.
           if [[ "$${BUILDKITE_PIPELINE_SLUG}" != "julia-ci" ]]; then
             echo "No coverage tokens in this pipeline; coverage uploads will be skipped"
           else
@@ -147,7 +147,7 @@ steps:
           buildkite-agent artifact upload lcov_files.tar.gz
 
           echo "--- Process and upload coverage information"
-          if [[ -n "$${CODECOV_TOKEN:-}" && -n "$${COVERALLS_TOKEN:-}" ]]; then
+          if [[ -n "$${CODECOV_TOKEN:-}" && -n "$${COVERALLS_TOKEN:-}" ]] || [[ "$${BUILDKITE_PIPELINE_SLUG}" == "julia-pr" ]]; then
             ./julia --color=yes .buildkite/pipelines/scheduled/coverage/upload_coverage.jl
           else
             echo "No coverage tokens; skipping upload"
@@ -212,7 +212,7 @@ steps:
                 tar -zcf lcov_files.tar.gz lcov_files/ &&
                 buildkite-agent artifact upload lcov_files.tar.gz &&
                 echo '--- Process and upload coverage information' &&
-                if [[ -n $${CODECOV_TOKEN:-} && -n $${COVERALLS_TOKEN:-} ]]; then
+                if [[ -n $${CODECOV_TOKEN:-} && -n $${COVERALLS_TOKEN:-} ]] || [[ $${BUILDKITE_PIPELINE_SLUG} == julia-pr ]]; then
                   ./usr/bin/julia.exe --color=yes .buildkite/pipelines/scheduled/coverage/upload_coverage.jl;
                 else
                   echo 'No coverage tokens; skipping upload';
@@ -234,7 +234,10 @@ steps:
                 - "BUILDKITE_BUILD_AUTHOR_EMAIL"
                 - "BUILDKITE_BUILD_CREATOR_EMAIL"
                 - "BUILDKITE_PULL_REQUEST"
+                - "BUILDKITE_PULL_REQUEST_REPO"
                 - "BUILDKITE_BUILD_NUMBER"
+                - "BUILDKITE_BUILD_URL"
+                - "BUILDKITE_JOB_ID"
                 - "BUILDKITE_PIPELINE_SLUG"
         timeout_in_minutes: 360 # 6h
         agents:

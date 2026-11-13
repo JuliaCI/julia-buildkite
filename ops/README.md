@@ -156,8 +156,9 @@ and which carry AWS session tags (`step_key`, `build_commit`, `pipeline_slug`, .
   SSM `ssm:GetParameter` on the telemetry tokens). There is deliberately
   no `-pr` counterpart: a pull request executes attacker-controlled code
   inside the job, which could exfiltrate any bearer token the job can
-  read — so PR builds hold **no tokens at all** (and consequently no
-  coverage/analytics uploads happen on PRs). The promote and publish roles
+  read — so PR builds hold **no tokens at all** (so no analytics or
+  Coveralls uploads happen on PRs; Codecov takes PR coverage without a
+  token). The promote and publish roles
   read their own tokens (the Fastly purge tokens) from separate prefixes,
   `/julia-promote/tokens` and `/julia-publish/tokens`, which
   `julia-oidc-tokens-ci` cannot read.
