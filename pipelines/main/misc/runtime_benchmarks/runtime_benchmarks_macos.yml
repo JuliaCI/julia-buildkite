@@ -21,8 +21,9 @@ steps:
         agents:
           queue: "test"
           os: "macos"
-          # Timings are only comparable on one CPU model; other Macs also serve "test".
-          cpu: "apple-m2"
+          # Timings are only comparable on one CPU model: the M6s, which have room for this
+          # job while the M2s are busy with TTFX. Other Macs also serve "test".
+          cpu: "apple-m6"
           arch: "${ARCH}"
         env:
           TRIPLET: "${TRIPLET?}"
