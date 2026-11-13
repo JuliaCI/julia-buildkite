@@ -66,6 +66,11 @@ to the merge-base with its target branch (`PR_GATED_FILES` and
 - The PDF manual is built only when it changes `doc/`.
 - The JuliaSyntax jobs, which test that package on released Julia versions,
   run only when it changes `JuliaSyntax/`.
+- JuliaC is tested on Intel macOS only when it changes JuliaC or trimming
+  (`deps/jlutilities/juliac/`, `contrib/juliac*`, `test/trim*`,
+  `verifytrim.jl`). The other platforms' JuliaC jobs always run, and pull
+  requests into a `backports-release-*` branch always test JuliaC on Intel
+  macOS.
 
 `julia-ci` runs every job, so what a pull request skips is still tested on
 master. Pull requests into a `release-*` branch (backports), with the
