@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Exercise companion publishing with real archives and offline service/signing doubles."""
 
+import base64
 import os
 from pathlib import Path
 import shutil
@@ -128,6 +129,15 @@ elif sys.argv[1:3] == ["artifact", "upload"]:
     dest = pathlib.Path(os.environ["FIXTURE_OUTPUT"]) / "artifacts"
     dest.mkdir(exist_ok=True)
     shutil.copy(sys.argv[-1], dest)
+elif sys.argv[1:3] == ["meta-data", "exists"]:
+    if "FIXTURE_METADATA_ERROR" in os.environ:
+        sys.exit(1)
+    sys.exit(0 if (pathlib.Path(os.environ["FIXTURE_OUTPUT"]) / ("meta-data." + sys.argv[3])).exists() else 100)
+elif sys.argv[1:3] == ["meta-data", "set"]:
+    (pathlib.Path(os.environ["FIXTURE_OUTPUT"]) / ("meta-data." + sys.argv[3])).write_text(sys.argv[4])
+elif sys.argv[1:3] == ["pipeline", "upload"]:
+    with (pathlib.Path(os.environ["FIXTURE_OUTPUT"]) / "pipeline-uploads").open("a") as f:
+        f.write(sys.stdin.read() + "---\\n")
 else:
     assert sys.argv[1:] == ["--version"]
 ''')
@@ -272,6 +282,21 @@ elif "checkbounds-pkgimages" in args:
         self.assertTrue(main[0].endswith(" default stdlibs-cache-checkbounds"))
         # the later steps get the whole precompile budget again
         self.assertTrue(all(c.startswith("8 ") for c in calls if c is not main[0]))
+
+    def test_build_uploads_deferred_publish_trigger_once(self):
+        trigger = 'steps:\n  - trigger: "julia-publish"\n'
+        self.env["PUBLISH_TRIGGER"] = base64.b64encode(trigger.encode()).decode()
+        self.mock_build("linux")
+        uploads = self.output / "pipeline-uploads"
+        self.assertEqual(uploads.read_text(), trigger + "---\n")
+        # a retry of a job that already uploaded it does not upload it again
+        self.run_script("build_julia.sh")
+        self.assertEqual(uploads.read_text(), trigger + "---\n")
+        # a build that cannot tell fails rather than risk not publishing
+        (self.output / "meta-data.publish-trigger-uploaded-x86_64-fixture").unlink()
+        self.env["FIXTURE_METADATA_ERROR"] = "1"
+        self.run_script("build_julia.sh", success=False)
+        self.assertEqual(uploads.read_text(), trigger + "---\n")
 
     def test_build_companion_serially_without_target(self):
         calls = self.mock_build("linux", "checkbounds-pkgimages:\n")
