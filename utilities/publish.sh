@@ -167,16 +167,11 @@ if [[ "${#DEFERRED_MACOS[@]}" -gt 0 ]]; then
             FAILED+=( "${name}" )
             continue
         fi
-        upload_ok=1
-        PIDS=()
+        uploads=()
         for i in "${!files[@]}"; do
-            upload_to_s3 "${files[$i]}" "${targets[$i]}" &
-            PIDS+=( "$!" )
+            uploads+=( "${files[$i]}" "${targets[$i]}" )
         done
-        for pid in "${PIDS[@]}"; do
-            wait "${pid}" || upload_ok=0
-        done
-        if [[ "${upload_ok}" -ne 1 ]]; then
+        if ! upload_to_s3_all "${uploads[@]}"; then
             echo "ERROR: publishing ${name} failed" >&2
             FAILED+=( "${name}" )
         else
