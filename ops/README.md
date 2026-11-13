@@ -305,6 +305,48 @@ are Terraform variables with the production defaults):
     private half lived on agents) and securely delete all copies; keep
     its revoked public key published so old releases remain verifiable.
 
+### Moving a release tag after it was published
+
+Publishing claims a release's version names (`julia-<version>-*` in the
+nightlies and no-GPL buckets) for the commit that was built, and the publish
+role cannot replace them. A tag build publishes only once all of its jobs
+have passed, so a tag can be moved freely while its build is failing. If a
+tag is moved after its build passed, the new commit's publish fails with
+`already exists with DIFFERENT content (from build-commit: <old commit>)`.
+As long as the version has not been promoted (`julia-promote`; nothing under
+`bin/*/*/<majmin>/julia-<version>-*` in `julialang2`), someone with delete
+rights on the buckets can remove the old commit's objects and retry the
+failed publish jobs:
+
+```sh
+OLD=<old commit>; VERSION=<version>; MAJMIN=<major.minor>
+subdirs() {  # the "directories" directly under s3://$1/$2
+    aws s3api list-objects-v2 --bucket "$1" --prefix "$2" --delimiter / \
+        --query 'CommonPrefixes[].Prefix' --output text | tr '\t' '\n' | grep -v '^None$'
+}
+for bucket_prefix in julialangnightlies/bin/ julialang-nogpl/bin-nogpl/; do
+    bucket="${bucket_prefix%%/*}"
+    for os in $(subdirs "$bucket" "${bucket_prefix#*/}"); do
+        for arch in $(subdirs "$bucket" "$os"); do
+            # bin/<os>/<arch>/<majmin>/..., and bin/src/<majmin>/... for the source dists
+            [[ "$arch" == */$MAJMIN/ ]] && dir="$arch" || dir="$arch$MAJMIN/"
+            aws s3api list-objects-v2 --bucket "$bucket" --prefix "${dir}julia-$VERSION" \
+                --query 'Contents[].Key' --output text | tr '\t' '\n' | grep -v '^None$' |
+            while read -r key; do
+                commit="$(aws s3api head-object --bucket "$bucket" --key "$key" \
+                    --query 'Metadata."build-commit"' --output text)"
+                [[ "$commit" == "$OLD" ]] || continue
+                aws s3api delete-object --bucket "$bucket" --key "$key" && echo "deleted s3://$bucket/$key"
+            done
+        done
+    done
+done
+```
+
+Only objects stamped with the old commit are deleted; the `julia-latest-*`
+pointers are left alone (the retried publish moves them). Tagging a new
+prerelease instead avoids all this.
+
 ### NON-PRODUCTION publish test stack (`julia-publish-test-nosecrets`)
 
 An isolated stack to debug the publish flow (download → KMS-sign → promote)
