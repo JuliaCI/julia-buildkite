@@ -44,7 +44,8 @@ export JULIA_CPU_THREADS=1 ARCH=x86_64 TRIPLET=x86_64-fixture MAJMIN=1.14
 export JULIA_VERSION=1.14.0 EXTERNAL_STDLIB_NAMES="" MAC_APP_NAME=Julia-1.14.app
 UPLOAD_TARGETS=(published/julia-fixture published/julia-latest-fixture)
 ''')
-        self.write(self.utils / "upload_to_s3.sh", '''
+        # The real helpers (upload_to_s3_all, ...) around a local upload_to_s3
+        self.write(self.utils / "upload_to_s3.sh", f'source "{ROOT / "utilities" / "upload_to_s3.sh"}"\n' + '''
 upload_to_s3() {
     mkdir -p "${FIXTURE_OUTPUT}/$(dirname "$2")"
     cp "$1" "${FIXTURE_OUTPUT}/$2"

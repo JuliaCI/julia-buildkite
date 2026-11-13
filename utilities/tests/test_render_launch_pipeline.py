@@ -77,6 +77,21 @@ def publish_group(output):
     return output[output.index('  - group: "Publish"'):]
 
 
+def trigger_dependencies(output):
+    """{PUBLISH_TARGET: [depends_on keys]} of the Publish group's triggers."""
+    triggers = re.split(r'(?m)^      - trigger: ', publish_group(output))[1:]
+    return {re.search(r'PUBLISH_TARGET: "([^"]+)"', t).group(1):
+            re.findall(r'(?m)^          - "([^"]+)"$', t) for t in triggers}
+
+
+def job_keys(output, *groups):
+    """The step keys of the given groups, in order."""
+    blocks = re.split(r'(?m)^(?=  - group: )', output)
+    return [key for block in blocks
+            if any(block.startswith(f'  - group: "{g}"') for g in groups)
+            for key in re.findall(r'(?m)^        key: "?([^"\s]+)"?\s*$', block)]
+
+
 def depends_on(*keys):
     """A publish trigger's exact `depends_on:` block for the given keys."""
     return ("        depends_on:\n"
@@ -306,6 +321,9 @@ class RenderLaunchPipelineTests(unittest.TestCase):
                        + ["riscv64-linux-gnu", "riscv64-linux-gnuopt", "docs"]),
             )
             self.assertEqual(output.count('group: "RISC-V Build (Allow Fail)"'), 1)
+            self.assertNotIn("PUBLISH_SCHEDULED", publish)
+            if not build_env["BUILDKITE_BRANCH"].startswith("release-"):
+                continue  # tags wait for the whole build, see below
             self.assertIn(depends_on("build_riscv64-linux-gnu"), publish)
             self.assertIn(depends_on("build_riscv64-linux-gnuopt"), publish)
             # Each optimized platform's publish waits for its own tests
@@ -314,7 +332,6 @@ class RenderLaunchPipelineTests(unittest.TestCase):
                                      "test_i686-linux-gnuoptnet"), publish)
             for triplet in NOGPL_TRIPLETS:
                 self.assertIn(depends_on(f"build_{triplet}"), publish)
-            self.assertNotIn("PUBLISH_SCHEDULED", publish)
 
         # master (which gets them from the schedule), and release-like
         # branches outside julia-ci, do not.
@@ -325,6 +342,41 @@ class RenderLaunchPipelineTests(unittest.TestCase):
             self.assertNotIn('group: "no_GPL"', output)
             self.assertNotIn('group: "Optimized Build"', output)
             self.assertNotIn('group: "RISC-V Build (Allow Fail)"', output)
+
+    def test_release_tags_publish_once_the_whole_build_passes(self):
+        # A platform published for one commit cannot be replaced by another
+        # commit's, so a release only publishes once its whole build passed:
+        # until then, the tag can still be moved to a fixed commit.
+        gated_groups = ("Build", "Check", "Test", "Allow Fail", "no_GPL", "Optimized Build",
+                        "Optimized Tests", "RISC-V Build (Allow Fail)")
+        for build_env in ({"BUILDKITE_TAG": "v1.14.0", "BUILDKITE_BRANCH": "v1.14.0"},
+                          {"BUILDKITE_BRANCH": "v1.14.0-beta1"}):
+            with self.subTest(env=build_env):
+                output = render(BUILDKITE_PIPELINE_SLUG="julia-ci", **build_env)
+                gate = job_keys(output, *gated_groups)
+                for key in ("build_x86_64-linux-gnu", "test_aarch64-apple-darwin", "doctest",
+                            "source_dist", "test_x86_64-linux-gnuopt", "build_riscv64-linux-gnu"):
+                    self.assertIn(key, gate)
+                deps = trigger_dependencies(output)
+                self.assertEqual(len(deps), len(PUBLISHED_TRIPLETS + NOGPL_TRIPLETS + ALL_OPT_TRIPLETS) + 3)
+                for target, keys in deps.items():
+                    self.assertEqual(keys, gate, target)
+
+        # The partial builds of a release wait for everything they build.
+        for extra in ({"NOGPL_ONLY": "true"}, {"OPT_ONLY": "true"},
+                      {"ONLY_TRIPLETS": "x86_64-linux-gnuassert, i686-linux-gnuopt"}):
+            with self.subTest(env=extra):
+                output = render(BUILDKITE_PIPELINE_SLUG="julia-ci", BUILDKITE_BRANCH="v1.14.0", **extra)
+                gate = job_keys(output, *gated_groups)
+                self.assertTrue(gate)
+                for target, keys in trigger_dependencies(output).items():
+                    self.assertEqual(keys, gate, target)
+
+        # Release branches publish nightlies, each platform as soon as it is ready.
+        deps = trigger_dependencies(render(BUILDKITE_PIPELINE_SLUG="julia-ci",
+                                           BUILDKITE_BRANCH="release-1.14"))
+        self.assertEqual(deps["x86_64-linux-gnu"], ["build_x86_64-linux-gnu", "test_x86_64-linux-gnu"])
+        self.assertEqual(deps["x86_64-linux-gnunogpl"], ["build_x86_64-linux-gnunogpl"])
 
     def test_nogpl_only(self):
         output = render(BUILDKITE_PIPELINE_SLUG="julia-ci", BUILDKITE_BRANCH="v1.13.1",
@@ -384,11 +436,11 @@ class RenderLaunchPipelineTests(unittest.TestCase):
                          ["Build", "Test", "Optimized Build", "Optimized Tests", "Publish"])
         self.assertEqual(set(re.findall(r'TRIPLET: "([^"]+)"', output)),
                          {"x86_64-linux-gnuassert", "i686-linux-gnuopt"})
-        self.assertIn(depends_on("build_x86_64-linux-gnuassert", "test_x86_64-linux-gnuassert",
-                                 "test_x86_64-linux-gnuassertrr", "test_x86_64-linux-gnuassertrr-net"),
-                      output)
-        self.assertIn(depends_on("build_i686-linux-gnuopt", "test_i686-linux-gnuopt",
-                                 "test_i686-linux-gnuoptnet"), output)
+        gate = ["build_x86_64-linux-gnuassert", "test_x86_64-linux-gnuassert",
+                "test_x86_64-linux-gnuassertrr", "test_x86_64-linux-gnuassertrr-net",
+                "build_i686-linux-gnuopt", "test_i686-linux-gnuopt", "test_i686-linux-gnuoptnet"]
+        self.assertEqual({target: sorted(keys) for target, keys in trigger_dependencies(output).items()},
+                         {"x86_64-linux-gnuassert": sorted(gate), "i686-linux-gnuopt": sorted(gate)})
         for job in ("doctest", "gcext", "juliac", "ttfx", "docs"):
             self.assertNotIn(f'"{job}"', output)
         self.assertNotIn('group: "Runtime benchmarks"', output)
