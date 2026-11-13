@@ -73,6 +73,11 @@ steps:
           fi
         agents:
           queue: "test"
+          # As the Linux test suites: charged at typical use, 12 workers wide.
+          sched_cpus: "8"
+          sched_cpus_limit: "12"
+          sched_mem_gib: "13"
+          sched_mem_limit_gib: "64"
           # Only run on `sandbox.jl` machines (not `docker`-isolated ones) since we need nestable sandboxing
           sandbox_capable: "true"
           os: "linux"
@@ -140,6 +145,8 @@ steps:
           fi
         agents:
           queue: "test"
+          # No sched_* tags: macOS jobs always get the whole host, and its width is
+          # a per-host fact in the scheduler's config.
           os: "macos"
           arch: "aarch64"
           # The suite with coverage peaks at ~26 GiB: keep it off the 8 GiB M1s.
@@ -218,6 +225,9 @@ steps:
         timeout_in_minutes: 540 # 9h
         agents:
           queue: "test"
+          sched_cpus: "6"
+          sched_cpus_limit: "6"
+          sched_mem_gib: "24"
           os: "windows"
           arch: "x86_64"
         env:
@@ -258,6 +268,9 @@ steps:
           fi
         agents:
           queue: "test"
+          sched_cpus: "1"
+          sched_cpus_limit: "1"
+          sched_mem_gib: "2"
           os: "linux"
           arch: "x86_64"
         env:
