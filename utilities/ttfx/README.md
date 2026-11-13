@@ -114,7 +114,8 @@ the geometric mean of the ratios over the suite is judged per block against a ti
 threshold, which catches a small cost spread across every package. A suite load or run
 difference that shows with the GC on only, while the suite's GC time moved the other way
 in the other phase, counts only when the geomean of load and run added together changed
-the same way beyond the load threshold. Precompile is judged
+the same way beyond the load threshold. The stdlibs-first suite (below) counts with its GC
+time taken out only. Precompile is judged
 on the blocks that measured it; on a pull request its suite geomean is a single one, of
 each task's fastest head sample over its fastest base sample. Thresholds are the
 `METRICS` table in `ttfx_compare.jl`. A task that fails on head and passes on base is a
@@ -210,6 +211,16 @@ outlast the phase; such a task is not judged with the GC off for that phase.
 precompile in the same depot, so it is mostly the extensions the stdlibs trigger, and a
 large value means adding them changed the resolved versions. A failure here is kept in `error_stdlibs` and does not
 affect `status`.
+
+The stdlibs-first suite geomeans count with the GC time taken out only; the GC-on ones
+are reported but not counted. With every stdlib loaded the heap sits near a collection
+trigger, so a small allocation difference decides whether one collection (about 25 ms on
+an M2) falls inside a task's phase, in the other phase or after the last marker, the same
+way in every block. For a phase of a few milliseconds that is a 2-3x ratio, which the
+geomean weighs like any other task's: in julia-buildkite-ci build 482, three such tasks
+moved the load geomean by 9% between two builds that differed only in the build tools'
+manifests. A GC cost spread over the suite is still caught by the plain load and run
+suites, but not one that only shows with every stdlib loaded.
 
 ## Release reference: the weekly schedule (julia-ci)
 
