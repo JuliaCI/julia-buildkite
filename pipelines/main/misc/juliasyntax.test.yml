@@ -16,8 +16,8 @@ steps:
         timeout_in_minutes: 30
         agents:
           queue: "test"
-          # Sized for the Linux and Windows rows; the macOS rows ignore these
-          # and get the whole host.
+          # Also sizes the macOS rows, which then share a Mac with other light
+          # jobs instead of getting the whole host.
           sched_cpus: "1"
           sched_cpus_limit: "4"
           sched_mem_gib: "2"
