@@ -28,8 +28,9 @@
 #   --repeats N          task script runs per sample; the first is the cold one, later ones
 #                        may hit caches it populated (default 3)
 #   --counters           also record retired instructions and CPU cycles (macOS only): of the
-#                        precompile's whole process tree, and of the load and run phases of
-#                        one more untimed run of each task script per sample
+#                        precompile's whole process tree, of the load and run phases of
+#                        one more untimed run of each task script per sample, and of julia's
+#                        startup
 #   --startup N          before the tasks, time `julia -e ''`, and the REPL to its first prompt,
 #                        N times each per arm and block, the arms alternating from run to run;
 #                        0 skips it (default 30)
@@ -48,9 +49,12 @@
 # arm's position within the block. `preload_times` is, per repeat, the time from spawning the
 # process to the script's first marker: startup, plus the little the script does before it.
 # Startup records, in their own file: {arm, package = "julia", task = "startup", block,
-# order, status, error, packages_hash = null, startup_times, startup_repl_times, error_repl},
+# order, status, error, packages_hash = null, startup_times, startup_repl_times, error_repl,
+# startup_instructions, startup_cycles, startup_repl_instructions, startup_repl_cycles},
 # every timed run in run order. A REPL failure is kept in `error_repl` and does not affect
-# `status`.
+# `status`. The last four (--counters) are the whole process's instructions and cycles:
+# of one more, untimed, `julia -e ''` beside each timed one, from its start to its exit
+# (startup_counters), and of each timed REPL run when its prompt appeared.
 # A task that fails on any arm finishes the current block, so every arm gets its one try,
 # and skips the remaining blocks: a broken package does not cost the whole ABBA.
 # The task script prints "load, run, total seconds"; the `*_times` arrays keep every
@@ -716,8 +720,10 @@ end
 median(x) = (s = sort(x); n = length(s); isodd(n) ? s[(n + 1) ÷ 2] : (s[n ÷ 2] + s[n ÷ 2 + 1]) / 2)
 
 # The time from spawning an interactive julia on a pseudo-terminal to its first `julia> `
-# prompt; then it is sent `exit()`, which is not timed. Returns the time, or the failure
-# message with the output so far.
+# prompt; then it is sent `exit()`, which is not timed. Returns the time, with the
+# process's instructions and cycles up to then (--counters; read from outside as soon as
+# the prompt is seen, so they cost the measured process nothing), or the failure message
+# with the output so far.
 function repl_startup(arm::Arm, env, timeout::Float64)
     fdm, fds = Ref{Cint}(), Ref{Cint}()
     ccall(:openpty, Cint, (Ptr{Cint}, Ptr{Cint}, Ptr{Cvoid}, Ptr{Cvoid}, Ptr{Cvoid}),
@@ -725,6 +731,8 @@ function repl_startup(arm::Arm, env, timeout::Float64)
     pty = Base.TTY(RawFD(fdm[]))
     cmd = addenv(`$(arm.julia) --startup-file=no --history-file=no --color=no --banner=no`, env..., "TERM" => "xterm")
     seen = ""
+    counters = nothing
+    rusage = zeros(UInt64, RI_WORDS)
     t0 = time()
     proc = run(cmd, RawFD(fds[]), RawFD(fds[]), RawFD(fds[]); wait = false)
     ccall(:close, Cint, (Cint,), fds[])
@@ -736,6 +744,7 @@ function repl_startup(arm::Arm, env, timeout::Float64)
             seen *= String(readavailable(pty))
             if occursin("julia> ", seen)
                 t = time() - t0
+                COUNTERS[] && (counters = process_counters!(rusage, getpid(proc)))
                 break
             end
         end
@@ -754,21 +763,41 @@ function repl_startup(arm::Arm, env, timeout::Float64)
         wait(proc)
         close(pty)
     end
-    t !== nothing && success(proc) && return t
+    t !== nothing && success(proc) && return (; time = t, counters)
     why = t === nothing ? "no prompt within $(timeout)s" : "exit() failed"
     return "REPL startup: $why; output: $(repr(seen))"
+end
+
+# The instructions and cycles of one `julia -e ''`, from its start to its exit, or nothing.
+# They are the whole process's, which only the kernel still has once it has exited:
+# `/usr/bin/time -l` reads them as it reaps the process and prints them. It is a run of
+# its own because the timed ones must not have another process started around them.
+const TIME_COUNTERS = (r"(\d+)\s+instructions retired", r"(\d+)\s+cycles elapsed")
+function startup_counters(arm::Arm, env, timeout::Float64)
+    err = try
+        run_timed(addenv(`/usr/bin/time -l $(arm.julia) --startup-file=no -e ''`, env...), timeout)[2]
+    catch
+        return nothing
+    end
+    m = map(re -> match(re, err), TIME_COUNTERS)
+    any(isnothing, m) && return nothing
+    return (; instructions = parse(Int, m[1].captures[1]), cycles = parse(Int, m[2].captures[1]))
 end
 
 # `julia -e ''`, and the REPL to its first prompt, in fresh processes, `runs` times each per
 # arm and block. The arms alternate from run to run, so drift lands on both alike. Each
 # arm's first run in a block is not timed: it pages the build in from disk, which a user
-# pays once and not on every start.
+# pays once and not on every start. With --counters each timed `-e ''` run is followed by
+# an untimed one that reads the process's instructions and cycles (startup_counters).
 function measure_startup(arms::Vector{Arm}, depot::String, runs::Int, blocks::Int, timeout::Float64)
     records = Any[]
     for block in 1:blocks
         order = isodd(block) ? arms : reverse(arms)
         times = Dict(arm.label => Float64[] for arm in arms)
         repl_times = Dict(arm.label => Float64[] for arm in arms)
+        # Per arm: -e '' instructions and cycles, then the REPL's
+        counts = Dict(arm.label => (Int[], Int[], Int[], Int[]) for arm in arms)
+        count!(arm, k, c) = c === nothing || (push!(counts[arm.label][k], Int(c.instructions)); push!(counts[arm.label][k + 1], Int(c.cycles)))
         errs = Dict{String,String}()
         repl_errs = Dict{String,String}()
         for i in 0:runs, arm in (isodd(i) ? reverse(order) : order)
@@ -781,6 +810,7 @@ function measure_startup(arms::Vector{Arm}, depot::String, runs::Int, blocks::In
                     errs[arm.label] = failure_message("startup", out, err, timed_out, timeout; logname = "startup-$(arm.label)-b$block")
                 elseif i > 0
                     push!(times[arm.label], t)
+                    COUNTERS[] && count!(arm, 1, startup_counters(arm, env, timeout))
                 end
             end
             if !haskey(repl_errs, arm.label)
@@ -788,7 +818,8 @@ function measure_startup(arms::Vector{Arm}, depot::String, runs::Int, blocks::In
                 if t isa String
                     repl_errs[arm.label] = t
                 elseif i > 0
-                    push!(repl_times[arm.label], t)
+                    push!(repl_times[arm.label], t.time)
+                    count!(arm, 3, t.counters)
                 end
             end
         end
@@ -796,12 +827,15 @@ function measure_startup(arms::Vector{Arm}, depot::String, runs::Int, blocks::In
             push!(records, (; arm = arm.label, package = "julia", task = "startup", block, order = pos,
                               status = haskey(errs, arm.label) ? "error" : "ok", error = get(errs, arm.label, nothing),
                               packages_hash = nothing, startup_times = times[arm.label],
-                              startup_repl_times = repl_times[arm.label], error_repl = get(repl_errs, arm.label, nothing)))
+                              startup_repl_times = repl_times[arm.label], error_repl = get(repl_errs, arm.label, nothing),
+                              startup_instructions = counts[arm.label][1], startup_cycles = counts[arm.label][2],
+                              startup_repl_instructions = counts[arm.label][3], startup_repl_cycles = counts[arm.label][4]))
             summary(t) = @sprintf("median %d ms, min %d ms", round(Int, 1000median(t)), round(Int, 1000minimum(t)))
+            instr(v) = isempty(v) ? "" : @sprintf(", median %.1f M instructions", median(v) / 1e6)
             println("  ", lpad(block, 3), "  ", rpad(arm.label, 8), "  -e '': ",
-                    haskey(errs, arm.label) ? "\e[31mFAILED\e[0m: $(errs[arm.label])" : summary(times[arm.label]),
+                    haskey(errs, arm.label) ? "\e[31mFAILED\e[0m: $(errs[arm.label])" : summary(times[arm.label]) * instr(counts[arm.label][1]),
                     " · to the REPL prompt: ",
-                    haskey(repl_errs, arm.label) ? "\e[31mFAILED\e[0m: $(repl_errs[arm.label])" : summary(repl_times[arm.label]),
+                    haskey(repl_errs, arm.label) ? "\e[31mFAILED\e[0m: $(repl_errs[arm.label])" : summary(repl_times[arm.label]) * instr(counts[arm.label][3]),
                     " · $runs runs each")
         end
         flush(stdout)

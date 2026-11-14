@@ -144,7 +144,7 @@ else:
 | artifact | content |
 |---|---|
 | `ttfx/results.json` | records: `arm, package, task, block, order, status, error, precompile_time, load_times, run_times, total_times, load_stats, run_stats, load_times_gcoff, run_times_gcoff, total_times_gcoff, load_stats_gcoff, run_stats_gcoff, gc_after_load, error_gcoff, invalidations, packages_hash, precompile_time_stdlibs, load_times_stdlibs, run_times_stdlibs, total_times_stdlibs, load_stats_stdlibs, run_stats_stdlibs, error_stdlibs, preload_times, precompile_counters, precompile_counters_stdlibs, load_counters, run_counters, error_counters` |
-| `ttfx/startup.json` | the startup records: `arm, package, task, block, order, status, error, packages_hash, startup_times, startup_repl_times, error_repl`, every timed run of the block |
+| `ttfx/startup.json` | the startup records: `arm, package, task, block, order, status, error, packages_hash, startup_times, startup_repl_times, error_repl, startup_instructions, startup_cycles, startup_repl_instructions, startup_repl_cycles`, every timed run of the block |
 | `ttfx/results-meta.json` | the builds (`arms.<label>`: version, commit, date, CPU threads seen), machine, settings, task list, snippets commit, Buildkite build |
 | `ttfx/report.md`, `ttfx/compare.json` | the report and, on pull requests, the per-task and suite verdicts |
 | `ttfx/benchmark.log` | the driver's log |
@@ -225,6 +225,18 @@ one and the timed runs read no counters. In the same test the run phase's instru
 agreed within 0.1% from run to run and the load phase's within 1%, about as far as its
 wall time. A failure of this run is kept in `error_counters` and does not affect
 `status`. Nothing is compared on them yet.
+
+Startup has them too, in the startup records, as the whole process's counts: startup has
+no thread of the script's to single out, and the REPL starts on a thread of its own.
+`startup_instructions` and `startup_cycles` are those of one more `julia -e ''` after
+each timed one, from its start to its exit. Only the kernel has them once the process
+has exited, so that run goes through `/usr/bin/time -l`, which reads them as it reaps
+the process; the timed run must not have that extra process around it.
+`startup_repl_instructions` and `startup_repl_cycles` are those of each timed REPL run
+up to its prompt, read by the driver from outside the moment it sees the prompt, which
+costs the measured process nothing. As with the times, take a block's median: single
+REPL runs differed by up to 13% in the test, the block medians by 0.1% (0.2% for
+`-e ''`, whose median times differed by 17%).
 
 Each task also runs in a second copy of its project, with every stdlib of the build added as
 a dependency and imported before the first marker (`TTFX_STDLIBS`, on by default). Each
