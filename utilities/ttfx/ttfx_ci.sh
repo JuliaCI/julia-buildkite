@@ -13,6 +13,13 @@ set -euo pipefail
 # shellcheck source=SCRIPTDIR/../build_envs.sh
 source .buildkite/utilities/build_envs.sh
 
+# The measured julia processes size their precompile tasks and image threads from
+# JULIA_CPU_THREADS, which the scheduler sets to the host's width. Fix it at the width
+# the series was recorded with (the M2s' performance cores), so a host that counts more
+# cores runs the same measurement.
+TTFX_THREADS="${TTFX_THREADS:-4}"
+export JULIA_CPU_THREADS="${TTFX_THREADS}"
+
 # An optimized build's OS is macosopt
 if [[ "${OS%opt}" != "macos" ]]; then
     echo "The TTFX job only knows how to re-sign and run macOS builds (got ${TRIPLET})" >&2
