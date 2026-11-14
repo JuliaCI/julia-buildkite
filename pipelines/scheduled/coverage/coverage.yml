@@ -48,7 +48,9 @@ steps:
 
           echo "--- Build Julia from source"
           # Older Julia trees ignore these options and retain ordinary coverage.
-          make --output-sync -j$${JULIA_CPU_THREADS:?} JULIA_COVERAGE_IMAGES=1 JULIA_CHECK_BOUNDS_PKGIMAGES=$${JULIA_CHECK_BOUNDS_PKGIMAGES:-1}
+          # The build records the image code it runs in lcov-build-*.info, which the
+          # upload below collects with the test tracefiles.
+          make --output-sync -j$${JULIA_CPU_THREADS:?} JULIA_COVERAGE_IMAGES=1 JULIA_COVERAGE_IMAGES_TRACEFILE="$$(pwd)/lcov-build-%p.info" JULIA_CHECK_BOUNDS_PKGIMAGES=$${JULIA_CHECK_BOUNDS_PKGIMAGES:-1}
 
           echo "--- Print Julia version info"
           ./julia --color=yes -e 'using InteractiveUtils; InteractiveUtils.versioninfo()'
@@ -122,7 +124,7 @@ steps:
           fi
 
           echo "--- Build Julia from source"
-          make -j$${JULIA_CPU_THREADS:?} JULIA_COVERAGE_IMAGES=1 JULIA_CHECK_BOUNDS_PKGIMAGES=$${JULIA_CHECK_BOUNDS_PKGIMAGES:-1}
+          make -j$${JULIA_CPU_THREADS:?} JULIA_COVERAGE_IMAGES=1 JULIA_COVERAGE_IMAGES_TRACEFILE="$$(pwd)/lcov-build-%p.info" JULIA_CHECK_BOUNDS_PKGIMAGES=$${JULIA_CHECK_BOUNDS_PKGIMAGES:-1}
 
           echo "--- Print Julia version info"
           ./julia --color=yes -e 'using InteractiveUtils; InteractiveUtils.versioninfo()'
@@ -193,7 +195,7 @@ steps:
                   [[ -n $${CODECOV_TOKEN} && -n $${COVERALLS_TOKEN} ]] || { echo 'Coverage token fetch returned an empty value' >&2; exit 1; };
                 fi &&
                 echo '--- Build Julia from source' &&
-                make -j$${JULIA_CPU_THREADS:?} VERBOSE=1 JULIA_COVERAGE_IMAGES=1 JULIA_CHECK_BOUNDS_PKGIMAGES=$${JULIA_CHECK_BOUNDS_PKGIMAGES:-1} &&
+                make -j$${JULIA_CPU_THREADS:?} VERBOSE=1 JULIA_COVERAGE_IMAGES=1 JULIA_COVERAGE_IMAGES_TRACEFILE=$$(pwd)/lcov-build-%p.info JULIA_CHECK_BOUNDS_PKGIMAGES=$${JULIA_CHECK_BOUNDS_PKGIMAGES:-1} &&
                 echo '--- Print Julia version info' &&
                 ./usr/bin/julia.exe --color=yes -e 'using InteractiveUtils; InteractiveUtils.versioninfo()' &&
                 ./usr/bin/julia.exe --color=yes -e '@info \"\" Sys.CPU_THREADS' &&
