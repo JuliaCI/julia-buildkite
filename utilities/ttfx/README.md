@@ -198,7 +198,8 @@ which draws the optimized build next to the master series with the paired differ
 ## Knobs
 
 Environment variables on the job: `TTFX_EXCLUDE` (default `exclude.txt`, or `none`),
-`TTFX_BLOCKS` (2), `TTFX_REPEATS` (3), `TTFX_BASE_WAIT_MINUTES` (20),
+`TTFX_BLOCKS` (2), `TTFX_REPEATS` (3), `TTFX_THREADS` (4: the `JULIA_CPU_THREADS` of the
+measured processes, whatever the host's width), `TTFX_BASE_WAIT_MINUTES` (20),
 `TTFX_SNIPPETS_REPO` and `TTFX_SNIPPETS_REF`, `TTFX_RELEASE` (`latest`, a series such as
 `1.10`, a release branch's nightly such as `1.14-nightly`, `branch-nightly`, or a version; unset measures the build), `TTFX_BASE` (`commit` compares with the regular build of the
 same commit; unset uses the merge-base on pull requests), `TTFX_RELEASES_URL` and
