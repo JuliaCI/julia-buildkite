@@ -282,7 +282,8 @@ which draws the optimized build next to the master series with the paired differ
 ## Knobs
 
 Environment variables on the job: `TTFX_EXCLUDE` (default `exclude.txt`, or `none`),
-`TTFX_BLOCKS` (2), `TTFX_REPEATS` (3), `TTFX_STARTUP_RUNS` (30, or 0 to skip), `TTFX_STDLIBS` (`on`, or `off`), `TTFX_PRECOMPILE_ONCE`
+`TTFX_BLOCKS` (2), `TTFX_REPEATS` (3), `TTFX_THREADS` (4: the `JULIA_CPU_THREADS` of the
+measured processes, whatever the host's width), `TTFX_STARTUP_RUNS` (30, or 0 to skip), `TTFX_STDLIBS` (`on`, or `off`), `TTFX_PRECOMPILE_ONCE`
 (`on` on pull requests without the `needs TTFX check` label and on the self-test, `off`
 elsewhere), `TTFX_BASE_WAIT_MINUTES` (20),
 `TTFX_SNIPPETS_REPO` and `TTFX_SNIPPETS_REF`, `TTFX_RELEASE` (`latest`, a series such as
