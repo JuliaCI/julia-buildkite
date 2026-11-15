@@ -224,7 +224,7 @@ milliseconds the first compilation costs. That is why the run is a separate, unt
 one and the timed runs read no counters. In the same test the run phase's instructions
 agreed within 0.1% from run to run and the load phase's within 1%, about as far as its
 wall time. A failure of this run is kept in `error_counters` and does not affect
-`status`. Nothing is compared on them yet.
+`status`.
 
 Startup has them too, in the startup records, as the whole process's counts: startup has
 no thread of the script's to single out, and the REPL starts on a thread of its own.
@@ -237,6 +237,14 @@ up to its prompt, read by the driver from outside the moment it sees the prompt,
 costs the measured process nothing. As with the times, take a block's median: single
 REPL runs differed by up to 13% in the test, the block medians by 0.1% (0.2% for
 `-e ''`, whose median times differed by 17%).
+
+A comparison reports the instructions and does not judge them: what change in them is a
+regression has yet to be learnt from the data. `compare.json` has each task's head/base
+ratios per block as the metrics `precompile_instructions`, `load_instructions` and
+`run_instructions` (and `startup_instructions` and `startup_repl_instructions` of the
+`julia/startup` task), each with verdict `same`, and their geomeans over the tasks under
+the same keys of `suite`, marked `diagnostic` so they count for nothing. The report has
+them in one line, per block. The cycles are in the records only.
 
 Each task also runs in a second copy of its project, with every stdlib of the build added as
 a dependency and imported before the first marker (`TTFX_STDLIBS`, on by default). Each
