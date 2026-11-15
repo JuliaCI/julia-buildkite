@@ -36,6 +36,9 @@ TTFX_REPEATS="${TTFX_REPEATS:-3}"
 TTFX_STARTUP_RUNS="${TTFX_STARTUP_RUNS:-30}"
 # Also load each task with every stdlib loaded first; "off" skips that run
 TTFX_STDLIBS="${TTFX_STDLIBS:-on}"
+# Also record the retired instructions and CPU cycles of each task's precompile, load and
+# run, the last two from one more untimed run of the task; "off" skips that
+TTFX_COUNTERS="${TTFX_COUNTERS:-on}"
 # "on" precompiles each task once per arm, in the first block (ttfx_bench.jl
 # --precompile-once). Pull requests do, to halve the job's precompile time, unless they
 # have the `needs TTFX check` label; master and release builds precompile in every
@@ -277,6 +280,9 @@ if [[ "${TTFX_STDLIBS}" == "on" ]]; then
 fi
 if [[ "${TTFX_PRECOMPILE_ONCE}" == "on" ]]; then
     bench_args+=( --precompile-once )
+fi
+if [[ "${TTFX_COUNTERS}" == "on" ]]; then
+    bench_args+=( --counters )
 fi
 "${HEAD_JULIA}" --startup-file=no "${TTFX_UTILS}/ttfx_bench.jl" \
     --tasks "${TTFX_DIR}/snippets/tasks" ${bench_args[@]+"${bench_args[@]}"} \

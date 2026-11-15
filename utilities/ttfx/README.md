@@ -13,7 +13,7 @@ repository's `main` branch at job time; everything that runs them lives here.
 | `ttfx_launch.sh` | the launch step: decides whether this build is measured, uploads the job |
 | `paths.txt` | the paths a pull request must touch to be measured without the label |
 | `ttfx_ci.sh` | the job: fetch the builds, check out the snippets, benchmark, compare, report |
-| `ttfx_bench.jl` | the driver: interleaved ABBA measurement, one record per task, arm and block, and the untimed trace and invalidation run |
+| `ttfx_bench.jl` | the driver: interleaved ABBA measurement, one record per task, arm and block, and the untimed counter, trace and invalidation runs |
 | `ttfx_invalidations.jl` | loaded by a task script in the untimed trace run: summarizes the invalidations of its load and run phases |
 | `ttfx_compare.jl` | the verdict and the markdown report |
 | `ttfx_metrics.jl` | the compared metrics and their thresholds, shared by the driver and the comparison |
@@ -143,8 +143,8 @@ else:
 
 | artifact | content |
 |---|---|
-| `ttfx/results.json` | records: `arm, package, task, block, order, status, error, precompile_time, load_times, run_times, total_times, load_stats, run_stats, load_times_gcoff, run_times_gcoff, total_times_gcoff, load_stats_gcoff, run_stats_gcoff, gc_after_load, error_gcoff, invalidations, packages_hash, precompile_time_stdlibs, load_times_stdlibs, run_times_stdlibs, total_times_stdlibs, load_stats_stdlibs, run_stats_stdlibs, error_stdlibs, preload_times` |
-| `ttfx/startup.json` | the startup records: `arm, package, task, block, order, status, error, packages_hash, startup_times, startup_repl_times, error_repl`, every timed run of the block |
+| `ttfx/results.json` | records: `arm, package, task, block, order, status, error, precompile_time, load_times, run_times, total_times, load_stats, run_stats, load_times_gcoff, run_times_gcoff, total_times_gcoff, load_stats_gcoff, run_stats_gcoff, gc_after_load, error_gcoff, invalidations, packages_hash, precompile_time_stdlibs, load_times_stdlibs, run_times_stdlibs, total_times_stdlibs, load_stats_stdlibs, run_stats_stdlibs, error_stdlibs, preload_times, precompile_counters, precompile_counters_stdlibs, load_counters, run_counters, error_counters` |
+| `ttfx/startup.json` | the startup records: `arm, package, task, block, order, status, error, packages_hash, startup_times, startup_repl_times, error_repl, startup_instructions, startup_cycles, startup_repl_instructions, startup_repl_cycles`, every timed run of the block |
 | `ttfx/results-meta.json` | the builds (`arms.<label>`: version, commit, date, CPU threads seen), machine, settings, task list, snippets commit, Buildkite build |
 | `ttfx/report.md`, `ttfx/compare.json` | the report and, on pull requests, the per-task and suite verdicts |
 | `ttfx/benchmark.log` | the driver's log |
@@ -190,6 +190,61 @@ holds; and `top_definitions` and `top_rejected`, the five causes with the most, 
 `[method, count]`. Logging slows loading by up to a sixth, so it is kept out of the timed
 runs; the summary is compiled after tracing stops, so it stays out of the trace. The
 counts are deterministic for a given build and set of package versions.
+
+The driver also records retired instructions and CPU cycles (`TTFX_COUNTERS`, on by
+default), which follow the work a build does rather than how long the machine took over
+it, so the instructions repeat far more closely than the times do. macOS on Apple
+silicon counts both for every thread and lets a process read them without privileges; on
+any other system the fields are null.
+
+`precompile_counters` is `{instructions, cycles, processes}` over every process of the
+precompile: the process that runs `Pkg.precompile()` (its startup and loading of Pkg
+included), the worker it starts per package and the linkers those start. Precompilation
+runs several workers at a time, so its wall time also depends on how the work was
+scheduled, which these do not. The kernel does not add a process's counters to its
+parent's when it exits, so the driver walks the process tree every 2 ms while the
+precompile runs (`proc_listchildpids`, `proc_pid_rusage`) and keeps the last reading of
+each process. The total misses what each process did after its last reading, about a
+thousandth of the whole. In a test on a quiet machine, three precompiles of one project
+by the same build agreed within 0.01% in instructions and within 3% in wall time.
+`processes` is how many were seen. `precompile_counters_stdlibs` is the same for the precompile of the
+stdlibs copy. Both are null where `precompile_time` is.
+
+`load_counters` and `run_counters` are `{instructions, cycles, process_instructions,
+process_cycles}` over the load and run phases of one more run of the instrumented script
+(`TTFX_COUNTERS=on`), after the GC-off repeats and as cold as the first of them. The first
+two are those of the script's own thread (`thread_selfcounts`), where everything julia
+does for it runs: loading, inference, code generation and the GC, which has no threads
+of its own when julia runs with one. The `process_` ones add every other thread of the
+process. They are recorded to tell when a task does work elsewhere, and are not the ones
+to compare: in a short phase they are several times the script's own and vary from run to
+run (OpenBLAS's threads, for one, spin for a while after LinearAlgebra starts them). Reading the counters takes a `ccall`, which julia compiles, and the
+script compiles it before its first marker, so this run's load has lost the few
+milliseconds the first compilation costs. That is why the run is a separate, untimed
+one and the timed runs read no counters. In the same test the run phase's instructions
+agreed within 0.1% from run to run and the load phase's within 1%, about as far as its
+wall time. A failure of this run is kept in `error_counters` and does not affect
+`status`.
+
+Startup has them too, in the startup records, as the whole process's counts: startup has
+no thread of the script's to single out, and the REPL starts on a thread of its own.
+`startup_instructions` and `startup_cycles` are those of one more `julia -e ''` after
+each timed one, from its start to its exit. Only the kernel has them once the process
+has exited, so that run goes through `/usr/bin/time -l`, which reads them as it reaps
+the process; the timed run must not have that extra process around it.
+`startup_repl_instructions` and `startup_repl_cycles` are those of each timed REPL run
+up to its prompt, read by the driver from outside the moment it sees the prompt, which
+costs the measured process nothing. As with the times, take a block's median: single
+REPL runs differed by up to 13% in the test, the block medians by 0.1% (0.2% for
+`-e ''`, whose median times differed by 17%).
+
+A comparison reports the instructions and does not judge them: what change in them is a
+regression has yet to be learnt from the data. `compare.json` has each task's head/base
+ratios per block as the metrics `precompile_instructions`, `load_instructions` and
+`run_instructions` (and `startup_instructions` and `startup_repl_instructions` of the
+`julia/startup` task), each with verdict `same`, and their geomeans over the tasks under
+the same keys of `suite`, marked `diagnostic` so they count for nothing. The report has
+them in one line, per block. The cycles are in the records only.
 
 Each task also runs in a second copy of its project, with every stdlib of the build added as
 a dependency and imported before the first marker (`TTFX_STDLIBS`, on by default). Each
@@ -283,7 +338,7 @@ which draws the optimized build next to the master series with the paired differ
 
 Environment variables on the job: `TTFX_EXCLUDE` (default `exclude.txt`, or `none`),
 `TTFX_BLOCKS` (2), `TTFX_REPEATS` (3), `TTFX_THREADS` (4: the `JULIA_CPU_THREADS` of the
-measured processes, whatever the host's width), `TTFX_STARTUP_RUNS` (30, or 0 to skip), `TTFX_STDLIBS` (`on`, or `off`), `TTFX_PRECOMPILE_ONCE`
+measured processes, whatever the host's width), `TTFX_STARTUP_RUNS` (30, or 0 to skip), `TTFX_STDLIBS` (`on`, or `off`), `TTFX_COUNTERS` (`on`, or `off`), `TTFX_PRECOMPILE_ONCE`
 (`on` on pull requests without the `needs TTFX check` label and on the self-test, `off`
 elsewhere), `TTFX_BASE_WAIT_MINUTES` (20),
 `TTFX_SNIPPETS_REPO` and `TTFX_SNIPPETS_REF`, `TTFX_RELEASE` (`latest`, a series such as
@@ -291,6 +346,6 @@ elsewhere), `TTFX_BASE_WAIT_MINUTES` (20),
 same commit; unset uses the merge-base on pull requests), `TTFX_RELEASES_URL` and
 `TTFX_LATEST_RELEASE_API`, `TTFX_VERSIONS_URL`; on the
 launch step, `TTFX_PATHS` (default `paths.txt`). The job's budget is the sum of the tasks' precompile times, times two arms,
-times the blocks (one block with `TTFX_PRECOMPILE_ONCE=on`), plus one untimed run of every task script per arm, plus the stdlibs-first
+times the blocks (one block with `TTFX_PRECOMPILE_ONCE=on`), plus one untimed run of every task script per arm, plus the counter run and the stdlibs-first
 run of every sample, plus package
 downloads: exclude tasks before raising the timeout.

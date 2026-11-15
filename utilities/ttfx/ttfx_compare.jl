@@ -7,7 +7,7 @@
 #
 # Exit status: 0 nothing to report, 1 robust regression, 2 unusable data, 3 robust
 # improvements only. The report lists only the differences (and, in summary mode, every
-# task); with nothing to report it is a single line.
+# task); with nothing to report it is a single line, and the instructions' when recorded.
 #
 # A difference in a task's metric is robust when the samples of the two builds do not
 # overlap and every ABBA block, each of which pairs a head sample with a base sample taken
@@ -19,6 +19,10 @@
 # is a collection that moved between load and run; it is reported but not counted. For the
 # suite, such a difference counts only when load and run added together changed the same way.
 # The stdlibs-first suite counts with its GC time taken out only (see compare_suite).
+#
+# Where the driver recorded retired instructions (--counters), their head/base ratios are
+# reported beside the times, per task as the metrics `<metric>_instructions` and over the
+# suite under the same keys, and never judged: nothing here counts them.
 
 include(joinpath(@__DIR__, "ttfx_json.jl"))
 using .TTFXJSON
@@ -90,6 +94,22 @@ function gc_time(r, key)
     st = get(r, phase * "_stats" * suffix, Any[])
     g = isempty(st) || !(st[1] isa AbstractDict) ? nothing : get(st[1], "gc_time", nothing)
     return g === nothing ? nothing : Float64(g)
+end
+
+# The instructions of a record for one of INSTRUCTIONS, the time metrics that have them;
+# nothing when the driver did not read them. A startup record holds many runs per block,
+# whose median is the sample, as for its times.
+const INSTRUCTIONS = [(key = "startup", name = "startup"), (key = "startup_repl", name = "startup to REPL prompt"),
+                      (key = "precompile", name = "precompile"), (key = "load", name = "load (cold)"), (key = "run", name = "run (cold)")]
+function instructions(r, key)
+    r["status"] == "error" && return nothing
+    if key in ("startup", "startup_repl")
+        v = get(r, key * "_instructions", Any[])
+        return isempty(v) ? nothing : median(Float64.(v))
+    end
+    c = get(r, key * "_counters", nothing)
+    v = c isa AbstractDict ? get(c, "instructions", nothing) : nothing
+    return v === nothing ? nothing : Float64(v)
 end
 
 const STARTUP = "julia/startup"
@@ -182,6 +202,14 @@ function compare_task(name, byarm, base, head, nblocks)
             push!(out["improvements"], m.key)
         end
     end
+    # Instructions are reported, not judged
+    for m in INSTRUCTIONS
+        bv = [instructions(r, m.key) for r in b]; hv = [instructions(r, m.key) for r in h]
+        blocks = [k for k in 1:nblocks if bv[k] !== nothing && hv[k] !== nothing]
+        (isempty(blocks) || (m.key != "precompile" && length(blocks) != nblocks)) && continue
+        bv = Float64.(bv[blocks]); hv = Float64.(hv[blocks])
+        out["metrics"][m.key * "_instructions"] = Dict("base" => bv, "head" => hv, "ratios" => hv ./ bv, "blocks" => blocks, "verdict" => "same")
+    end
     # A build can move work from startup into the first package load, for example by
     # faulting in system image pages on first use. Load then looks slower although the
     # user waits no longer. A load difference counts only if the time before the first
@@ -260,6 +288,18 @@ function compare_suite(tasks, nblocks; precompile_once::Bool = false)
         verdict = all(>(1 + m.suite), gs) ? "regression" : all(<(1 - m.suite), gs) ? "improvement" : "same"
         suite[field == "ratios" ? m.key : m.key * "_gcoff"] = Dict("geomeans" => gs, "verdict" => verdict, "n_tasks" => count(has, tasks))
     end
+    # The instructions' geomeans, per block like the times'; `diagnostic` keeps them from
+    # counting. Startup has no suite: its ratios are the startup task's own.
+    for m in INSTRUCTIONS
+        key = m.key * "_instructions"
+        ratios(t) = t["metrics"][key]["ratios"]
+        once = precompile_once && m.key == "precompile"
+        ts = [t for t in tasks if t["name"] != STARTUP && haskey(t["metrics"], key) && (once || length(ratios(t)) == nblocks)]
+        isempty(ts) && continue
+        gs = once ? [geomean([minimum(t["metrics"][key]["head"]) / minimum(t["metrics"][key]["base"]) for t in ts])] :
+                    [geomean([ratios(t)[k] for t in ts]) for k in 1:nblocks]
+        suite[key] = Dict("geomeans" => gs, "verdict" => "same", "n_tasks" => length(ts), "diagnostic" => true)
+    end
     # A suite difference that shows with the GC on only, while the GC time moved the other
     # way in the other phase, is collections moving between load and run. It counts only
     # when load and run added together changed the same way.
@@ -326,6 +366,22 @@ function precompile_note(meta)
            "Buildkite reads labels when it creates a build, so it applies from the next push."
 end
 
+# The instruction changes in one line, per block: the suite geomeans, and the startup
+# task's own ratios. Empty when the driver recorded none.
+change2(x) = (x >= 1 ? "+" : "") * string(round(100 * (x - 1); digits = 2)) * "%"
+function instructions_line(tasks, suite)
+    startup = findfirst(t -> t["name"] == STARTUP, tasks)
+    parts = String[]
+    for m in INSTRUCTIONS
+        key = m.key * "_instructions"
+        g = haskey(suite, key) ? suite[key]["geomeans"] :
+            startup !== nothing && haskey(tasks[startup]["metrics"], key) ? tasks[startup]["metrics"][key]["ratios"] : nothing
+        g === nothing || push!(parts, m.name * " " * join(change2.(g), ", "))
+    end
+    return isempty(parts) ? "" : "Retired instructions, per block (not judged; they follow the work done, so they repeat far " *
+                                 "more closely than the times): " * join(parts, "; ") * "."
+end
+
 links(opts) = (isempty(opts["url"]) ? "" : " · [job](" * opts["url"] * ")") *
               (isempty(opts["perf-url"]) ? "" : " · [perf.julialang.org](" * opts["perf-url"] * ")")
 
@@ -338,9 +394,11 @@ function write_comparison(io, opts, meta, tasks, suite, nblocks)
     header = arm_desc(meta, head) * " vs " * arm_desc(meta, base) * note * " · " * string(count(t -> t["name"] != STARTUP, tasks)) *
              " tasks · " * string(nblocks) * " blocks (ABBA)" * link
     pnote = precompile_note(meta)
+    inote = instructions_line(tasks, suite)
     if nreg + nimp == 0
         println(io, opts["title"], ": no robust regressions or improvements. ", header)
         isempty(pnote) || println(io, "\n", pnote)
+        isempty(inote) || println(io, "\n", inote)
         return nreg, nimp
     end
     println(io, "## ", opts["title"])
@@ -376,6 +434,7 @@ function write_comparison(io, opts, meta, tasks, suite, nblocks)
                 g === nothing ? "–" : marked(g) * (g["n_tasks"] == s["n_tasks"] ? "" : " (" * string(g["n_tasks"]) * (g["n_tasks"] == 1 ? " task)" : " tasks)")),
                 " | ±", pct(m.suite), " |")
     end
+    isempty(inote) || println(io, "\n", inote)
     for (title, field) in (("Regressions", "regressions"), ("Improvements", "improvements"),
                            ("GC moved between load and run (not counted)", "gc_moved"),
                            ("Moved between startup and load (not counted)", "startup_moved"))

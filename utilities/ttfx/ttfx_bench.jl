@@ -27,6 +27,10 @@
 #                        arm always precompiles first
 #   --repeats N          task script runs per sample; the first is the cold one, later ones
 #                        may hit caches it populated (default 3)
+#   --counters           also record retired instructions and CPU cycles (macOS only): of the
+#                        precompile's whole process tree, of the load and run phases of
+#                        one more untimed run of each task script per sample, and of julia's
+#                        startup
 #   --startup N          before the tasks, time `julia -e ''`, and the REPL to its first prompt,
 #                        N times each per arm and block, the arms alternating from run to run;
 #                        0 skips it (default 30)
@@ -40,13 +44,17 @@
 # run_times, total_times, load_stats, run_stats, load_times_gcoff, run_times_gcoff,
 # total_times_gcoff, load_stats_gcoff, run_stats_gcoff, gc_after_load, error_gcoff,
 # invalidations, packages_hash, precompile_time_stdlibs, load_times_stdlibs, run_times_stdlibs,
-# total_times_stdlibs, load_stats_stdlibs, run_stats_stdlibs, error_stdlibs, preload_times}. `order` is the
+# total_times_stdlibs, load_stats_stdlibs, run_stats_stdlibs, error_stdlibs, preload_times,
+# precompile_counters, precompile_counters_stdlibs, load_counters, run_counters, error_counters}. `order` is the
 # arm's position within the block. `preload_times` is, per repeat, the time from spawning the
 # process to the script's first marker: startup, plus the little the script does before it.
 # Startup records, in their own file: {arm, package = "julia", task = "startup", block,
-# order, status, error, packages_hash = null, startup_times, startup_repl_times, error_repl},
+# order, status, error, packages_hash = null, startup_times, startup_repl_times, error_repl,
+# startup_instructions, startup_cycles, startup_repl_instructions, startup_repl_cycles},
 # every timed run in run order. A REPL failure is kept in `error_repl` and does not affect
-# `status`.
+# `status`. The last four (--counters) are the whole process's instructions and cycles:
+# of one more, untimed, `julia -e ''` beside each timed one, from its start to its exit
+# (startup_counters), and of each timed REPL run when its prompt appeared.
 # A task that fails on any arm finishes the current block, so every arm gets its one try,
 # and skips the remaining blocks: a broken package does not cost the whole ABBA.
 # The task script prints "load, run, total seconds"; the `*_times` arrays keep every
@@ -62,7 +70,13 @@
 # build difference from a resolution difference. The `*_stdlibs` fields are one run of the
 # task in the stdlibs copy (--stdlibs); a failure there is kept in `error_stdlibs` and does
 # not affect `status`. `precompile_time_stdlibs` is the precompile of that copy after the
-# task's own, so mostly the extensions the stdlibs trigger.
+# task's own, so mostly the extensions the stdlibs trigger. The `*_counters` fields
+# (--counters) are retired instructions and CPU cycles, which follow the work done rather
+# than how long the machine took over it: `precompile_counters` and its `_stdlibs` twin
+# those of every process of the precompile (see TreeCounters), `load_counters` and
+# `run_counters` those of the phases of one more cold run of the task script (see
+# counter_run); a failure of that run is kept in `error_counters` and does not affect
+# `status`.
 
 using Dates, Printf, SHA, TOML
 include(joinpath(@__DIR__, "ttfx_json.jl"))
@@ -84,7 +98,7 @@ end
 function parse_args(args)
     opts = Dict{String,Any}(
         "tasks" => nothing, "exclude" => nothing, "depot" => nothing, "workdir" => nothing, "logdir" => nothing,
-        "tracedir" => nothing, "stdlibs" => false, "precompile-once" => false,
+        "tracedir" => nothing, "stdlibs" => false, "precompile-once" => false, "counters" => false,
         "blocks" => "2", "repeats" => "3", "timeout" => "1800", "startup" => "30",
         "startup-results" => "startup.json", "results" => "results.json", "meta" => "results-meta.json", "snippets-commit" => "")
     arms = Arm[]
@@ -191,12 +205,75 @@ function arm_env(arm::Arm, depot::String)
     return ("JULIA_DEPOT_PATH" => depot_path,)
 end
 
+# Retired instructions and CPU cycles (--counters). Only macOS has them here: on Apple
+# silicon the kernel counts both for every thread, and a process may read its own and
+# those of any process of its user without privileges, which the agents' sandbox allows.
+# `proc_pid_rusage` fills a `struct rusage_info_v4` (sys/resource.h) with a process's
+# totals over all its threads, those that have exited included: a 16-byte uuid followed
+# by 64-bit fields, of which these words (1-based) are read.
+const COUNTERS = Ref(false)
+const RUSAGE_INFO_V4 = 4
+const RI_WORDS, RI_START, RI_INSTRUCTIONS, RI_CYCLES = 37, 11, 32, 33
+
+function process_counters!(buf::Vector{UInt64}, pid::Integer)
+    ccall(:proc_pid_rusage, Cint, (Cint, Cint, Ptr{UInt64}), pid, RUSAGE_INFO_V4, buf) == 0 || return nothing
+    return (; start = buf[RI_START], instructions = buf[RI_INSTRUCTIONS], cycles = buf[RI_CYCLES])
+end
+
+function counters_available()
+    Sys.isapple() || return false
+    c = process_counters!(zeros(UInt64, RI_WORDS), getpid())
+    return c !== nothing && c.instructions > 0 && c.cycles > 0
+end
+
+# The instructions and cycles of a process and all its descendants. A precompile is one
+# process that starts a worker per package, several at a time, and each worker a linker,
+# so its wall time depends on how the work was scheduled; the instructions of all of them
+# together do not. The kernel adds a child's CPU time to its parent's when it is reaped
+# but not its counters, and the one total it does keep, of the launchd job, covers
+# everything the host's scheduler has started. So the tree is walked every few
+# milliseconds while it runs, keeping the last reading of every process: the total misses
+# what each process did between its last reading and its exit, about a thousandth of a
+# precompile. Readings are keyed by pid and start time, in case a pid comes round again.
+struct TreeCounters
+    seen::Dict{Tuple{Cint,UInt64},Tuple{UInt64,UInt64}}
+    rusage::Vector{UInt64}
+    pids::Vector{Cint}
+    stack::Vector{Cint}
+end
+TreeCounters() = TreeCounters(Dict{Tuple{Cint,UInt64},Tuple{UInt64,UInt64}}(), zeros(UInt64, RI_WORDS), zeros(Cint, 4096), Cint[])
+const TREE_POLL_SECONDS = 0.002
+
+function poll!(t::TreeCounters, root::Integer)
+    push!(empty!(t.stack), Cint(root))
+    while !isempty(t.stack)
+        pid = pop!(t.stack)
+        c = process_counters!(t.rusage, pid)
+        c === nothing || (t.seen[(pid, c.start)] = (c.instructions, c.cycles))
+        # Returns how many pids it wrote
+        n = ccall(:proc_listchildpids, Cint, (Cint, Ptr{Cint}, Cint), pid, t.pids, sizeof(t.pids))
+        n > 0 && append!(t.stack, view(t.pids, 1:min(Int(n), length(t.pids))))
+    end
+    return t
+end
+
+function totals(t::TreeCounters)
+    isempty(t.seen) && return nothing
+    return (; instructions = sum(v -> Int(v[1]), values(t.seen)), cycles = sum(v -> Int(v[2]), values(t.seen)),
+              processes = length(t.seen))
+end
+
 # Run a subprocess capturing stdout and stderr under `timeout` seconds. Returns
 # (stdout, stderr, succeeded, timed_out). SIGINT first so a precompile driver can stop
-# its workers, SIGTERM 30s later.
-function run_timed(cmd::Cmd, timeout::Float64)
+# its workers, SIGTERM 30s later. With `tree`, the counters of the process and its
+# descendants are collected into it while it runs.
+function run_timed(cmd::Cmd, timeout::Float64; tree::Union{Nothing,TreeCounters} = nothing)
     err = IOBuffer()
     proc = open(pipeline(cmd; stderr = err), "r")
+    poller = tree === nothing ? nothing : @async while process_running(proc)
+        poll!(tree, getpid(proc))
+        sleep(TREE_POLL_SECONDS)
+    end
     timed_out = Ref(false)
     interrupt = Timer(timeout) do _
         timed_out[] = true
@@ -211,6 +288,7 @@ function run_timed(cmd::Cmd, timeout::Float64)
         close(interrupt); close(terminate)
     end
     wait(proc)
+    poller === nothing || wait(poller)
     return out, String(take!(err)), success(proc) && !timed_out[], timed_out[]
 end
 
@@ -355,20 +433,58 @@ const ADD_STDLIBS = raw"""
 # every other run this adds a few branches not taken, before the first marker, in the
 # second marker's block and after the third.
 #
+# With `TTFX_COUNTERS=on` (the untimed counter run) the script reads, at each marker, the
+# instructions and cycles of its own thread so far (`thread_selfcounts`) and of the whole
+# process (`proc_pid_rusage`), and prints the differences over the load and run phases.
+# Everything julia does for a script runs on that thread: loading, inference, code
+# generation and the GC, which has no threads of its own when julia runs with one. The
+# process totals add what other threads did, which is mostly noise: in a short phase
+# they are several times the script's own and vary from run to run (OpenBLAS's threads,
+# for one, spin for a while after LinearAlgebra starts them). The reader is a function
+# with a `ccall`, so it is compiled, and called once before the first marker so that
+# happens there: this run's load has lost the JIT's initialization, a few milliseconds,
+# which is why the timed runs do not read counters.
+#
 # The original `task.jl` is left alone, and a script without exactly these markers runs
 # as it is.
 const PHASE_MARKERS = ("__t1 = time()", "__t2 = time()", "__t3 = time()")
 const STATS_PREFIX = "__TTFX_STATS__:"
 const INV_PREFIX = "__TTFX_INV__:"
 const UNTRACED_NOTE = "# not traced: tracing the compilation of a span needs Julia 1.12"
+const COUNTERS_PREFIX = "__TTFX_CTR__:"
+# `thread_selfcounts(1, ...)` fills {instructions, cycles}; words 32 and 33 of
+# `proc_pid_rusage`'s are the process's (RI_INSTRUCTIONS, RI_CYCLES). False when the system
+# has no such counters.
+const COUNTERS_SETUP = raw"""
+const __ttfx_ctr = get(ENV, "TTFX_COUNTERS", "") == "on" && Core.eval(Main, :(begin
+    function __ttfx_counters()
+        t = zeros(UInt64, 2); p = zeros(UInt64, 37)
+        ccall(:thread_selfcounts, Cint, (Cint, Ptr{UInt64}, Csize_t), 1, t, sizeof(t)) == 0 || return nothing
+        ccall(:proc_pid_rusage, Cint, (Cint, Cint, Ptr{UInt64}), getpid(), 4, p) == 0 || return nothing
+        return (t[1], t[2], p[32], p[33])
+    end
+    try
+        __ttfx_counters() isa Tuple
+    catch
+        false
+    end
+end))
+"""
+const COUNTERS_REPORT = """
+__ttfx_ctr && let d(a, b) = "{\\"instructions\\":\$(b[1] - a[1]),\\"cycles\\":\$(b[2] - a[2])," *
+                            "\\"process_instructions\\":\$(b[3] - a[3]),\\"process_cycles\\":\$(b[4] - a[4])}"
+    println(stdout, "$COUNTERS_PREFIX{\\"load\\":", d(__ttfx_c1, __ttfx_c2), ",\\"run\\":", d(__ttfx_c2, __ttfx_c3), "}")
+end
+"""
 
 function instrument_task(proj::String)
     script = joinpath(proj, "task.jl")
     src = read(script, String)
     all(m -> count(m, src) == 1, PHASE_MARKERS) || return script, false
     snapshot(name) = "$name = (Base.gc_num(), Base.cumulative_compile_time_ns())"
+    counters(name) = "__ttfx_ctr && ($name = __ttfx_counters())"
     src = replace(src,
-        PHASE_MARKERS[1] => "begin " * snapshot("__ttfx_s1") * "; " * PHASE_MARKERS[1] * " end",
+        PHASE_MARKERS[1] => "begin " * snapshot("__ttfx_s1") * "; " * counters("__ttfx_c1") * "; " * PHASE_MARKERS[1] * " end",
         PHASE_MARKERS[2] => """
         begin
             __ttfx_inv && (__ttfx_inv_n2 = (length(__ttfx_invlogs[1]), length(__ttfx_invlogs[2])))
@@ -382,9 +498,10 @@ function instrument_task(proj::String)
                 __t1 += __ttfx_gc_after_load
                 $(snapshot("__ttfx_s2r"))
             end
+            $(counters("__ttfx_c2"))
             $(PHASE_MARKERS[2])
         end""",
-        PHASE_MARKERS[3] => PHASE_MARKERS[3] * "\n" * snapshot("__ttfx_s3") * "\n" *
+        PHASE_MARKERS[3] => PHASE_MARKERS[3] * "\n" * counters("__ttfx_c3") * "\n" * snapshot("__ttfx_s3") * "\n" *
             "__ttfx_trace && Core.eval(Main, :(ccall(:jl_force_trace_compile_timing_disable, Cvoid, ())))")
     src = "const __ttfx_gc_off = get(ENV, \"TTFX_GC\", \"\") == \"off\"\n" *
           "const __ttfx_inv = get(ENV, \"TTFX_INVALIDATIONS\", \"\") == \"on\"\n" *
@@ -392,6 +509,7 @@ function instrument_task(proj::String)
           "__ttfx_inv && (__ttfx_invlogs = Main.TTFXInvalidations.start())\n" *
           "const __ttfx_trace = get(ENV, \"TTFX_TRACE\", \"\") == \"on\" &&\n" *
           "    (VERSION >= v\"1.12\" || (println(stderr, \"$UNTRACED_NOTE\"); false))\n" *
+          COUNTERS_SETUP *
           "Base.cumulative_compile_timing(true)\n__ttfx_gc_off && GC.enable(false)\n" *
           "__ttfx_trace && Core.eval(Main, :(ccall(:jl_force_trace_compile_timing_enable, Cvoid, ())))\n" * src * "\n" * """
     __ttfx_gc_off && GC.enable(true)
@@ -403,7 +521,7 @@ function instrument_task(proj::String)
     end
     __ttfx_inv && Main.TTFXInvalidations.stop()
     __ttfx_inv && Main.TTFXInvalidations.report(__ttfx_invlogs, __ttfx_inv_n2)
-    """
+    """ * COUNTERS_REPORT
     instrumented = joinpath(proj, "task_ttfx.jl")
     write(instrumented, src)
     return instrumented, true
@@ -441,6 +559,18 @@ function trace_run(arm::Arm, env, proj::String, script::String, timeout::Float64
     return (; file = tracefile, statements, ok = ok && traced), inv
 end
 
+# The task script once more, cold and untimed, reading the instructions and cycles of its
+# load and run phases (instrument_task). Returns them, each as {instructions, cycles,
+# process_instructions, process_cycles}, or the failure message.
+function counter_run(task_cmd::Cmd, timeout::Float64, logname::String)
+    out, err, ok, timed_out = run_timed(addenv(task_cmd, "TTFX_COUNTERS" => "on"), timeout)
+    ok || return failure_message("counter run", out, err, timed_out, timeout; logname)
+    m = match(Regex("^" * COUNTERS_PREFIX * raw"(\{.*\})$", "m"), out)
+    m === nothing && return "the counter run printed no counters"
+    c = json_parse(m.captures[1])
+    return (; load = c["load"], run = c["run"])
+end
+
 # The first process to load freshly written pkgimages pays a one-time cost that no later
 # process does, the GC-off set's first included: on the macOS agents some 55 to 110 ms a
 # task, up to 670 ms, that a user pays once after precompiling rather than on every
@@ -465,15 +595,17 @@ end
 # One sample: clear the caches, precompile the project, load its packages once untimed
 # (warmup_load), then run the task script `repeats` times in fresh processes. With
 # `precompile = false` the depot already holds this arm's package images, and they are
-# used as they are. With `tracefile`, the script runs once more after
+# used as they are. With --counters the script then runs once more, cold and untimed,
+# for the instructions and cycles of its phases (counter_run). With `tracefile`, the
+# script runs once more after
 # them, untimed, traced and logging invalidations (trace_run). With `stdlibs`, a project and
 # script, the task first runs once in that copy of its project (stdlibs_run).
 function measure(arm::Arm, depot::String, proj::String, script::String, repeats::Int, timeout::Float64, logname::String;
                  tracefile::Union{Nothing,String} = nothing, stdlibs = nothing, precompile::Bool = true)
     precompile && clear_compiled!(depot)
     env = arm_env(arm, depot)
-    precompile_time = precompile ? precompile_project(arm, env, proj, timeout, logname) : nothing
-    precompile_time isa String && return (; status = "error", error = precompile_time)
+    pc = precompile ? precompile_project(arm, env, proj, timeout, logname) : nothing
+    pc isa String && return (; status = "error", error = pc)
     warmup_load(arm, env, proj, timeout)
     clear_objcache!(depot)
 
@@ -490,12 +622,24 @@ function measure(arm::Arm, depot::String, proj::String, script::String, repeats:
         clear_objcache!(depot)
         g = run_repeats(addenv(task_cmd, "TTFX_GC" => "off"), repeats, timeout, logname * "-gcoff")
     end
+    # As cold as the first repeat of either set, so the object cache goes again
+    c = nothing
+    if COUNTERS[] && script != joinpath(proj, "task.jl") && status != "error"
+        clear_objcache!(depot)
+        c = counter_run(task_cmd, timeout, logname * "-counters")
+    end
     # Before the trace run, which would warm what this measures. Its packages are mostly
     # precompiled by now, in the same depot.
     s = stdlibs === nothing || status == "error" ? nothing : stdlibs_run(arm, depot, env, stdlibs..., timeout, logname; precompile)
     trace, inv = tracefile === nothing || isempty(r.load) ? (nothing, nothing) :
         trace_run(arm, env, proj, script, timeout, tracefile, logname)
-    return (; status, error = status == "ok" ? nothing : r.err, precompile_time,
+    return (; status, error = status == "ok" ? nothing : r.err,
+              precompile_time = pc === nothing ? nothing : pc.time,
+              precompile_counters = pc === nothing ? nothing : pc.counters,
+              precompile_counters_stdlibs = s isa NamedTuple ? s.precompile_counters : nothing,
+              load_counters = c isa NamedTuple ? c.load : nothing,
+              run_counters = c isa NamedTuple ? c.run : nothing,
+              error_counters = c isa String ? c : nothing,
               load_times = r.load, run_times = r.run, total_times = r.total, preload_times = r.preload,
               load_stats = r.load_stats, run_stats = r.run_stats,
               load_times_gcoff = g === nothing ? Float64[] : g.load,
@@ -515,16 +659,19 @@ function measure(arm::Arm, depot::String, proj::String, script::String, repeats:
               trace, invalidations = inv)
 end
 
-# `Pkg.precompile()` of the project: its time, or the failure message.
+# `Pkg.precompile()` of the project: its time, and with --counters the instructions and
+# cycles of the whole process tree, which also has the process's startup and its loading
+# of Pkg; or the failure message.
 function precompile_project(arm::Arm, env, proj::String, timeout::Float64, logname::String)
     code = "using Pkg; t = @elapsed Pkg.precompile(); print(\"__TTFX_T__:\", t)"
+    tree = COUNTERS[] ? TreeCounters() : nothing
     out, err, ok, timed_out = run_timed(
         addenv(`$(arm.julia) --startup-file=no --project=$proj -e $code`,
-               env..., "JULIA_PKG_PRECOMPILE_AUTO" => "0"), timeout)
+               env..., "JULIA_PKG_PRECOMPILE_AUTO" => "0"), timeout; tree)
     ok || return failure_message("precompile", out, err, timed_out, timeout; logname = logname * "-precompile")
     pm = match(r"__TTFX_T__:([\d.eE+-]+)", out)
     pm === nothing && return "could not parse precompile time from $(repr(out))"
-    return parse(Float64, pm.captures[1])
+    return (; time = parse(Float64, pm.captures[1]), counters = tree === nothing ? nothing : totals(tree))
 end
 
 # The task once, cold, in the stdlibs copy of its project (ADD_STDLIBS), after an untimed
@@ -537,7 +684,8 @@ function stdlibs_run(arm::Arm, depot::String, env, proj::String, script::String,
     warmup_load(arm, env, proj, timeout)
     clear_objcache!(depot)
     r = run_repeats(addenv(`$(arm.julia) --startup-file=no --project=$proj $script`, env...), 1, timeout, logname * "-stdlibs")
-    return (; precompile_time = t, r...)
+    return (; precompile_time = t === nothing ? nothing : t.time,
+              precompile_counters = t === nothing ? nothing : t.counters, r...)
 end
 
 # The task script `repeats` times in fresh processes, stopping at the first failure. An
@@ -572,8 +720,10 @@ end
 median(x) = (s = sort(x); n = length(s); isodd(n) ? s[(n + 1) ÷ 2] : (s[n ÷ 2] + s[n ÷ 2 + 1]) / 2)
 
 # The time from spawning an interactive julia on a pseudo-terminal to its first `julia> `
-# prompt; then it is sent `exit()`, which is not timed. Returns the time, or the failure
-# message with the output so far.
+# prompt; then it is sent `exit()`, which is not timed. Returns the time, with the
+# process's instructions and cycles up to then (--counters; read from outside as soon as
+# the prompt is seen, so they cost the measured process nothing), or the failure message
+# with the output so far.
 function repl_startup(arm::Arm, env, timeout::Float64)
     fdm, fds = Ref{Cint}(), Ref{Cint}()
     ccall(:openpty, Cint, (Ptr{Cint}, Ptr{Cint}, Ptr{Cvoid}, Ptr{Cvoid}, Ptr{Cvoid}),
@@ -581,6 +731,8 @@ function repl_startup(arm::Arm, env, timeout::Float64)
     pty = Base.TTY(RawFD(fdm[]))
     cmd = addenv(`$(arm.julia) --startup-file=no --history-file=no --color=no --banner=no`, env..., "TERM" => "xterm")
     seen = ""
+    counters = nothing
+    rusage = zeros(UInt64, RI_WORDS)
     t0 = time()
     proc = run(cmd, RawFD(fds[]), RawFD(fds[]), RawFD(fds[]); wait = false)
     ccall(:close, Cint, (Cint,), fds[])
@@ -592,6 +744,7 @@ function repl_startup(arm::Arm, env, timeout::Float64)
             seen *= String(readavailable(pty))
             if occursin("julia> ", seen)
                 t = time() - t0
+                COUNTERS[] && (counters = process_counters!(rusage, getpid(proc)))
                 break
             end
         end
@@ -610,21 +763,41 @@ function repl_startup(arm::Arm, env, timeout::Float64)
         wait(proc)
         close(pty)
     end
-    t !== nothing && success(proc) && return t
+    t !== nothing && success(proc) && return (; time = t, counters)
     why = t === nothing ? "no prompt within $(timeout)s" : "exit() failed"
     return "REPL startup: $why; output: $(repr(seen))"
+end
+
+# The instructions and cycles of one `julia -e ''`, from its start to its exit, or nothing.
+# They are the whole process's, which only the kernel still has once it has exited:
+# `/usr/bin/time -l` reads them as it reaps the process and prints them. It is a run of
+# its own because the timed ones must not have another process started around them.
+const TIME_COUNTERS = (r"(\d+)\s+instructions retired", r"(\d+)\s+cycles elapsed")
+function startup_counters(arm::Arm, env, timeout::Float64)
+    err = try
+        run_timed(addenv(`/usr/bin/time -l $(arm.julia) --startup-file=no -e ''`, env...), timeout)[2]
+    catch
+        return nothing
+    end
+    m = map(re -> match(re, err), TIME_COUNTERS)
+    any(isnothing, m) && return nothing
+    return (; instructions = parse(Int, m[1].captures[1]), cycles = parse(Int, m[2].captures[1]))
 end
 
 # `julia -e ''`, and the REPL to its first prompt, in fresh processes, `runs` times each per
 # arm and block. The arms alternate from run to run, so drift lands on both alike. Each
 # arm's first run in a block is not timed: it pages the build in from disk, which a user
-# pays once and not on every start.
+# pays once and not on every start. With --counters each timed `-e ''` run is followed by
+# an untimed one that reads the process's instructions and cycles (startup_counters).
 function measure_startup(arms::Vector{Arm}, depot::String, runs::Int, blocks::Int, timeout::Float64)
     records = Any[]
     for block in 1:blocks
         order = isodd(block) ? arms : reverse(arms)
         times = Dict(arm.label => Float64[] for arm in arms)
         repl_times = Dict(arm.label => Float64[] for arm in arms)
+        # Per arm: -e '' instructions and cycles, then the REPL's
+        counts = Dict(arm.label => (Int[], Int[], Int[], Int[]) for arm in arms)
+        count!(arm, k, c) = c === nothing || (push!(counts[arm.label][k], Int(c.instructions)); push!(counts[arm.label][k + 1], Int(c.cycles)))
         errs = Dict{String,String}()
         repl_errs = Dict{String,String}()
         for i in 0:runs, arm in (isodd(i) ? reverse(order) : order)
@@ -637,6 +810,7 @@ function measure_startup(arms::Vector{Arm}, depot::String, runs::Int, blocks::In
                     errs[arm.label] = failure_message("startup", out, err, timed_out, timeout; logname = "startup-$(arm.label)-b$block")
                 elseif i > 0
                     push!(times[arm.label], t)
+                    COUNTERS[] && count!(arm, 1, startup_counters(arm, env, timeout))
                 end
             end
             if !haskey(repl_errs, arm.label)
@@ -644,7 +818,8 @@ function measure_startup(arms::Vector{Arm}, depot::String, runs::Int, blocks::In
                 if t isa String
                     repl_errs[arm.label] = t
                 elseif i > 0
-                    push!(repl_times[arm.label], t)
+                    push!(repl_times[arm.label], t.time)
+                    count!(arm, 3, t.counters)
                 end
             end
         end
@@ -652,12 +827,15 @@ function measure_startup(arms::Vector{Arm}, depot::String, runs::Int, blocks::In
             push!(records, (; arm = arm.label, package = "julia", task = "startup", block, order = pos,
                               status = haskey(errs, arm.label) ? "error" : "ok", error = get(errs, arm.label, nothing),
                               packages_hash = nothing, startup_times = times[arm.label],
-                              startup_repl_times = repl_times[arm.label], error_repl = get(repl_errs, arm.label, nothing)))
+                              startup_repl_times = repl_times[arm.label], error_repl = get(repl_errs, arm.label, nothing),
+                              startup_instructions = counts[arm.label][1], startup_cycles = counts[arm.label][2],
+                              startup_repl_instructions = counts[arm.label][3], startup_repl_cycles = counts[arm.label][4]))
             summary(t) = @sprintf("median %d ms, min %d ms", round(Int, 1000median(t)), round(Int, 1000minimum(t)))
+            instr(v) = isempty(v) ? "" : @sprintf(", median %.1f M instructions", median(v) / 1e6)
             println("  ", lpad(block, 3), "  ", rpad(arm.label, 8), "  -e '': ",
-                    haskey(errs, arm.label) ? "\e[31mFAILED\e[0m: $(errs[arm.label])" : summary(times[arm.label]),
+                    haskey(errs, arm.label) ? "\e[31mFAILED\e[0m: $(errs[arm.label])" : summary(times[arm.label]) * instr(counts[arm.label][1]),
                     " · to the REPL prompt: ",
-                    haskey(repl_errs, arm.label) ? "\e[31mFAILED\e[0m: $(repl_errs[arm.label])" : summary(repl_times[arm.label]),
+                    haskey(repl_errs, arm.label) ? "\e[31mFAILED\e[0m: $(repl_errs[arm.label])" : summary(repl_times[arm.label]) * instr(counts[arm.label][3]),
                     " · $runs runs each")
         end
         flush(stdout)
@@ -671,6 +849,11 @@ ms(x) = x === nothing ? "–" : string(round(Int, 1000x))
 secs(x) = x === nothing ? "–" : @sprintf("%.2fs", x)
 cold(v) = isempty(v) ? nothing : v[1]
 cold(v, key) = isempty(v) ? nothing : v[1][key]
+
+mega(x) = x === nothing ? "–" : string(round(Int, x / 1e6))
+instructions(::Nothing) = nothing
+instructions(c::NamedTuple) = c.instructions
+instructions(c::AbstractDict) = c["instructions"]
 
 function log_columns(armwidth::Int, instrumented::Bool, stdlibs::Bool)
     cols = Any[("", "blk", 3, r -> string(r.block)), ("", "arm", armwidth, r -> r.arm),
@@ -694,6 +877,11 @@ function log_columns(armwidth::Int, instrumented::Bool, stdlibs::Bool)
                        ("compile (ms)", "recomp", 6, r -> ms(cold(r.run_stats, "recompile_time"))),
                        ("gc (ms)", "load", 5, r -> ms(cold(r.load_stats, "gc_time"))),
                        ("gc (ms)", "run", 5, r -> ms(cold(r.run_stats, "gc_time")))])
+    end
+    if COUNTERS[]
+        push!(cols, ("instructions (M)", "precomp", 7, r -> mega(instructions(r.precompile_counters))))
+        instrumented && append!(cols, [("instructions (M)", "load", 6, r -> mega(instructions(r.load_counters))),
+                                       ("instructions (M)", "run", 6, r -> mega(instructions(r.run_counters)))])
     end
     # Widen a group's last column when its label is longer than its columns.
     for g in unique(first.(cols))
@@ -749,6 +937,8 @@ function main()
     mkpath(depot); mkpath(workdir)
     LOGDIR[] = opts["logdir"]
     tracedir = opts["tracedir"]
+    COUNTERS[] = opts["counters"] && counters_available()
+    opts["counters"] && !COUNTERS[] && println("NOTE: this system has no instruction and cycle counters to read; --counters does nothing")
 
     all_tasks = find_tasks(abspath(opts["tasks"]))
     tasks, stale = select_tasks(all_tasks, opts["exclude"])
@@ -762,7 +952,7 @@ function main()
               arms = builds,
               arm_order = [arm.label for arm in arms],
               system = system_info(),
-              settings = (; blocks, repeats, startup_runs, timeout_s = timeout, depot, stdlibs = opts["stdlibs"], precompile_once, n_tasks = length(tasks),
+              settings = (; blocks, repeats, startup_runs, timeout_s = timeout, depot, stdlibs = opts["stdlibs"], precompile_once, counters = COUNTERS[], n_tasks = length(tasks),
                             tasks = [t.package * "/" * t.task for t in tasks],
                             excluded = filter(∉(stale), opts["exclude"] === nothing ? String[] :
                                               [strip(first(split(l, '#'))) for l in eachline(opts["exclude"])])),
@@ -878,13 +1068,19 @@ function main()
                          load_stats_stdlibs = get(result, :load_stats_stdlibs, Any[]),
                          run_stats_stdlibs = get(result, :run_stats_stdlibs, Any[]),
                          error_stdlibs = get(result, :error_stdlibs, nothing),
-                         preload_times = get(result, :preload_times, Float64[]))
+                         preload_times = get(result, :preload_times, Float64[]),
+                         precompile_counters = get(result, :precompile_counters, nothing),
+                         precompile_counters_stdlibs = get(result, :precompile_counters_stdlibs, nothing),
+                         load_counters = get(result, :load_counters, nothing),
+                         run_counters = get(result, :run_counters, nothing),
+                         error_counters = get(result, :error_counters, nothing))
                 push!(records, rec)
                 write_results()
                 if rec.status == "ok"
                     println(log_row(cols, rec))
                     rec.error_gcoff === nothing || println("      GC-off runs failed: $(rec.error_gcoff)")
                     rec.error_stdlibs === nothing || println("      stdlibs-first run failed: $(rec.error_stdlibs)")
+                    rec.error_counters === nothing || println("      counter run failed: $(rec.error_counters)")
                 else
                     # Red, and `^^^ +++` makes Buildkite expand this task's log group
                     println("  ", lpad(block, 3), "  ", rpad(arm.label, cols[2][3]), "  \e[31mFAILED\e[0m ($(rec.status)): $(rec.error)")
