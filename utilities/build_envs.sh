@@ -325,9 +325,6 @@ if [[ "${BUILDKITE_BRANCH}" == master ]] || [[ "${BUILDKITE_BRANCH}" == release-
         if [[ "${ARCH}" == "x86_64" ]]; then
             FOLDER_ARCH="x64"
             SHORT_ARCH="64"
-        elif [[ "${ARCH}" == "i686" ]]; then
-            FOLDER_ARCH="x86"
-            SHORT_ARCH="32"
         else
             FOLDER_ARCH="${ARCH}"
             SHORT_ARCH="${ARCH}"
