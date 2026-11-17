@@ -70,9 +70,6 @@ MAPPINGS=(
     "julia-${VERSION}-win64.exe              winnt/x64/${MAJMIN}      winnt/x64/${MAJMIN}"
     "julia-${VERSION}-win64.zip              winnt/x64/${MAJMIN}      winnt/x64/${MAJMIN}"
     "julia-${VERSION}-win64.tar.gz           winnt/x64/${MAJMIN}      winnt/x64/${MAJMIN}"
-    "julia-${VERSION}-win32.exe              winnt/x86/${MAJMIN}      winnt/x86/${MAJMIN}"
-    "julia-${VERSION}-win32.zip              winnt/x86/${MAJMIN}      winnt/x86/${MAJMIN}"
-    "julia-${VERSION}-win32.tar.gz           winnt/x86/${MAJMIN}      winnt/x86/${MAJMIN}"
     "julia-${VERSION}-freebsd-x86_64.tar.gz  freebsd/x86_64/${MAJMIN} freebsd/x64/${MAJMIN}"
 )
 
