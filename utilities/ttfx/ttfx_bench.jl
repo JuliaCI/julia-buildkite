@@ -220,6 +220,21 @@ function process_counters!(buf::Vector{UInt64}, pid::Integer)
     return (; start = buf[RI_START], instructions = buf[RI_INSTRUCTIONS], cycles = buf[RI_CYCLES])
 end
 
+# One idle process of every arm, kept for as long as the driver runs. Starting a build
+# that a live process already has mapped is less work for the kernel: about 1% of the
+# instructions of `julia -e ''`, and some of its time. This driver runs on the head build,
+# so without these only the head's processes had that, and every comparison put the head
+# ahead of the base by as much. Each ends when its stdin closes, so when the driver exits.
+const PARKED = Base.Process[]
+function park!(arms::Vector{Arm})
+    for arm in arms
+        p = open(`$(arm.julia) --startup-file=no -e 'println(); read(stdin)'`, "r+")
+        readline(p)  # it is up, with the build mapped
+        process_running(p) || println("NOTE: could not keep an idle process of $(arm.label) running; its processes start a little slower than the other arms'")
+        push!(PARKED, p)
+    end
+end
+
 function counters_available()
     Sys.isapple() || return false
     c = process_counters!(zeros(UInt64, RI_WORDS), getpid())
@@ -971,6 +986,7 @@ function main()
     println("Load at start: $(sys.load_avg)")
     flush(stdout)
 
+    park!(arms)
     if startup_runs > 0
         println("--- julia startup (julia -e '')")
         write(opts["startup-results"], json_write(measure_startup(arms, depot, startup_runs, blocks, timeout)) * "\n")

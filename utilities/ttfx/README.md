@@ -72,6 +72,12 @@ it took; Julia 1.12 and later) and logging invalidations over the same span (bel
 the traces are the `trace-compile.tar.gz` artifact. The depot
 holds packages and artifacts only; the agent user's own depot is not on the path.
 
+The driver keeps one idle process of every arm running for as long as it measures. A
+build that a live process already has mapped starts with less work in the kernel, and the
+driver itself runs on the head build, so without them only the head had that: on the
+agents every head `julia -e ''` took about 8 M instructions (1%) fewer than the same build
+as the base, and about 0.5% less time, whatever the pull request changed.
+
 Before the tasks, each arm starts julia `TTFX_STARTUP_RUNS` times (30) per block, the arms
 alternating from run to run: `julia --startup-file=no -e ''`, timed by the driver from
 spawning the process to its exit, and an interactive julia on a pseudo-terminal, timed
