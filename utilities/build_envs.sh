@@ -50,12 +50,10 @@ case "${ARCH?}" in
         JULIA_CPU_TARGETS+=(
             # Absolute base x86_64 feature set
             "generic"
-            # Add sandybridge level (without xsaveopt) and that clones all functions
-            "sandybridge,-xsaveopt,clone_all"
-            # Add haswell level (without rdrnd) that is a diff of the sandybridge level
-            "haswell,-rdrnd,base(1)"
-            # A common baseline for modern x86-64 server CPUs
-            "x86-64-v4,-rdrnd,base(1)"
+            # AVX2 level (Haswell and Zen onwards) that clones all functions
+            "x86-64-v3,clone_all"
+            # AVX-512 level that is a diff of the AVX2 level
+            "x86-64-v4,base(1)"
         )
         ;;
     i686)
@@ -93,17 +91,16 @@ case "${ARCH?}" in
                 JULIA_CPU_TARGETS+=(
                     # Absolute base aarch64 feature set
                     "generic"
-                    # Cortex A57, Example: NVIDIA Jetson TX1, Jetson Nano
-                    "cortex-a57"
-                    # Cavium ThunderX2T99, a common server architecture
-                    "thunderx2t99"
-                    # NVidia Carmel, e.g. Jetson AGX Xavier; serves as a baseline for later architectures
-                    "carmel,clone_all"
-                    # Apple M1
-                    "apple-m1,base(3)"
-                    # Vector-length-agnostic common denominator between Neoverse V1 and V2, recent Arm server architectures.
-                    # Disable little used rand and fpac features which would prevent matching on many systems.
-                    "neoverse-512tvb,-rand,-fpac,base(3)"
+                    # Armv8.2 level with half-precision floats and LSE atomics, tuned for Neoverse N1,
+                    # that clones all functions. Masking aes, dotprod and rcpc also admits
+                    # Carmel, A64FX and Kunpeng 920.
+                    "neoverse-n1,-aes,-dotprod,-rcpc,clone_all"
+                    # Apple M1; also matches Snapdragon X and AmpereOne
+                    "apple-m1,base(1)"
+                    # SVE level shared by Neoverse V1, V2 and N2.
+                    # Masked features are unused by generated code and absent on some of these
+                    # systems (sm4 on Graviton4, dit on Azure Cobalt 100 guests).
+                    "neoverse-512tvb,-sm4,-rand,-fpac,-dit,base(1)"
                 )
                 ;;
         esac
