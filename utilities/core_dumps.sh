@@ -13,6 +13,10 @@
 MAX_CORE_DUMPS="${MAX_CORE_DUMPS:-4}"
 # Free disk space, in GiB, to keep for the tests
 CORE_DUMP_RESERVE_GIB="${CORE_DUMP_RESERVE_GIB:-20}"
+# timeout.jl creates this file when the tests time out. The cores dumped after that are of
+# the hung test processes, a test driver, worker and children that can number more than
+# MAX_CORE_DUMPS, so from then on only the disk space reserve applies.
+TEARDOWN_MARKER="${JL_TEARDOWN_MARKER:-}"
 
 free_space_kib() {
     df -Pk "${1}" | awk 'NR == 2 { print $4 }'
@@ -41,7 +45,8 @@ reap_core_dumps() {
     while kill -0 "$$" 2>/dev/null; do
         while IFS= read -r core; do
             [[ $'\n'"${kept}" == *$'\n'"${core}"$'\n'* ]] && continue
-            if (( $(printf '%s' "${kept}" | grep -c '') >= MAX_CORE_DUMPS )); then
+            if (( $(printf '%s' "${kept}" | grep -c '') >= MAX_CORE_DUMPS )) &&
+               [[ -z "${TEARDOWN_MARKER}" || ! -e "${TEARDOWN_MARKER}" ]]; then
                 echo "Deleting core dump ${core}: already kept ${MAX_CORE_DUMPS} (MAX_CORE_DUMPS)"
                 rm -f "${core}"
             elif (( $(free_space_kib .) < reserve_kib )); then
