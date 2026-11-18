@@ -357,27 +357,26 @@ function compare_suite(tasks, nblocks; precompile_once::Bool = false)
         s = get(suite, k, nothing)
         s === nothing || (s["diagnostic"] = true)
     end
-    # The suite's load and warm load+run likewise, when the time before the first marker
-    # moved the other way over the suite and startup with them did not change the same way.
+    # The suite's load and warm load+run likewise, when startup with them did not change the
+    # same way. Judged on the median task, as the geomean is: a fixed shift weighs most in the
+    # shortest tasks, while the longest can change the other way and outweigh them in a sum.
+    # The time before the first marker must have moved the other way by at least half of
+    # the median task's change.
+    offset(s, moved, delta) = !isempty(moved) &&
+        (s["verdict"] == "regression" ? 1 : -1) * median([m["preload_delta"] for m in moved]) <= -abs(median([m[delta] for m in moved])) / 2
     sl = get(suite, "startup_load", nothing)
     moved = [t["metrics"]["load"] for t in tasks if haskey(t["metrics"], "load") && haskey(t["metrics"]["load"], "preload_delta")]
-    if sl !== nothing && !isempty(moved) && sum(m -> m["load_delta"], moved) * sum(m -> m["preload_delta"], moved) < 0
-        for k in ("load", "load_gcoff")
-            s = get(suite, k, nothing)
-            if s !== nothing && s["verdict"] != "same" && !get(s, "gc_moved", false) && sl["verdict"] != s["verdict"]
-                s["startup_moved"] = true
-                s["startup_load_geomeans"] = sl["geomeans"]
-            end
+    for k in ("load", "load_gcoff")
+        s = get(suite, k, nothing)
+        if sl !== nothing && s !== nothing && s["verdict"] != "same" && !get(s, "gc_moved", false) &&
+           sl["verdict"] != s["verdict"] && offset(s, moved, "load_delta")
+            s["startup_moved"] = true
+            s["startup_load_geomeans"] = sl["geomeans"]
         end
     end
     s = get(suite, "warm", nothing)
     moved = [t["metrics"]["warm"] for t in tasks if haskey(t["metrics"], "warm") && haskey(t["metrics"]["warm"], "startup_ratios")]
-    # Judged on the median task, as the geomean is: a fixed shift weighs most in the
-    # shortest tasks, while the longest can change the other way and outweigh them in a sum.
-    # The time before the first marker must have moved the other way by at least half of
-    # the median task's change.
-    if s !== nothing && s["verdict"] != "same" && !isempty(moved) &&
-       (s["verdict"] == "regression" ? 1 : -1) * median([m["preload_delta"] for m in moved]) <= -abs(median([m["warm_delta"] for m in moved])) / 2
+    if s !== nothing && s["verdict"] != "same" && offset(s, moved, "warm_delta")
         gs = [geomean([m["startup_ratios"][k] for m in moved]) for k in 1:nblocks]
         thr = only(m.suite for m in METRICS if m.key == "warm")
         sverdict = all(>(1 + thr), gs) ? "regression" : all(<(1 - thr), gs) ? "improvement" : "same"
@@ -403,11 +402,8 @@ precompile_once(meta) = meta !== nothing && get(get(meta, "settings", Dict()), "
 # the report says how to get the precision master builds have.
 function precompile_note(meta)
     precompile_once(meta) || return ""
-    return "Precompile was measured once per arm, in block 1, and again in block 2 only for the tasks " *
-           "whose block-1 difference cleared the threshold; the suite geomean compares each task's fastest samples. " *
-           "Master builds precompile in every block. " *
-           "For a more precise precompile comparison, add the `needs TTFX check` label; " *
-           "Buildkite reads labels when it creates a build, so it applies from the next push."
+    return "Precompile was measured once per arm (twice where block 1 cleared the threshold). " *
+           "The `needs TTFX check` label measures it in every block, from the next push."
 end
 
 # The instruction changes in one line, per block: the suite geomeans, and the startup
@@ -422,9 +418,10 @@ function instructions_line(tasks, suite)
             startup !== nothing && haskey(tasks[startup]["metrics"], key) ? tasks[startup]["metrics"][key]["ratios"] : nothing
         g === nothing || push!(parts, m.name * " " * join(change2.(g), ", "))
     end
-    return isempty(parts) ? "" : "Retired instructions, per block (not judged; they follow the work done, so they repeat far " *
-                                 "more closely than the times): " * join(parts, "; ") * "."
+    return isempty(parts) ? "" : "Instructions (not judged): " * join(parts, "; ") * "."
 end
+
+const JUDGED = "https://github.com/JuliaCI/julia-buildkite/blob/main/utilities/ttfx/README.md#comparison-mode-pull-requests-julia-pr"
 
 links(opts) = (isempty(opts["url"]) ? "" : " · [job](" * opts["url"] * ")") *
               (isempty(opts["perf-url"]) ? "" : " · [perf.julialang.org](" * opts["perf-url"] * ")")
@@ -448,16 +445,7 @@ function write_comparison(io, opts, meta, tasks, suite, nblocks)
     println(io, "## ", opts["title"])
     println(io, header, "\n")
     println(io, "**", nreg == 0 ? "No robust regressions" : "$nreg robust regression" * (nreg == 1 ? "" : "s"),
-            ", ", nimp, " improvement", nimp == 1 ? "" : "s", ".** ",
-            "Robust: samples do not overlap and every block clears the threshold (",
-            join([m.name * " " * pct(m.threshold) for m in METRICS], ", "),
-            "); load and run are also judged from the repeats with the GC off (the stdlibs-first load and run with their GC time ",
-            "taken out), and either counts (bold marks which), ",
-            "except a difference that shows with the GC on only and whose GC time moved from the other phase ",
-            "(for the suite: unless load and run added together changed the same way), ",
-            "and a load or warm load+run difference offset by the opposite change in startup (unless startup with it changed the same way). ",
-            "The stdlibs-first suite counts with the GC time taken out only.\n")
-    isempty(pnote) || println(io, pnote, "\n")
+            ", ", nimp, " improvement", nimp == 1 ? "" : "s", "**, in bold. [How this is judged](", JUDGED, ").\n")
     println(io, "| suite (geomean over tasks) | change per block | with GC off | threshold |")
     println(io, "|---|---|---|---|")
     for m in METRICS
@@ -467,13 +455,12 @@ function write_comparison(io, opts, meta, tasks, suite, nblocks)
             v = s["verdict"]; c = join(change.(s["geomeans"]), ", ")
             v == "same" && return c
             get(s, "gc_moved", false) &&
-                return c * " (GC moved between load and run, not counted; load+run " * join(change.(s["combined_geomeans"]), ", ") * ")"
+                return c * " (GC moved, not counted; load+run " * join(change.(s["combined_geomeans"]), ", ") * ")"
             get(s, "startup_moved", false) &&
-                return c * " (moved between startup and load, not counted; " *
-                       (haskey(s, "startup_warm_geomeans") ? "startup+load+run " * join(change.(s["startup_warm_geomeans"]), ", ") :
-                                                             "startup+load " * join(change.(s["startup_load_geomeans"]), ", ")) * ")"
-            get(s, "diagnostic", false) && return c * " " * v * " with the GC on, not counted"
-            return "**" * c * " " * v * "**"
+                return c * " (moved from startup, not counted" *
+                       (haskey(s, "startup_warm_geomeans") ? "; with startup " * join(change.(s["startup_warm_geomeans"]), ", ") : "") * ")"
+            get(s, "diagnostic", false) && return c * " (not counted)"
+            return "**" * c * "**"
         end
         g = get(suite, m.key * "_gcoff", nothing)
         println(io, "| ", m.name, " (", s["n_tasks"], s["n_tasks"] == 1 ? " task) | " : " tasks) | ", marked(s), " | ",
@@ -481,6 +468,7 @@ function write_comparison(io, opts, meta, tasks, suite, nblocks)
                 " | ±", pct(m.suite), " |")
     end
     isempty(inote) || println(io, "\n", inote)
+    isempty(pnote) || println(io, "\n", pnote)
     for (title, field) in (("Regressions", "regressions"), ("Improvements", "improvements"),
                            ("GC moved between load and run (not counted)", "gc_moved"),
                            ("Moved between startup and load (not counted)", "startup_moved"))
