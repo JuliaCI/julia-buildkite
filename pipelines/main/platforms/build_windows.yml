@@ -8,7 +8,7 @@ steps:
               version: "./.buildkite-external-version"
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
           - docker#v3.13.0:
-              image: "juliapackaging/package-windows-${DOCKER_ARCH?}:${DOCKER_TAG?}"
+              image: "juliapackaging/package-windows-${ARCH?}:${DOCKER_TAG?}"
               always-pull: true
               command: ["bash", ".buildkite/utilities/build_julia.sh"]
               propagate-environment: true

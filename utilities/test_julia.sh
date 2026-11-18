@@ -151,11 +151,6 @@ elif [[ "${USE_RR-}" == "" ]]; then
     elif [[ "${i686_GROUP-}" == "" ]]; then
         :
     fi
-
-    # Disable `Profile` on win32, as our backtraces are extremely slow.
-    if [[ "${OS}" == windows* && "${ARCH}" == "i686" ]]; then
-        TESTS_TO_SKIP+=( "Profile" )
-    fi
 else
     echo "ERROR: invalid value for USE_RR: ${USE_RR-}"
     exit 1

@@ -299,7 +299,7 @@ elif "checkbounds-pkgimages" in args:
 
     def test_release_promotion_includes_companions_and_checksums(self):
         self.write(self.work / "Makefile", "checkbounds-pkgimages:\n")
-        platforms = ("linux-x86_64", "linux-i686", "linux-aarch64", "mac64", "macaarch64", "win64", "win32", "freebsd-x86_64")
+        platforms = ("linux-x86_64", "linux-i686", "linux-aarch64", "mac64", "macaarch64", "win64", "freebsd-x86_64")
         for platform in platforms:
             for ext in ("tar.gz", "checkbounds.tar.gz"):
                 for signature in ("", ".asc"):
@@ -319,7 +319,7 @@ elif "checkbounds-pkgimages" in args:
         variant = self.output / "julialang2/bin/linuxopt/x86_64/1.14"
         self.assertTrue((variant / "julia-1.14.0-linuxopt-x86_64.checkbounds.tar.gz").is_file())
         self.assertTrue((variant / "julia-1.14.0-linuxopt-x86_64.checkbounds.tar.gz.asc").is_file())
-        self.assertEqual(len(list(self.output.rglob("*.checkbounds.tar.gz.asc"))), 18)
+        self.assertEqual(len(list(self.output.rglob("*.checkbounds.tar.gz.asc"))), 16)
 
 
 if __name__ == "__main__":
