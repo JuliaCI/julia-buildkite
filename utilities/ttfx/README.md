@@ -115,10 +115,10 @@ use instead of at startup does. So each task also has `startup+load (cold)`, fro
 process to the end of its load phase, and a load difference whose task's time before
 the first marker changed the opposite way by at least half as much is listed under "Moved
 between startup and load" and does not count, unless startup+load changed the same way.
-The suite's load geomean is treated likewise. The warm repeats are fresh processes too, so
+The warm repeats are fresh processes too, so
 `load+run (warm)` is checked the same way against the warm repeat's time from spawning its
-process to the end of its run; for the suite, the median task's time before the first marker
-must have moved the other way by at least half the median task's warm change, since a fixed
+process to the end of its run. The suite's load and warm geomeans are treated likewise: the median task's time before the first marker
+must have moved the other way by at least half the median task's load or warm change, since a fixed
 shift weighs most in the shortest tasks while a sum is dominated by the longest. Per metric,
 the geometric mean of the ratios over the suite is judged per block against a tighter
 threshold, which catches a small cost spread across every package. A suite load or run
