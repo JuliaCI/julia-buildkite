@@ -9,6 +9,8 @@ steps:
           - JuliaCI/coreupload#v2:
               core_pattern: "**/*.core"
               compressor: "zstd"
+              # a hung test leaves cores of its worker and of the worker's children
+              max_uploads: 3
               lldb_commands:
                 - "bt all"
           - JuliaCI/external-buildkite#v1:

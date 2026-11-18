@@ -90,6 +90,29 @@ echo "/dev/disk1 1000000000 0 $(cat {self.free}) 1% /"
         out, _ = reaper.communicate()
         self.assertIn("Deleting core dump ./test/julia-pid5.core: already kept 4", out)
 
+    def test_reaper_keeps_all_cores_of_a_timeout(self):
+        marker = Path(self.tmp.name) / "teardown"
+        self.env["JL_TEARDOWN_MARKER"] = str(marker)
+        first = [self.core(f"julia-pid{i}.core") for i in range(1, 5)]
+        reaper = self.bash("reap_core_dumps")
+
+        time.sleep(1)
+        late = self.core("julia-pid5.core")
+        self.wait_for(lambda: not late.exists())
+
+        # Once the tests time out, the cores of the hung processes stay
+        marker.touch()
+        hung = [self.core(f"julia-pid{i}.core") for i in range(6, 12)]
+        time.sleep(6)
+        self.assertTrue(all(core.exists() for core in first + hung))
+
+        # within the disk space reserve
+        self.set_free_gib(10)
+        self.wait_for(lambda: not any(core.exists() for core in first[1:] + hung))
+        self.assertTrue(first[0].exists())
+        reaper.kill()
+        reaper.communicate()
+
     def test_reaper_keeps_the_reserve_free(self):
         first = self.core("julia-pid1.core")
         self.bash("reap_core_dumps")

@@ -227,12 +227,14 @@ if [[ -z "${USE_RR-}" ]]; then
     if [[ "${OS}" == windows* ]]; then
         ulimit -c unlimited
     else
+        JL_TEARDOWN_MARKER="$(mktemp -u "${TMPDIR:-/tmp}/teardown.XXXXXX")"
+        export JL_TEARDOWN_MARKER
         # shellcheck source=SCRIPTDIR/core_dumps.sh
         source .buildkite/utilities/core_dumps.sh
         limit_core_dumps
         reap_core_dumps &
         CORE_REAPER_PID="$!"
-        echo "Core dumps kept:           the first ${MAX_CORE_DUMPS}, while ${CORE_DUMP_RESERVE_GIB} GiB of disk space is free"
+        echo "Core dumps kept:           the first ${MAX_CORE_DUMPS} and all after a timeout, while ${CORE_DUMP_RESERVE_GIB} GiB of disk space is free"
     fi
     if [[ "${OS}" == linux* || "${OS}" == "musl" ]]; then
         echo "Core dump pattern:         $(cat /proc/sys/kernel/core_pattern)"
@@ -253,6 +255,7 @@ fi
 if [[ -n "${CORE_REAPER_PID:-}" ]]; then
     kill "${CORE_REAPER_PID}" 2>/dev/null || true
     wait "${CORE_REAPER_PID}" 2>/dev/null || true
+    rm -f "${JL_TEARDOWN_MARKER}"
 fi
 
 echo "--- Upload results.json report"

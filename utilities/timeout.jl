@@ -27,6 +27,9 @@
 #                         Defaults to false.
 #  - JL_TERM_SIGQUIT:     Whether to include the SIGQUIT (coredump) stage.  Defaults to
 #                         true.
+#  - JL_TEARDOWN_MARKER:  A file to create when the watchdog fires, so that the core dump
+#                         reaper of test_julia.sh keeps the cores of the hung processes.
+#                         Optional.
 #
 # Example:
 #   - JL_TEST_TIMEOUT=2h30m JL_KILL_TIMEOUT=600s julia timeout.jl cmd...
@@ -126,6 +129,13 @@ timer_task = @async begin
     if isopen(proc)
         timed_out[] = true
         pid_or_pgid = do_detach ? "PGID" : "PID"
+        # best effort: the escalation below must run regardless
+        marker = get(ENV, "JL_TEARDOWN_MARKER", "")
+        try
+            isempty(marker) || touch(marker)
+        catch err
+            @warn "Unable to create the teardown marker; core dumps beyond the first few may be deleted" marker exception=err
+        end
 
         # SIGTERM: ask nicely.  The test driver will respond by SIGQUIT-ing the
         # workers that are still running tests, so that we collect core dumps
