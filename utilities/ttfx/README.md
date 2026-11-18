@@ -72,6 +72,12 @@ it took; Julia 1.12 and later) and logging invalidations over the same span (bel
 the traces are the `trace-compile.tar.gz` artifact. The depot
 holds packages and artifacts only; the agent user's own depot is not on the path.
 
+The driver keeps one idle process of every arm running for as long as it measures. A
+build that a live process already has mapped starts with less work in the kernel, and the
+driver itself runs on the head build, so without them only the head had that: on the
+agents every head `julia -e ''` took about 8 M instructions (1%) fewer than the same build
+as the base, and about 0.5% less time, whatever the pull request changed.
+
 Before the tasks, each arm starts julia `TTFX_STARTUP_RUNS` times (30) per block, the arms
 alternating from run to run: `julia --startup-file=no -e ''`, timed by the driver from
 spawning the process to its exit, and an interactive julia on a pseudo-terminal, timed
@@ -109,7 +115,11 @@ use instead of at startup does. So each task also has `startup+load (cold)`, fro
 process to the end of its load phase, and a load difference whose task's time before
 the first marker changed the opposite way by at least half as much is listed under "Moved
 between startup and load" and does not count, unless startup+load changed the same way.
-The suite's load geomean is treated likewise. Per metric,
+The suite's load geomean is treated likewise. The warm repeats are fresh processes too, so
+`load+run (warm)` is checked the same way against the warm repeat's time from spawning its
+process to the end of its run; for the suite, the median task's time before the first marker
+must have moved the other way by at least half the median task's warm change, since a fixed
+shift weighs most in the shortest tasks while a sum is dominated by the longest. Per metric,
 the geometric mean of the ratios over the suite is judged per block against a tighter
 threshold, which catches a small cost spread across every package. A suite load or run
 difference that shows with the GC on only, while the suite's GC time moved the other way
