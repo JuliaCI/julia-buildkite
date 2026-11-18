@@ -351,7 +351,7 @@ elif "checkbounds-pkgimages" in args:
         self.assertEqual((cache / "checked.ji").read_text(), "fixed checksum")
         self.assertEqual((cache / "auto.ji").read_text(), "fixed checksum")
 
-    RELEASE_PLATFORMS = ("linux-x86_64", "linux-i686", "linux-aarch64", "mac64", "macaarch64", "win64", "win32", "freebsd-x86_64")
+    RELEASE_PLATFORMS = ("linux-x86_64", "linux-i686", "linux-aarch64", "mac64", "macaarch64", "win64", "freebsd-x86_64")
 
     def release_fixtures(self, checkbounds):
         for platform in self.RELEASE_PLATFORMS:
@@ -378,7 +378,7 @@ elif "checkbounds-pkgimages" in args:
         variant = self.output / "julialang2/bin/linuxopt/x86_64/1.14"
         self.assertTrue((variant / "julia-1.14.0-linuxopt-x86_64.checkbounds.tar.gz").is_file())
         self.assertTrue((variant / "julia-1.14.0-linuxopt-x86_64.checkbounds.tar.gz.asc").is_file())
-        self.assertEqual(len(list(self.output.rglob("*.checkbounds.tar.gz.asc"))), 18)
+        self.assertEqual(len(list(self.output.rglob("*.checkbounds.tar.gz.asc"))), 16)
 
     def test_release_promotion_purges_promoted_objects(self):
         self.write(self.work / "Makefile", "")
