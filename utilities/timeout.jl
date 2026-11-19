@@ -106,7 +106,7 @@ timed_out = Ref(false)
 
 # Whether any process in the wrapped process' group is still alive.
 function pg_alive()
-    do_detach || return isopen(proc)
+    do_detach || return process_running(proc)
     return ccall(:kill, Cint, (Cpid_t, Cint), -proc_pid, 0) == 0
 end
 
@@ -126,7 +126,7 @@ timer_task = @async begin
 
     # If the process is still running, run the escalation pipeline:
     #   SIGTERM -> SIGQUIT -> SIGKILL
-    if isopen(proc)
+    if process_running(proc)
         timed_out[] = true
         pid_or_pgid = do_detach ? "PGID" : "PID"
         # best effort: the escalation below must run regardless
