@@ -48,8 +48,9 @@ into one `group:` per label: Build, Check, Test, Allow Fail, JuliaSyntax,
 JuliaC, TTFX, Publish.
 
 The Publish group's triggers each `depends_on` only their own platform's
-build + test jobs; soft-failing builds upload their trigger themselves (see
-publish_group_text).
+build + test jobs, except on release tags, where every trigger waits for the
+whole build (see publish_group_text and release_gate); soft-failing builds
+upload their trigger themselves (see publish_group_text).
 """
 
 import argparse
@@ -696,7 +697,7 @@ def publish_trigger_text(target, depends_on, scheduled, step_key=None):
     return "\n".join(lines)
 
 
-def publish_group_text(triplets, scheduled=False, docs=False):
+def publish_group_text(triplets, scheduled=False, docs=False, gate=None):
     """The Publish group: one julia-publish trigger per published platform,
     `depends_on` exactly that platform's build + test jobs, so it is signed
     and promoted as soon as those are green regardless of the rest of the
@@ -709,7 +710,15 @@ def publish_group_text(triplets, scheduled=False, docs=False):
     A soft-failing (Allow Fail) build satisfies `depends_on` too, so a static
     trigger would publish a build that failed or was stopped, and would not
     run again when a retry of it passes. Those builds upload their trigger
-    themselves once they have staged everything (see deferred_trigger_env)."""
+    themselves once they have staged everything (see deferred_trigger_env).
+
+    With `gate` (see release_gate), every trigger instead depends on those
+    keys, plus its own jobs should the gate miss any."""
+    def depends(keys):
+        if gate is None:
+            return keys
+        return gate + [k for k in keys if k not in gate]
+
     triggers = []
     for triplet in triplets:
         assert triplet in BUILD_KEYS, (
@@ -721,18 +730,22 @@ def publish_group_text(triplets, scheduled=False, docs=False):
             # cycle.
             assert triplet not in TEST_KEYS, (
                 f"{triplet}: a soft-failing build with tests cannot publish")
+            # Likewise, two of these waiting for each other's build would
+            # deadlock; they need not, as a soft-failing build passes anyway.
+            others = {BUILD_KEYS[t] for t in triplets if t in SOFT_FAIL_BUILDS} - {build_key}
             DEFERRED_TRIGGERS[build_key] = publish_trigger_text(
-                triplet, [build_key], scheduled, step_key=f"publish_{triplet}")
+                triplet, [k for k in depends([build_key]) if k not in others],
+                scheduled, step_key=f"publish_{triplet}")
             continue
         depends_on = [build_key] + TEST_KEYS.get(triplet, [])
-        triggers.append(publish_trigger_text(triplet, depends_on, scheduled))
+        triggers.append(publish_trigger_text(triplet, depends(depends_on), scheduled))
 
     if docs:
         depends_on = []
         for rel in DOCS_STAGING_FILES:
             _, inner = load_group_text(os.path.join(MISC, rel))
             depends_on.extend(step_keys(inner))
-        triggers.append(publish_trigger_text("docs", depends_on, scheduled))
+        triggers.append(publish_trigger_text("docs", depends(depends_on), scheduled))
 
     return emit_group("Publish", "\n".join(triggers))
 
@@ -773,6 +786,23 @@ def deferred_trigger_env(text):
 def pipeline_text(blocks):
     """The rendered pipeline of these groups."""
     return pipeline_header() + deferred_trigger_env("\n".join(blocks)) + "\n"
+
+
+def release_gate(blocks):
+    """On a release tag build, the keys of every job in `blocks` (the groups
+    the build renders, minus the launchers, whose jobs only exist once they
+    run), for each publish trigger to wait for; None for any other build.
+
+    Publishing claims the version names, which are write-once: an artifact
+    published for a commit cannot be replaced by one of another commit. A
+    platform publishing as soon as its own tests pass would thus pin the tag
+    to its commit even when the build as a whole fails, and moving the tag to
+    a fixed commit would then require deleting what was published by hand.
+    Release branch pushes publish nightlies, under names that are overwritten
+    anyway, so they keep publishing each platform as soon as it is ready."""
+    if not is_release_build() or os.environ.get("BUILDKITE_BRANCH", "").startswith("release-"):
+        return None
+    return [key for block in blocks for key in step_keys(block)]
 
 
 def is_release_build():
@@ -864,7 +894,7 @@ def only_triplets_text(only):
                  f"it has {', '.join(sorted(SEEN_TRIPLETS))}")
     selected = [t for t in triplets if t in ONLY_TRIPLETS]
     if selected:
-        blocks.append(publish_group_text(selected))
+        blocks.append(publish_group_text(selected, gate=release_gate(blocks)))
     # drop the groups that have none of the selected platforms
     blocks = [b for b in blocks if not b.endswith("    steps:")]
     return pipeline_text(blocks)
@@ -898,10 +928,8 @@ def main():
     # (branch=v<version>) without rebuilding everything else.
     if os.environ.get("NOGPL_ONLY") == "true":
         label, allow_fail, arches = NOGPL_GROUP
-        blocks = [
-            schedule_group_text(label, arches, allow_fail),
-            publish_group_text(nogpl_triplets()),
-        ]
+        blocks = [schedule_group_text(label, arches, allow_fail)]
+        blocks.append(publish_group_text(nogpl_triplets(), gate=release_gate(blocks)))
         sys.stdout.write(pipeline_text(blocks))
         return
 
@@ -911,7 +939,7 @@ def main():
         groups = release_opt_groups() if is_release_build() else OPT_GROUPS
         blocks = [schedule_group_text(label, arches, allow_fail)
                   for label, allow_fail, arches in groups]
-        blocks.append(publish_group_text(opt_triplets()))
+        blocks.append(publish_group_text(opt_triplets(), gate=release_gate(blocks)))
         sys.stdout.write(pipeline_text(blocks))
         return
 
@@ -931,6 +959,8 @@ def main():
         test_group_text(),
         allow_fail_group_text(),
     ]
+    # the groups a release tag's publish triggers wait for (see release_gate)
+    gated = list(blocks)
 
     # JuliaSyntax: gated on ./JuliaSyntax/Project.toml existing in the julia
     # checkout (same conditional the old Check step used). Included verbatim
@@ -959,13 +989,15 @@ def main():
     triplets = upload_triplets(UPLOAD_ARCHES, PLATFORMS)
     if is_release_build():
         label, allow_fail, arches = NOGPL_GROUP
-        blocks.append(schedule_group_text(label, arches, allow_fail))
-        blocks.extend(schedule_group_text(label, arches, allow_fail)
-                      for label, allow_fail, arches in release_opt_groups())
+        release_blocks = [schedule_group_text(label, arches, allow_fail)]
+        release_blocks.extend(schedule_group_text(label, arches, allow_fail)
+                              for label, allow_fail, arches in release_opt_groups())
         label, allow_fail, arches = RISCV64_GROUP
-        blocks.append(schedule_group_text(label, arches, allow_fail))
+        release_blocks.append(schedule_group_text(label, arches, allow_fail))
+        blocks += release_blocks
+        gated += release_blocks
         triplets += nogpl_triplets() + opt_triplets() + riscv64_triplets()
-    blocks.append(publish_group_text(triplets, docs=True))
+    blocks.append(publish_group_text(triplets, docs=True, gate=release_gate(gated)))
 
     sys.stdout.write(pipeline_text(blocks))
 
