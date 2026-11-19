@@ -11,6 +11,9 @@ const METRICS = [
     (key = "startup_load", name = "startup+load (cold)", threshold = 0.10, suite = 0.02, floor = 0.10),
     (key = "run",        name = "run (cold)",      threshold = 0.15, suite = 0.03, floor = 0.05),
     (key = "warm",       name = "load+run (warm)", threshold = 0.15, suite = 0.03, floor = 0.05),
+    # The run alone of those later repeats: each is a fresh process that loads the
+    # packages again, so load+run (warm) is mostly a second load for most tasks
+    (key = "warm_run",   name = "run (warm)",      threshold = 0.15, suite = 0.03, floor = 0.05),
     (key = "load_stdlibs", name = "load (stdlibs first)", threshold = 0.10, suite = 0.02, floor = 0.10),
     (key = "run_stdlibs",  name = "run (stdlibs first)",  threshold = 0.15, suite = 0.03, floor = 0.05),
 ]

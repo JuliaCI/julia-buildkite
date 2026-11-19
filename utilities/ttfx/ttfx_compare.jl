@@ -49,6 +49,8 @@ end
 # One value per metric from a record; nothing when the sample has no such measurement.
 # The startup records hold many runs of `julia -e ''` and of the REPL to its prompt per
 # block, and their median is the sample. Startup+load runs from spawning the task's process to the end of its load phase.
+# The warm ones are the best of the repeats after the first: load+run and the run alone.
+later(t) = length(t) >= 2 ? minimum(Float64.(t[2:end])) : nothing
 function value(r, key)
     r["status"] == "error" && return nothing
     first_of(field) = (t = get(r, field, Any[]); isempty(t) ? nothing : Float64(t[1]))
@@ -64,14 +66,15 @@ function value(r, key)
         return p === nothing || l === nothing ? nothing : p + l
     elseif key in ("load_stdlibs", "run_stdlibs")
         return first_of(key[1:end-8] * "_times_stdlibs")
+    elseif key == "warm_run"
+        return later(get(r, "run_times", Any[]))
     else
-        t = get(r, "total_times", Any[])
-        return length(t) >= 2 ? minimum(Float64.(t[2:end])) : nothing
+        return later(get(r, "total_times", Any[]))
     end
 end
 
-# The same phase measured with the GC disabled (see the driver), for load and run;
-# nothing for records from before the driver recorded it. The stdlibs-first run has no
+# The same phase measured with the GC disabled (see the driver), for load, run and the
+# warm run; nothing for records from before the driver recorded it. The stdlibs-first run has no
 # GC-off repeat, so its GC time is taken out instead, which is close but not the same.
 # The GC counters are read outside the phase's clocks (the third snapshot comes after
 # `__t3`), so a collection that starts just after the clock stops is counted but not
@@ -82,6 +85,7 @@ function value_gcoff(r, key)
         t = value(r, key); g = gc_time(r, key)
         return t === nothing || g === nothing || g >= t ? nothing : t - g
     end
+    key == "warm_run" && return later(get(r, "run_times_gcoff", Any[]))
     key in ("load", "run") || return nothing
     t = get(r, key * "_times_gcoff", Any[])
     return isempty(t) ? nothing : Float64(t[1])
@@ -193,7 +197,8 @@ function compare_task(name, byarm, base, head, nblocks)
             d = gc_delta(b, h, m.key)
             d === nothing || (out["metrics"][m.key]["gc_delta"] = d)
         end
-        if gverdict == "same" && verdict != "same" && haskey(out["metrics"][m.key], "gcoff_verdict") && gc_moved(b, h, m.key)
+        if gverdict == "same" && verdict != "same" && haskey(out["metrics"][m.key], "gcoff_verdict") && haskey(OTHER_PHASE, m.key) &&
+           gc_moved(b, h, m.key)
             out["metrics"][m.key]["gc_moved"] = true
             push!(out["gc_moved"], m.key)
         elseif verdict == "regression" || gverdict == "regression"
@@ -291,8 +296,8 @@ function judge(bv, hv, m)
     end
 end
 
-# Per metric, the geometric mean of the per-task ratios, per block; load and run once more
-# from the GC-off repeats (suite keys `load_gcoff`, `run_gcoff`). With --precompile-once
+# Per metric, the geometric mean of the per-task ratios, per block; load, run and the warm
+# run once more from the GC-off repeats (suite keys `load_gcoff`, `run_gcoff`, `warm_run_gcoff`). With --precompile-once
 # the tasks have one or two precompile samples, so precompile gets a single geomean of
 # each task's fastest head sample over its fastest base sample.
 function compare_suite(tasks, nblocks; precompile_once::Bool = false)

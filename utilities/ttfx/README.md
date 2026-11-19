@@ -103,7 +103,10 @@ precompile was measured once.
 
 A task's metric is a robust regression when the head samples are all slower than every
 base sample, every block's head/base ratio exceeds the metric's threshold, and the
-difference clears an absolute floor; improvements are the mirror image. Load and run are
+difference clears an absolute floor; improvements are the mirror image. The warm
+repeats load the packages again, so besides their `load+run (warm)` the run phase alone of
+them is judged as `run (warm)`, which the load, already judged as `load (cold)`, does not
+dilute. Load, run and the warm run are
 judged twice, as measured and from the repeats with the GC off (the stdlibs-first load
 and run with their GC time subtracted), and either counts: a difference that only shows with the
 GC on was GC pauses, one that only shows with it off was hidden by them. The exception is a collection that moved between the phases: when
