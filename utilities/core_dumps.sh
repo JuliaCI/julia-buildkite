@@ -17,6 +17,9 @@ CORE_DUMP_RESERVE_GIB="${CORE_DUMP_RESERVE_GIB:-20}"
 # the hung test processes, a test driver, worker and children that can number more than
 # MAX_CORE_DUMPS, so from then on only the disk space reserve applies.
 TEARDOWN_MARKER="${JL_TEARDOWN_MARKER:-}"
+# Where the cores are written, and their names. On Windows, the dump folder and `*.dmp`.
+CORE_DUMP_DIR="${CORE_DUMP_DIR:-.}"
+CORE_DUMP_NAME="${CORE_DUMP_NAME:-*.core}"
 
 free_space_kib() {
     df -Pk "${1}" | awk 'NR == 2 { print $4 }'
@@ -28,12 +31,12 @@ free_space_kib() {
 limit_core_dumps() {
     local limit_kib=0
     if (( MAX_CORE_DUMPS > 0 )); then
-        limit_kib=$(( ($(free_space_kib .) - CORE_DUMP_RESERVE_GIB * 1024 * 1024) / MAX_CORE_DUMPS ))
+        limit_kib=$(( ($(free_space_kib "${CORE_DUMP_DIR}") - CORE_DUMP_RESERVE_GIB * 1024 * 1024) / MAX_CORE_DUMPS ))
     fi
     ulimit -c "$(( limit_kib > 0 ? limit_kib : 0 ))"
 }
 
-# Run in the background while the tests run, on the cores below the current directory.
+# Run in the background while the tests run, on the cores below CORE_DUMP_DIR.
 reap_core_dumps() {
     # Cores kept so far, in the order they appeared, one per line
     local kept="" core first
@@ -48,25 +51,25 @@ reap_core_dumps() {
             if (( $(printf '%s' "${kept}" | grep -c '') >= MAX_CORE_DUMPS )) &&
                [[ -z "${TEARDOWN_MARKER}" || ! -e "${TEARDOWN_MARKER}" ]]; then
                 echo "Deleting core dump ${core}: already kept ${MAX_CORE_DUMPS} (MAX_CORE_DUMPS)"
-                rm -f "${core}"
-            elif (( $(free_space_kib .) < reserve_kib )); then
+                rm -f "${core}" || true
+            elif (( $(free_space_kib "${CORE_DUMP_DIR}") < reserve_kib )); then
                 echo "Deleting core dump ${core}: less than ${CORE_DUMP_RESERVE_GIB} GiB of disk space left (CORE_DUMP_RESERVE_GIB)"
-                rm -f "${core}"
+                rm -f "${core}" || true
             else
                 kept+="${core}"$'\n'
             fi
         # Oldest first, the order in which the coreupload plugin uploads them. Cores that
         # appeared since the last poll are otherwise taken in directory order, which
         # differs between file systems (tmpfs lists the newest first).
-        done < <(find . -name '*.core' -type f -exec ls -1tr -- {} + 2>/dev/null)
+        done < <(find "${CORE_DUMP_DIR}" -name "${CORE_DUMP_NAME}" -type f -exec ls -1tr -- {} + 2>/dev/null)
 
         # Cores keep growing after we first see them
-        if (( $(free_space_kib .) < reserve_kib )) && [[ "${kept}" == *$'\n'?* ]]; then
+        if (( $(free_space_kib "${CORE_DUMP_DIR}") < reserve_kib )) && [[ "${kept}" == *$'\n'?* ]]; then
             first="${kept%%$'\n'*}"
             while IFS= read -r core; do
                 [[ -z "${core}" || "${core}" == "${first}" ]] && continue
                 echo "Deleting core dump ${core}: less than ${CORE_DUMP_RESERVE_GIB} GiB of disk space left (CORE_DUMP_RESERVE_GIB)"
-                rm -f "${core}"
+                rm -f "${core}" || true
             done <<< "${kept}"
             kept="${first}"$'\n'
         fi

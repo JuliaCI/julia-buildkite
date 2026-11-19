@@ -219,14 +219,26 @@ fi
 
 # Show our core dump file pattern and size limit if we're going to be recording them
 if [[ -z "${USE_RR-}" ]]; then
+    JL_TEARDOWN_MARKER="$(mktemp -u "${TMPDIR:-/tmp}/teardown.XXXXXX")"
+    export JL_TEARDOWN_MARKER
     if [[ "${OS}" == windows* ]]; then
         ulimit -c unlimited
-    else
-        JL_TEARDOWN_MARKER="$(mktemp -u "${TMPDIR:-/tmp}/teardown.XXXXXX")"
-        export JL_TEARDOWN_MARKER
+        # for timeout.jl, which does not know MSYS paths
+        JL_TEARDOWN_MARKER="$(cygpath -m "${JL_TEARDOWN_MARKER}")"
+        # Set by the worker image (WER LocalDumps), for crashes and for the processes
+        # libuv dumps when sending them SIGQUIT.
+        DUMP_FOLDER="$(reg query 'HKLM\SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps' //v DumpFolder 2>/dev/null |
+                       awk '$1 == "DumpFolder" { $1 = $2 = ""; sub(/^ +/, ""); sub(/\r$/, ""); print }')" || true
+        echo "Core dump folder:          ${DUMP_FOLDER:-none, dumps are not kept}"
+        if [[ -n "${DUMP_FOLDER}" ]]; then
+            CORE_DUMP_DIR="$(cygpath -u "${DUMP_FOLDER}")"
+            CORE_DUMP_NAME="*.dmp"
+        fi
+    fi
+    if [[ "${OS}" != windows* || -n "${CORE_DUMP_DIR-}" ]]; then
         # shellcheck source=SCRIPTDIR/core_dumps.sh
         source .buildkite/utilities/core_dumps.sh
-        limit_core_dumps
+        [[ "${OS}" == windows* ]] || limit_core_dumps
         reap_core_dumps &
         CORE_REAPER_PID="$!"
         echo "Core dumps kept:           the first ${MAX_CORE_DUMPS} and all after a timeout, while ${CORE_DUMP_RESERVE_GIB} GiB of disk space is free"
