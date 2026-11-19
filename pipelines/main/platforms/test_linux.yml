@@ -11,6 +11,10 @@ steps:
               compressor: "zstd"
               disabled: "${USE_RR?}"
               create_bundle: "true"
+              # The plugin runs gdb when the rootfs has it (tester_linux does), and
+              # then only gdb_commands; lldb_commands are for a rootfs without gdb.
+              gdb_commands:
+                - "thread apply all bt"
               lldb_commands:
                 - "bt all"
           - JuliaCI/external-buildkite#v1:
