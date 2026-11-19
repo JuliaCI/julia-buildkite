@@ -55,7 +55,10 @@ reap_core_dumps() {
             else
                 kept+="${core}"$'\n'
             fi
-        done < <(find . -name '*.core' -type f 2>/dev/null)
+        # Oldest first, the order in which the coreupload plugin uploads them. Cores that
+        # appeared since the last poll are otherwise taken in directory order, which
+        # differs between file systems (tmpfs lists the newest first).
+        done < <(find . -name '*.core' -type f -exec ls -1tr -- {} + 2>/dev/null)
 
         # Cores keep growing after we first see them
         if (( $(free_space_kib .) < reserve_kib )) && [[ "${kept}" == *$'\n'?* ]]; then
