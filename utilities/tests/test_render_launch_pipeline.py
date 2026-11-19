@@ -275,6 +275,21 @@ class RenderLaunchPipelineTests(unittest.TestCase):
         self.assertIn('timeout_in_minutes: 225', test)
         self.assertIn('soft_fail: true', test)
 
+    def test_windows_dump_count_matches_the_uploads(self):
+        # timeout.jl budgets its dumps of the test workers by JL_DUMP_COUNT, as the
+        # command cannot see the coreupload plugin's max_uploads
+        test = re.search(
+            r'^      - label: ":windows: test x86_64-w64-mingw32"\n'
+            r'.*?(?=^      - label:|^  - group:|\Z)',
+            render(), re.M | re.S,
+        ).group()
+        uploads = re.search(r'^              max_uploads: (\d+)$', test, re.M)
+        count = re.search(r'^          JL_DUMP_COUNT: "(\d+)"$', test, re.M)
+        self.assertTrue(uploads and count, test)
+        self.assertEqual(uploads.group(1), count.group(1))
+        # a slot for a worker, besides the test driver's
+        self.assertGreaterEqual(int(count.group(1)), 2)
+
     def test_optimized_i686_jobs(self):
         for source, build_env in (("schedule", {}), (None, EXTENDED_PR)):
             with self.subTest(source=source, env=build_env):

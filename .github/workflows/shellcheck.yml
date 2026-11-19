@@ -43,6 +43,8 @@ jobs:
           version: '1'
       - name: Test the timeout wrapper
         run: python3 utilities/tests/test_timeout.py
+      - name: Test the selection of the processes dumped on Windows
+        run: julia --startup-file=no utilities/tests/test_descendants.jl
       - name: Install buildkite-agent
         # The same release (and sha256) that JuliaCI/sandboxed-buildkite-agent
         # deploys to the Linux agents

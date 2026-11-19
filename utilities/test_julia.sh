@@ -233,6 +233,17 @@ if [[ -z "${USE_RR-}" ]]; then
         if [[ -n "${DUMP_FOLDER}" ]]; then
             CORE_DUMP_DIR="$(cygpath -u "${DUMP_FOLDER}")"
             CORE_DUMP_NAME="*.dmp"
+            # where timeout.jl dumps the test workers and their children, for the
+            # coreupload plugin, which uploads only the oldest few: JL_DUMP_COUNT, as
+            # the step sets it next to the plugin's max_uploads (default 1), or a
+            # host's lower COREUPLOAD_MAX_UPLOADS
+            export JL_DUMP_FOLDER="${DUMP_FOLDER}"
+            JL_DUMP_COUNT="${JL_DUMP_COUNT:-1}"
+            if [[ -n "${COREUPLOAD_MAX_UPLOADS:-}" ]] && (( COREUPLOAD_MAX_UPLOADS < JL_DUMP_COUNT )); then
+                JL_DUMP_COUNT="${COREUPLOAD_MAX_UPLOADS}"
+            fi
+            export JL_DUMP_COUNT
+            export JL_DUMP_RESERVE_GIB="${CORE_DUMP_RESERVE_GIB:-20}"
         fi
     fi
     if [[ "${OS}" != windows* || -n "${CORE_DUMP_DIR-}" ]]; then

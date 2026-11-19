@@ -14,6 +14,7 @@ steps:
               # few while the tests run.
               core_pattern: "C:/buildkite-agent/dumps/*.dmp"
               compressor: "zstd"
+              # as JL_DUMP_COUNT below
               max_uploads: 3
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"
@@ -31,3 +32,6 @@ steps:
         env:
           JULIA_SHELL: "/bin/bash"
           TRIPLET: "${TRIPLET?}"
+          # The coreupload plugin's max_uploads above, which only its hooks see: how
+          # many dumps timeout.jl can expect uploaded when it dumps the test workers.
+          JL_DUMP_COUNT: "3"
