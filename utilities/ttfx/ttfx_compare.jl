@@ -142,6 +142,11 @@ function group(records, arms)
     return g
 end
 
+# Metrics reported and never judged: their verdicts are `same` and they are marked
+# `diagnostic`. The warm load+run's load is the cold load again, which is judged already;
+# the warm run is judged in its place.
+const REPORTED = ("warm",)
+
 function compare_task(name, byarm, base, head, nblocks)
     b = get(byarm, base, Any[]); h = get(byarm, head, Any[])
     out = Dict{String,Any}("name" => name, "metrics" => Dict{String,Any}(), "note" => nothing,
@@ -180,8 +185,10 @@ function compare_task(name, byarm, base, head, nblocks)
         blocks = [k for k in 1:nblocks if bv[k] !== nothing && hv[k] !== nothing]
         (isempty(blocks) || (m.key != "precompile" && length(blocks) != nblocks)) && continue
         bv = Float64.(bv[blocks]); hv = Float64.(hv[blocks])
-        verdict = judge(bv, hv, m)
+        reported = m.key in REPORTED
+        verdict = reported ? "same" : judge(bv, hv, m)
         out["metrics"][m.key] = Dict("base" => bv, "head" => hv, "ratios" => hv ./ bv, "blocks" => blocks, "verdict" => verdict)
+        reported && (out["metrics"][m.key]["diagnostic"] = true)
         # Load and run are also judged with the GC off, and either measurement counts: a
         # difference that only shows with the GC on was GC pauses, one that only shows with
         # it off was hidden by them.
@@ -189,7 +196,7 @@ function compare_task(name, byarm, base, head, nblocks)
         gverdict = "same"
         if !any(isnothing, gb) && !any(isnothing, gh)
             gb = Float64.(gb); gh = Float64.(gh)
-            gverdict = judge(gb, gh, m)
+            gverdict = reported ? "same" : judge(gb, gh, m)
             merge!(out["metrics"][m.key], Dict("gcoff_base" => gb, "gcoff_head" => gh,
                                                 "gcoff_ratios" => gh ./ gb, "gcoff_verdict" => gverdict))
         end
@@ -219,22 +226,11 @@ function compare_task(name, byarm, base, head, nblocks)
     # faulting in system image pages on first use. Load then looks slower although the
     # user waits no longer. A load difference counts only if the time before the first
     # marker did not offset at least half of it, or startup and load together changed the
-    # same way. The warm repeats are fresh processes too, so the same holds for their
-    # load+run against startup plus load+run.
+    # same way.
     if haskey(out["metrics"], "load") && haskey(out["metrics"], "startup_load")
         lm = out["metrics"]["load"]
         lm["load_delta"] = phase_delta(b, h, "load_times"); lm["preload_delta"] = phase_delta(b, h, "preload_times")
         startup_moved!(out, "load", lm["load_delta"], lm["preload_delta"], out["metrics"]["startup_load"]["verdict"])
-    end
-    bw = warm_repeat.(b); hw = warm_repeat.(h)
-    if haskey(out["metrics"], "warm") && !any(isnothing, bw) && !any(isnothing, hw)
-        wm = out["metrics"]["warm"]
-        bs = [w.startup_warm for w in bw]; hs = [w.startup_warm for w in hw]
-        wm["startup_ratios"] = hs ./ bs
-        wm["startup_verdict"] = judge(bs, hs, only(m for m in METRICS if m.key == "warm"))
-        wm["warm_delta"] = median([w.startup_warm - w.preload for w in hw]) - median([w.startup_warm - w.preload for w in bw])
-        wm["preload_delta"] = median([w.preload for w in hw]) - median([w.preload for w in bw])
-        startup_moved!(out, "warm", wm["warm_delta"], wm["preload_delta"], wm["startup_verdict"])
     end
     return out
 end
@@ -251,17 +247,6 @@ function startup_moved!(out, key, d, p, sverdict)
             push!(out["startup_moved"], key)
         end
     end
-end
-
-# The warm repeat with startup: its time from spawning the process to the end of its run
-# (`startup_warm`), and its share before the first marker (`preload`); nothing when the
-# driver did not record the marker.
-function warm_repeat(r)
-    r["status"] == "error" && return nothing
-    t = get(r, "total_times", Any[]); p = get(r, "preload_times", Any[])
-    (length(t) >= 2 && length(p) == length(t)) || return nothing
-    k = argmin(k -> Float64(p[k]) + Float64(t[k]), 2:length(t))
-    return (; startup_warm = Float64(p[k]) + Float64(t[k]), preload = Float64(p[k]))
 end
 
 # Head minus base median of a cold timing field.
@@ -318,8 +303,10 @@ function compare_suite(tasks, nblocks; precompile_once::Bool = false)
             length(gs) == nblocks || continue
         end
         isempty(gs) && continue
-        verdict = all(>(1 + m.suite), gs) ? "regression" : all(<(1 - m.suite), gs) ? "improvement" : "same"
-        suite[field == "ratios" ? m.key : m.key * "_gcoff"] = Dict("geomeans" => gs, "verdict" => verdict, "n_tasks" => count(has, tasks))
+        reported = m.key in REPORTED
+        verdict = reported ? "same" : all(>(1 + m.suite), gs) ? "regression" : all(<(1 - m.suite), gs) ? "improvement" : "same"
+        s = suite[field == "ratios" ? m.key : m.key * "_gcoff"] = Dict("geomeans" => gs, "verdict" => verdict, "n_tasks" => count(has, tasks))
+        reported && (s["diagnostic"] = true)
     end
     # The instructions' geomeans, per block like the times'; `diagnostic` keeps them from
     # counting. Startup has no suite: its ratios are the startup task's own.
@@ -362,8 +349,7 @@ function compare_suite(tasks, nblocks; precompile_once::Bool = false)
         s = get(suite, k, nothing)
         s === nothing || (s["diagnostic"] = true)
     end
-    # The suite's load and warm load+run likewise, when startup with them did not change the
-    # same way. Judged on the median task, as the geomean is: a fixed shift weighs most in the
+    # The suite's load likewise, when startup+load did not change the same way. Judged on the median task, as the geomean is: a fixed shift weighs most in the
     # shortest tasks, while the longest can change the other way and outweigh them in a sum.
     # The time before the first marker must have moved the other way by at least half of
     # the median task's change.
@@ -377,17 +363,6 @@ function compare_suite(tasks, nblocks; precompile_once::Bool = false)
            sl["verdict"] != s["verdict"] && offset(s, moved, "load_delta")
             s["startup_moved"] = true
             s["startup_load_geomeans"] = sl["geomeans"]
-        end
-    end
-    s = get(suite, "warm", nothing)
-    moved = [t["metrics"]["warm"] for t in tasks if haskey(t["metrics"], "warm") && haskey(t["metrics"]["warm"], "startup_ratios")]
-    if s !== nothing && s["verdict"] != "same" && offset(s, moved, "warm_delta")
-        gs = [geomean([m["startup_ratios"][k] for m in moved]) for k in 1:nblocks]
-        thr = only(m.suite for m in METRICS if m.key == "warm")
-        sverdict = all(>(1 + thr), gs) ? "regression" : all(<(1 - thr), gs) ? "improvement" : "same"
-        if sverdict != s["verdict"]
-            s["startup_moved"] = true
-            s["startup_warm_geomeans"] = gs
         end
     end
     return suite
@@ -458,12 +433,11 @@ function write_comparison(io, opts, meta, tasks, suite, nblocks)
         s = suite[m.key]
         function marked(s)
             v = s["verdict"]; c = join(change.(s["geomeans"]), ", ")
+            m.key in REPORTED && return c * " (not judged)"
             v == "same" && return c
             get(s, "gc_moved", false) &&
                 return c * " (GC moved, not counted; load+run " * join(change.(s["combined_geomeans"]), ", ") * ")"
-            get(s, "startup_moved", false) &&
-                return c * " (moved from startup, not counted" *
-                       (haskey(s, "startup_warm_geomeans") ? "; with startup " * join(change.(s["startup_warm_geomeans"]), ", ") : "") * ")"
+            get(s, "startup_moved", false) && return c * " (moved from startup, not counted)"
             get(s, "diagnostic", false) && return c * " (not counted)"
             return "**" * c * "**"
         end
