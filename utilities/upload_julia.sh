@@ -42,14 +42,6 @@ TARBALL_SIGNING_KMS_KEY="${TARBALL_SIGNING_KMS_KEY:-alias/julia-tarball-signing}
 # (`-` not `:-` so an explicit empty value is honored.)
 TARBALL_SIGNING_PUBKEY="${TARBALL_SIGNING_PUBKEY-.buildkite/signing-pubkeys/tarball_signing.pub.asc}"
 
-# Because `wait` returns the exit code of the waited-upon PID, this (with
-# `set -e`) ends execution if any backgrounded task failed.
-wait_pids() {
-    for PID in "$@"; do
-        wait "${PID}"
-    done
-}
-
 # Create a .tar.gz, parallel-compressed with pigz when available (pigz is
 # not a hard dependency -- fall back to plain gzip).
 make_targz() {
@@ -370,14 +362,13 @@ fi
 # applies to PutObject). The signed products are NOT also uploaded to buildkite
 # artifacts -- the final S3 locations are the canonical output.
 echo "--- Promote to final S3 locations"
-PIDS=()
+UPLOADS=()
 for UPLOAD_TARGET in "${UPLOAD_TARGETS[@]}"; do
     for EXT in "${UPLOAD_EXTENSIONS[@]}"; do
-        upload_to_s3 "${UPLOAD_FILENAME}.${EXT}" "${UPLOAD_TARGET}.${EXT}" &
-        PIDS+=( "$!" )
+        UPLOADS+=( "${UPLOAD_FILENAME}.${EXT}" "${UPLOAD_TARGET}.${EXT}" )
     done
 done
-wait_pids "${PIDS[@]}"
+upload_to_s3_all "${UPLOADS[@]}"
 
 # Purge the uploads from the CDN in front of their bucket: the julia-latest-*
 # pointers were just overwritten, so that it does not keep serving the previous
