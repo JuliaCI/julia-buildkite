@@ -12,7 +12,9 @@ import resource
 import shutil
 import signal
 import subprocess
+import sys
 import tempfile
+import textwrap
 import time
 import unittest
 
@@ -62,6 +64,49 @@ class TimeoutTests(unittest.TestCase):
         self.assertNotIn("SIGKILL", proc.stderr)
         self.assertLess(elapsed, 30, proc.stderr)
         self.assertNotEqual(proc.returncode, 0, proc.stderr)
+
+    def test_detached_descendants_dump_through_the_driver(self):
+        # A wrapper (as `Base.runtests`) runs a driver, which relays the output of a worker
+        # in a session of its own, which has a child of its own.  The worker's SIGQUIT
+        # output must reach us through the driver, before the driver itself is signalled,
+        # and its child must be signalled first.
+        worker = textwrap.dedent("""\
+            import os, signal, subprocess, sys, time
+            child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(1000)"])
+            def quit(*_):
+                try:
+                    child.wait(timeout=10)
+                    state = "gone"
+                except subprocess.TimeoutExpired:
+                    state = "alive"
+                print("worker: SIGQUIT, child " + state, flush=True)
+                os._exit(3)
+            signal.signal(signal.SIGQUIT, quit)
+            print("worker: ready", flush=True)
+            while True:
+                time.sleep(0.1)
+            """)
+        driver = textwrap.dedent("""\
+            import subprocess, sys
+            w = subprocess.Popen([sys.executable, "-c", sys.argv[1]], start_new_session=True,
+                                 stdout=subprocess.PIPE, text=True)
+            for line in w.stdout:
+                print("From worker 2: " + line, end="", flush=True)
+            w.wait()
+            print("driver: worker exited", w.returncode, flush=True)
+            import time
+            time.sleep(1000)
+            """)
+        proc, elapsed = self.run_timeout(
+            "sh", "-c", '"$0" -c "$1" "$2"; status=$?; exit $status', sys.executable, driver, worker,
+            JL_TEST_TIMEOUT="5s", JL_TERM_DETACH="true", JL_DUMP_DETACHED="true")
+        out = proc.stdout
+        self.assertIn("From worker 2: worker: SIGQUIT, child gone", out, proc.stderr)
+        self.assertIn("driver: worker exited 3", out, proc.stderr)
+        self.assertIn("Sent SIGQUIT to the 2 process(es)", proc.stderr)
+        self.assertIn("sending SIGQUIT to PGID", proc.stderr)
+        self.assertNotIn("SIGKILL", proc.stderr)
+        self.assertLess(elapsed, 30, proc.stderr)
 
     def test_command_that_finishes(self):
         proc, _ = self.run_timeout("sh", "-c", "exit 3")
