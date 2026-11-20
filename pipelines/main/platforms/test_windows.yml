@@ -6,6 +6,16 @@ steps:
         depends_on:
           - "build_${TRIPLET?}"
         plugins:
+          - JuliaCI/coreupload#v2:
+              # The workers' crash dump folder (WER LocalDumps). libuv also dumps a
+              # process there when sending it SIGQUIT, as a test or timeout.jl does
+              # to end a hung process. There is no debugger; dumps are only uploaded,
+              # the oldest first, and test_julia.sh deletes those beyond the first
+              # few while the tests run.
+              core_pattern: "C:/buildkite-agent/dumps/*.dmp"
+              compressor: "zstd"
+              # as JL_DUMP_COUNT below
+              max_uploads: 3
           - JuliaCI/external-buildkite#v1:
               version: "./.buildkite-external-version"
               repo_url: "https://github.com/JuliaCI/julia-buildkite"
@@ -22,3 +32,6 @@ steps:
         env:
           JULIA_SHELL: "/bin/bash"
           TRIPLET: "${TRIPLET?}"
+          # The coreupload plugin's max_uploads above, which only its hooks see: how
+          # many dumps timeout.jl can expect uploaded when it dumps the test workers.
+          JL_DUMP_COUNT: "3"

@@ -38,6 +38,13 @@ jobs:
         run: python3 utilities/tests/test_upload_to_s3.py
       - name: Test the Fastly purge helpers
         run: python3 utilities/tests/test_fastly_purge.py
+      - uses: julia-actions/setup-julia@da908477b5db94c10ffce8cfea9f2b3b9d5db687 # v3.0.3
+        with:
+          version: '1'
+      - name: Test the timeout wrapper
+        run: python3 utilities/tests/test_timeout.py
+      - name: Test the selection of the processes dumped on Windows
+        run: julia --startup-file=no utilities/tests/test_descendants.jl
       - name: Install buildkite-agent
         # The same release (and sha256) that JuliaCI/sandboxed-buildkite-agent
         # deploys to the Linux agents

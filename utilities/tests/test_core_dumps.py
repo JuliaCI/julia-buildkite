@@ -136,6 +136,25 @@ echo "/dev/disk1 1000000000 0 $(cat {self.free}) 1% /"
         self.core("julia.core")
         self.wait_for(lambda: not core.exists())
 
+    def test_reaper_watches_a_dump_folder(self):
+        # Windows: the dumps go to the WER LocalDumps folder, named *.dmp
+        dumps = Path(self.tmp.name) / "dumps"
+        dumps.mkdir()
+        self.env.update(CORE_DUMP_DIR=str(dumps), CORE_DUMP_NAME="*.dmp", MAX_CORE_DUMPS="1")
+        first = dumps / "julia.exe.1.dmp"
+        first.write_bytes(b"dump")
+        other = self.core("julia-pid1.core")
+        reaper = self.bash("reap_core_dumps")
+        time.sleep(1)
+        late = dumps / "julia.exe.2.dmp"
+        late.write_bytes(b"dump")
+        self.wait_for(lambda: not late.exists())
+        self.assertTrue(first.exists())
+        self.assertTrue(other.exists())
+        reaper.kill()
+        out, _ = reaper.communicate()
+        self.assertIn(f"Deleting core dump {late}: already kept 1", out)
+
     def test_reaper_stops_with_its_parent(self):
         # The reaper runs as a background job of a shell that then exits
         parent = self.bash("reap_core_dumps & echo $!; sleep 0.5")
