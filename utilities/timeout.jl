@@ -44,7 +44,8 @@
 #                         Optional.
 #  - JL_DUMP_FOLDER:      64-bit Windows only: before the SIGQUIT stage, write full dumps of
 #                         the descendants of the wrapped process (the test workers and their
-#                         children) to this folder; see windows/dump_descendants.jl.  The
+#                         children) to this folder; see windows/dump_descendants.jl.  It also
+#                         has the Julia processes among them print their task backtraces.  The
 #                         SIGQUIT there dumps (libuv, with WER LocalDumps configured) and
 #                         ends the wrapped process alone, and the rest die with it.  Takes
 #                         at most JL_KILL_TIMEOUT or 3 minutes, whichever is shorter.
@@ -260,13 +261,13 @@ function dump_descendants(timeout)
     helper = joinpath(@__DIR__, "windows", "dump_descendants.jl")
     try
         existing = count(name -> endswith(name, ".dmp"), readdir(dump_folder))
-        budget = dump_count - 1 - existing
-        if budget <= 0
-            println(stderr, "\n\nProcess still alive; not dumping its descendants, no upload slot is left for them (the uploader takes $(dump_count) dumps, $(existing) are there, and PID $(proc_pid)'s comes next).")
-            return
-        end
+        budget = max(0, dump_count - 1 - existing)
         cmd = `$(Base.julia_cmd()) --startup-file=no $(helper) $(proc_pid) $(proc_created) $(dump_folder) $(budget) $(dump_reserve_gib) $(token)`
-        println(stderr, "\n\nProcess still alive; dumping up to $(budget) of its descendants first, for at most $(timeout)s.")
+        if budget == 0
+            println(stderr, "\n\nProcess still alive; not dumping its descendants, no upload slot is left for them (the uploader takes $(dump_count) dumps, $(existing) are there, and PID $(proc_pid)'s comes next).  Having them print their task backtraces first, for at most $(timeout)s.")
+        else
+            println(stderr, "\n\nProcess still alive; dumping up to $(budget) of its descendants and having them print their task backtraces first, for at most $(timeout)s.")
+        end
         helper_proc = run(pipeline(cmd; stdin=devnull, stdout=stderr, stderr=stderr); wait=false)
         if timedwait(() -> !process_running(helper_proc), timeout) != :ok
             println(stderr, "Dumping the descendants took longer than $(timeout)s; stopping.")

@@ -12,6 +12,15 @@
 # RESERVE_GIB GiB of disk space is free.  A dump is written to `<name>.<TOKEN>.partial`
 # and renamed when complete, unless a file of that name exists by then, so the caller can
 # delete what is left when it has to stop us.  Every failure is reported and skipped.
+#
+# Then it has PID and each Julia process among its descendants print the backtraces of all
+# its tasks to its own stderr, which the test driver relays into the log: a dump shows the
+# threads only, not the tasks parked on them, and names no JIT-compiled frames.  On
+# Windows the test processes have no signal handler that would print them, so we start a
+# thread at `jl_print_task_backtraces` in each (as one would `call` it from a debugger),
+# but only in a process that has loaded the same libjulia-internal file as we have, so
+# that the function is at the same offset in it, and only from Julia 1.14 on, which can
+# record a backtrace from a thread it does not know.
 
 include(joinpath(@__DIR__, "descendants.jl"))
 
@@ -138,6 +147,105 @@ function dump_process(proc, folder, token)
     return path
 end
 
+const PROCESS_CREATE_THREAD = 0x0002
+const PROCESS_VM_OPERATION = 0x0008
+const PROCESS_VM_WRITE = 0x0020
+const LIST_MODULES_ALL = 0x03
+const GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS = 0x4
+const GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT = 0x2
+const WAIT_OBJECT_0 = 0x0
+# how long a process may take to print its backtraces
+const PRINT_TIMEOUT_MS = 20_000
+
+# The file mapped at module `mod` of `process`, as an NT path with every drive letter, subst
+# and junction resolved: the same file can be loaded under different names (the test
+# processes see the Julia install through a substituted drive, those started from PATH
+# through the directory it stands for).
+function module_file(process, mod)
+    buf = Vector{UInt16}(undef, 32768)
+    n = ccall((:K32GetMappedFileNameW, "kernel32"), UInt32,
+              (Ptr{Cvoid}, Ptr{Cvoid}, Ptr{UInt16}, UInt32), process, mod, buf, length(buf))
+    n == 0 && error("GetMappedFileName failed: $(last_error())")
+    return lowercase(transcode(String, buf[1:n]))
+end
+
+# Our libjulia-internal: its file, and the offset of jl_print_task_backtraces in it
+function local_printer()
+    fn = cglobal(:jl_print_task_backtraces)
+    mod = Ref{Ptr{Cvoid}}(C_NULL)
+    ccall((:GetModuleHandleExW, "kernel32"), Cint, (UInt32, Ptr{Cvoid}, Ref{Ptr{Cvoid}}),
+          GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+          fn, mod) == 0 && error("GetModuleHandleExW failed: $(last_error())")
+    self = ccall((:GetCurrentProcess, "kernel32"), Ptr{Cvoid}, ())
+    return module_file(self, mod[]), UInt(fn) - UInt(mod[])
+end
+
+# The base address of the module of file `file` in `process`, or nothing
+function remote_module(process, file)
+    mods = Vector{Ptr{Cvoid}}(undef, 4096)
+    needed = Ref{UInt32}(0)
+    ccall((:K32EnumProcessModulesEx, "kernel32"), Cint,
+          (Ptr{Cvoid}, Ptr{Ptr{Cvoid}}, UInt32, Ref{UInt32}, UInt32),
+          process, mods, sizeof(mods), needed, LIST_MODULES_ALL) == 0 &&
+        error("EnumProcessModulesEx failed: $(last_error())")
+    for mod in mods[1:min(length(mods), needed[] ÷ sizeof(Ptr{Cvoid}))]
+        module_file(process, mod) == file && return mod
+    end
+    return nothing
+end
+
+# Have process `pid` print its task backtraces to its stderr, waiting at most
+# PRINT_TIMEOUT_MS.  Returns a description of what happened.
+function print_backtraces(pid, printer)
+    file, offset = printer
+    process = ccall((:OpenProcess, "kernel32"), Ptr{Cvoid}, (UInt32, Cint, UInt32),
+                    PROCESS_CREATE_THREAD | PROCESS_QUERY_INFORMATION | PROCESS_VM_OPERATION |
+                    PROCESS_VM_WRITE | PROCESS_VM_READ, false, pid)
+    process == C_NULL && error("OpenProcess failed: $(last_error())")
+    try
+        base = remote_module(process, file)
+        base === nothing && return "it has not loaded $(file)"
+        thread = ccall((:CreateRemoteThread, "kernel32"), Ptr{Cvoid},
+                       (Ptr{Cvoid}, Ptr{Cvoid}, Csize_t, Ptr{Cvoid}, Ptr{Cvoid}, UInt32, Ptr{UInt32}),
+                       process, C_NULL, 0, Ptr{Cvoid}(UInt(base) + offset), C_NULL, 0, C_NULL)
+        thread == C_NULL && error("CreateRemoteThread failed: $(last_error())")
+        start = time()
+        result = ccall((:WaitForSingleObject, "kernel32"), UInt32, (Ptr{Cvoid}, UInt32),
+                       thread, PRINT_TIMEOUT_MS)
+        close_handle(thread)
+        result == WAIT_OBJECT_0 || return "still printing after $(PRINT_TIMEOUT_MS ÷ 1000)s; going on"
+        return "printed in $(round(time() - start; digits=1))s"
+    finally
+        close_handle(process)
+    end
+end
+
+function print_all_backtraces(root, procs)
+    # Before 1.14 (JuliaLang/julia#62288), recording the backtrace of another task on a
+    # thread Julia does not know, as ours, dereferences its null current task, which
+    # crashes the process.
+    if VERSION < v"1.14.0-alpha1"
+        println("Not printing the task backtraces of the Julia processes: Julia $(VERSION) crashes when asked from a foreign thread.")
+        return
+    end
+    julias = filter(proc -> lowercase(proc.name) == "julia.exe" && running(proc.handle), procs)
+    printer = try
+        local_printer()
+    catch err
+        println("Not printing the task backtraces of the Julia processes: ", sprint(showerror, err))
+        return
+    end
+    # deepest first: a driver relays the output of its workers, a worker that of its children
+    for pid in [reverse!([proc.pid for proc in julias]); root]
+        what = "PID $(pid)"
+        try
+            println("Printing the task backtraces of $(what) to its stderr: ", print_backtraces(pid, printer), ".")
+        catch err
+            println("Unable to print the task backtraces of $(what): ", sprint(showerror, err))
+        end
+    end
+end
+
 function main(root, root_created, folder, budget, reserve_gib, token)
     procs = list_descendants(root, root_created)
     try
@@ -162,6 +270,7 @@ function main(root, root_created, folder, budget, reserve_gib, token)
                 println("Unable to dump $(what): ", sprint(showerror, err))
             end
         end
+        print_all_backtraces(root, procs)
     finally
         foreach(proc -> close_handle(proc.handle), procs)
     end
