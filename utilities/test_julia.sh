@@ -80,10 +80,10 @@ if [[ "${OS}" != windows* ]]; then
     # Tell timeout.jl to detach the process group, so we get core dumps from
     # each process.
     export JL_TERM_DETACH="true"
-    # On timeout, SIGTERM the test driver before core-dumping it, so that it
-    # can core-dump the (detached, otherwise unreachable) workers that are
-    # still running tests.  See the escalation pipeline in timeout.jl.
-    export JL_TERM_SIGTERM="true"
+    # On timeout, core-dump the test workers (detached, so out of reach of the
+    # group's SIGQUIT) before the test driver, which then still relays their
+    # backtraces.  See the escalation pipeline in timeout.jl.
+    export JL_DUMP_DETACHED="true"
 fi
 
 # Make sure that temp files and temp directories are created in a location that is
