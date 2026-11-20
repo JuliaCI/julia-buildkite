@@ -8,25 +8,37 @@
 # Relevant environment variables:
 #
 #  - JL_TEST_TIMEOUT:     How long to wait for the task to complete before starting the
-#                         teardown escalation pipeline (SIGTERM -> SIGQUIT -> SIGKILL).
+#                         teardown escalation pipeline (SIGTERM, then dumping the detached
+#                         descendants, -> SIGQUIT -> SIGKILL).
 #                         Defaults to 2 hours.
 #  - JL_TEARDOWN_TIMEOUT: How long to wait for the process group to exit after SIGTERM
-#                         before escalating.  This covers graceful teardown work, e.g.
-#                         the test driver core-dumping its stuck workers, or `rr`
-#                         finishing off its recording, which can take a long time.
+#                         before escalating, and for the detached descendants to exit after
+#                         their SIGQUIT (JL_DUMP_DETACHED).  This covers graceful teardown
+#                         work, e.g. `rr` finishing off its recording, or the test workers
+#                         writing their core dumps, which can take a long time.
 #                         Defaults to 10 minutes.
 #  - JL_KILL_TIMEOUT:     How long to wait for the process group to exit after SIGQUIT
 #                         (including time spent writing core dumps) before escalating
 #                         to SIGKILL.  Defaults to 10 minutes.
-#  - JL_TERM_SIGTERM:     Whether to start the escalation with SIGTERM, which asks the
-#                         test driver to core-dump its stuck workers (they run in
-#                         detached sessions, out of reach of our process-group signals;
-#                         see test/runtests.jl in JuliaLang/julia).  This stage signals
-#                         the driver alone rather than its process group, so that the
-#                         children which *are* in reach survive to be dumped.
-#                         Defaults to false.
+#  - JL_TERM_SIGTERM:     Whether to start the escalation with SIGTERM to the wrapped
+#                         process alone, never its group, which asks it to finish up: `rr`
+#                         then completes its recording.  Not for the Julia test suite: the
+#                         wrapped process there is the `Base.runtests` wrapper, which exits
+#                         without passing it on, and the test driver below it would react
+#                         by signalling its workers from an `atexit` hook, where it no longer
+#                         relays their output (see JL_DUMP_DETACHED).  Defaults to false.
 #  - JL_TERM_SIGQUIT:     Whether to include the SIGQUIT (coredump) stage.  Defaults to
 #                         true.
+#  - JL_DUMP_DETACHED:    Unix only: before the SIGQUIT stage, SIGQUIT the descendants of the
+#                         wrapped process that are outside its process group, deepest first,
+#                         and wait up to JL_TEARDOWN_TIMEOUT for them to exit.  These are the
+#                         test workers, which Distributed starts in sessions of their own,
+#                         and their children: a group-wide signal cannot reach them.  Doing
+#                         this while the test driver still runs lets it relay what they
+#                         print (the backtraces of all their tasks) into the log; once the
+#                         driver has been signalled it stops reading their output, and a
+#                         worker that fills its pipe blocks before it can dump core.  Only
+#                         with JL_TERM_SIGQUIT.  Defaults to false.
 #  - JL_TEARDOWN_MARKER:  A file to create when the watchdog fires, so that the core dump
 #                         reaper of test_julia.sh keeps the cores of the hung processes.
 #                         Optional.
@@ -82,6 +94,7 @@ teardown_timeout = parse_time_period(get(ENV, "JL_TEARDOWN_TIMEOUT", "10m"))
 kill_timeout = parse_time_period(get(ENV, "JL_KILL_TIMEOUT", "10m"))
 do_term = parse_bool(get(ENV, "JL_TERM_SIGTERM", "false"))
 do_quit = parse_bool(get(ENV, "JL_TERM_SIGQUIT", "true"))
+do_dump_detached = parse_bool(get(ENV, "JL_DUMP_DETACHED", "false"))
 do_detach = parse_bool(get(ENV, "JL_TERM_DETACH", "false"))
 dump_folder = get(ENV, "JL_DUMP_FOLDER", "")
 dump_count = parse(Int, get(ENV, "JL_DUMP_COUNT", "1"))
@@ -89,6 +102,9 @@ dump_reserve_gib = parse(Int, get(ENV, "JL_DUMP_RESERVE_GIB", "20"))
 
 if Sys.iswindows() && do_detach
     error("JL_TERM_DETACH is not available on windows")
+end
+if Sys.iswindows() && do_dump_detached
+    error("JL_DUMP_DETACHED is not available on windows")
 end
 
 # Setup logs dir
@@ -133,9 +149,7 @@ proc_created = Sys.iswindows() && Sys.WORD_SIZE == 64 && !isempty(dump_folder) &
 
 kill_proc_or_pgid(sig) = do_detach ? ccall(:kill, Cint, (Cpid_t, Cint), -proc_pid, sig) : kill(proc, sig)
 
-# Signal the wrapped process alone, never its group.  The SIGTERM stage must use
-# this: a group-wide SIGTERM reaches the driver's own children, and they die from
-# it before the driver can dump them.
+# Signal the wrapped process alone, never its group.
 kill_proc(sig) = kill(proc, sig)
 
 # Set when the watchdog fires, so we know to wait for the teardown of the
@@ -156,6 +170,85 @@ function await_group_exit(timeout)
         sleep(1)
     end
     return !pg_alive()
+end
+
+# The direct children of `pid`, best effort: it may exit while we look.
+function child_pids(pid)
+    children = Int[]
+    try
+        if Sys.islinux()
+            for tid in readdir("/proc/$pid/task")
+                append!(children, parse.(Int, split(read("/proc/$pid/task/$tid/children", String))))
+            end
+        else
+            # `pgrep -P` exits non-zero when there are no matches
+            append!(children, parse.(Int, split(read(ignorestatus(`pgrep -P $pid`), String))))
+        end
+    catch
+    end
+    return children
+end
+
+getpgid(pid) = ccall(:getpgid, Cpid_t, (Cpid_t,), pid)
+
+# The live descendants of `root` outside its process group, and everything below them,
+# deepest first: the processes that a signal to the group misses.
+function detached_descendants(root)
+    group = getpgid(root)
+    found = Int[]
+    queue = [(root, false)]
+    while !isempty(queue)
+        pid, detached = popfirst!(queue)
+        for child in child_pids(pid)
+            child_group = getpgid(child)
+            child_group == -1 && continue   # gone
+            child_detached = detached || child_group != group
+            child_detached && push!(found, child)
+            push!(queue, (child, child_detached))
+        end
+    end
+    return reverse!(found)
+end
+
+# Whether `pid` is still running.  A process that has exited is a zombie until its parent
+# reaps it, and signal 0 still reaches a zombie; on Linux, check its state instead.
+function running(pid)
+    if Sys.islinux()
+        stat = try
+            read("/proc/$pid/stat", String)
+        catch
+            return false
+        end
+        # the state is the field after the parenthesised command name
+        return split(stat[something(findlast(')', stat), 0)+1:end])[1] != "Z"
+    end
+    return ccall(:kill, Cint, (Cpid_t, Cint), pid, 0) == 0
+end
+
+# SIGQUIT the descendants that our group signals cannot reach, while the test driver is
+# still alive to relay their output, and wait up to `timeout` seconds for them to exit.  A
+# wedged process can swallow a SIGQUIT without dumping: a repeated SIGQUIT makes Julia
+# raise it for a kernel core dump, and SIGABRT covers processes that ignore SIGQUIT.
+function dump_detached(timeout)
+    pids = filter(pid -> ccall(:kill, Cint, (Cpid_t, Cint), pid, Base.SIGQUIT) == 0,
+                  detached_descendants(proc_pid))
+    isempty(pids) && return
+    println(stderr, "\n\nSent SIGQUIT to the $(length(pids)) process(es) outside the process group of PID $(proc_pid), deepest first (the test workers and their children: PIDs $(join(pids, ", "))), so that they print their backtraces and core-dump while the test driver still relays their output.")
+    SIGABRT = 6
+    resignal = [(30, Base.SIGQUIT), (60, SIGABRT), (90, SIGABRT)]
+    start = time()
+    while any(running, pids) && time() - start < timeout
+        sleep(1)
+        if !isempty(resignal) && time() - start >= resignal[1][1]
+            after, sig = popfirst!(resignal)
+            for pid in filter(running, pids)
+                ccall(:kill, Cint, (Cpid_t, Cint), pid, sig) == 0 || continue
+                println(stderr, "Process $(pid) is still running $(after)s after SIGQUIT; re-signalling it with signal $(sig) to force a core dump.")
+            end
+        end
+    end
+    left = filter(running, pids)
+    isempty(left) || println(stderr, "Processes still running after $(timeout)s: $(join(left, ", ")).")
 end
 
 # Dump the descendants of the wrapped process on Windows, in a helper process that we stop
@@ -194,7 +287,7 @@ timer_task = @async begin
     sleep(test_timeout)
 
     # If the process is still running, run the escalation pipeline:
-    #   SIGTERM -> SIGQUIT -> SIGKILL
+    #   SIGTERM -> SIGQUIT of the detached descendants -> SIGQUIT -> SIGKILL
     if process_running(proc)
         timed_out[] = true
         pid_or_pgid = do_detach ? "PGID" : "PID"
@@ -206,14 +299,17 @@ timer_task = @async begin
             @warn "Unable to create the teardown marker; core dumps beyond the first few may be deleted" marker exception=err
         end
 
-        # SIGTERM: ask nicely.  The test driver will respond by SIGQUIT-ing the
-        # workers that are still running tests, so that we collect core dumps
-        # of the processes that are actually stuck (the workers run in detached
-        # sessions out of reach of our signals).
+        # SIGTERM: ask nicely.
         if pg_alive() && do_term
-            println(stderr, "\n\nProcess group still alive after $(test_timeout)s; sending SIGTERM to PID $(proc_pid) so the test driver can tear down and core-dump its stuck workers.")
+            println(stderr, "\n\nProcess group still alive after $(test_timeout)s; sending SIGTERM to PID $(proc_pid) so that it can finish up.")
             kill_proc(Base.SIGTERM)
             await_group_exit(teardown_timeout)
+        end
+
+        # The test workers, out of reach of the group signals below; first, so that the
+        # test driver relays their backtraces.
+        if do_dump_detached && do_quit && pg_alive()
+            dump_detached(teardown_timeout)
         end
 
         # Windows has no SIGTERM stage or process groups, and SIGQUIT dumps the test
