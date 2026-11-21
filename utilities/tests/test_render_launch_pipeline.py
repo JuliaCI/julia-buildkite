@@ -260,13 +260,13 @@ class RenderLaunchPipelineTests(unittest.TestCase):
             r'.*?(?=^      - label:|^  - group:|\Z)',
             output, re.M | re.S,
         ).group()
-        self.assertIn('image: "juliapackaging/package-windows-x86_64:v8.10"', build)
+        self.assertIn('install_toolchain.jl \\\n'
+                      '                          "package_windows.x86_64.v8.14" '
+                      '"c1ee19169e6c3ddc16a28d609a00245aa5241a78"', build)
         self.assertIn('timeout_in_minutes: 270', build)
         self.assertIn('soft_fail: false', build)
         self.assertIn('TRIPLET: "x86_64-w64-mingw32opt"', build)
         self.assertIn('JULIA_CI_BUILD_MODE: "opt"', build)
-        # The Docker plugin must forward the mode into the build container.
-        self.assertRegex(build, r'environment:\n(?:.*\n)*?\s+- "JULIA_CI_BUILD_MODE"')
         test = re.search(
             r'^      - label: ":windows: test x86_64-w64-mingw32opt"\n'
             r'.*?(?=^      - label:|^  - group:|\Z)',
@@ -274,6 +274,32 @@ class RenderLaunchPipelineTests(unittest.TestCase):
         ).group()
         self.assertIn('timeout_in_minutes: 225', test)
         self.assertIn('soft_fail: true', test)
+
+    def test_windows_builds_use_one_toolchain(self):
+        # Every Windows job that builds Julia installs a toolchain tree into the julia
+        # plugin's depot and runs under toolchain.sh; those of one branch pin the same tree.
+        output = render(**EXTENDED_PR)
+        steps = re.findall(
+            r'^      - label: ":windows: (?:build|coverage) .*?(?=^      - |^  - group:|\Z)',
+            output, re.M | re.S)
+        labels = [step.splitlines()[0] for step in steps]
+        self.assertEqual(len(steps), 4, labels)  # build, nogpl, opt, coverage
+        pins = set()
+        for label, step in zip(labels, steps):
+            with self.subTest(label):
+                pin = re.search(r'install_toolchain\.jl \\\n\s+"?([^"\s]+)"? "?([^"\s]+)"?\)', step)
+                self.assertTrue(pin, step)
+                # What install_toolchain.jl accepts
+                self.assertRegex(pin.group(1), r'^package_windows\.(x86_64|i686)\.v[0-9]+\.[0-9]+$')
+                self.assertRegex(pin.group(2), r'^[0-9a-f]{40}$')
+                pins.add(pin.groups())
+                self.assertIn("- JuliaCI/julia#v1:", step)
+                self.assertRegex(step, r'(?m)^          bash \.buildkite/utilities/windows/toolchain\.sh '
+                                       r'--root "\$\$\{TOOLCHAIN\}" ')
+                self.assertNotIn("sched_toolchain", step)
+        self.assertEqual(len(pins), 1, pins)
+        self.assertNotIn("docker#", output)
+        self.assertNotIn("juliapackaging/package-windows", output)
 
     def test_windows_dump_count_matches_the_uploads(self):
         # timeout.jl budgets its dumps of the test workers by JL_DUMP_COUNT, as the
