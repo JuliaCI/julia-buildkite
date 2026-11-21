@@ -174,9 +174,16 @@ if [[ "${branch}" == release-* ]] || \
    [[ "${BUILDKITE_SOURCE:-}" == "schedule" ]]; then
     echo "On important branch '${branch}' or pipeline '${pipeline}': running all external stdlib tests"
 else
-    # Skip all external stdlibs that aren't in CHANGED_STDLIB_VERSIONS
+    # Skip the external stdlibs that neither changed nor depend on one that did: a bump
+    # of LinearAlgebra must also run the tests of SparseArrays, which uses it.
+    AFFECTED_STDLIBS=" "
+    if [[ -n "${CHANGED_STDLIB_VERSIONS:-}" ]]; then
+        # shellcheck disable=SC2086 # one argument per stdlib
+        AFFECTED_STDLIBS=" $(${JULIA_BINARY} --startup-file=no .buildkite/utilities/stdlib_dependents.jl ${CHANGED_STDLIB_VERSIONS} | tr '\n' ' ')"
+        echo "Changed stdlibs:${CHANGED_STDLIB_VERSIONS}; testing them and their dependents:${AFFECTED_STDLIBS}"
+    fi
     for stdlib_name in ${EXTERNAL_STDLIB_NAMES}; do
-        if [[ "${CHANGED_STDLIB_VERSIONS:-}" != *"$stdlib_name"* ]]; then
+        if [[ "${AFFECTED_STDLIBS}" != *" ${stdlib_name} "* ]]; then
             EXTERNAL_STDLIB_SKIP_LIST+=("$stdlib_name")
         fi
     done
