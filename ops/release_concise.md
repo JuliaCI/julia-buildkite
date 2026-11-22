@@ -1,16 +1,16 @@
 # Concise release checklist
 
 1. Create tag
-    - [ ] `git tag vX.Y.Z <sha> && git push origin vX.Y.Z`
-    - [ ] Wait until `julia-ci` is green on `vX.Y.Z`
-    - [ ] Wait until `julia-publish` is green on `vX.Y.Z`
+    - [ ] `git tag v1.X.Y <sha> && git push origin v1.X.Y`
+    - [ ] Wait until `julia-ci` is green on `v1.X.Y`
+    - [ ] Wait until `julia-publish` is green on `v1.X.Y`
 2. `julia-promote`
-    - [ ] `bk build create -p julialang/julia-promote --branch vX.Y.Z --commit -m "Promote vX.Y.Z" -i`
-    - [ ] Wait until `julia-promote` is green on `vX.Y.Z`
+    - [ ] `bk build create -p julialang/julia-promote --branch v1.X.Y --commit v1.X.Y -m 'Promote v1.X.Y' -i`
+    - [ ] Wait until `julia-promote` is green on `v1.X.Y`
 3. GitHub release
-    - [ ] If latest Julia release:           `gh release create vX.Y.Z --repo JuliaLang/julia --verify-tag --latest=true  --title vX.Y.Z`
-    - [ ] If older Julia release (e.g. LTS): `gh release create vX.Y.Z --repo JuliaLang/julia --verify-tag --latest=false --title vX.Y.Z`
-    - [ ] `contrib/github_source_release.sh vX.Y.Z --execute`
+    - [ ] If latest Julia release:           `gh release create v1.X.Y --repo JuliaLang/julia --verify-tag --latest=true  --title v1.X.Y`
+    - [ ] If older Julia release (e.g. LTS): `gh release create v1.X.Y --repo JuliaLang/julia --verify-tag --latest=false --title v1.X.Y`
+    - [ ] `contrib/github_source_release.sh v1.X.Y --execute`
 4. `versions.json`
     - [ ] Trigger: https://github.com/JuliaLang/VersionsJSONUtil.jl/actions/workflows/CI.yml
     - [ ] Wait until it's done.
