@@ -1,5 +1,5 @@
-# OS     TRIPLET              ARCH       MAKE_FLAGS                                                                                                                                                                                                                                        TIMEOUT     DOCKER_TAG
-windows  x86_64-w64-mingw32   x86_64     VERBOSE=1,JL_CFLAGS="-Werror -Wno-error=array-bounds -Wno-error=array-bounds= -Wno-error=infinite-recursion",JL_CXXFLAGS="-Werror -Wno-error=array-bounds -Wno-error=array-bounds= -Wno-error=infinite-recursion"                                 .           v8.10
+# OS     TRIPLET              ARCH       MAKE_FLAGS                                                                                                                                                                                                                                        TIMEOUT     ROOTFS_IMAGE_NAME          ARCH_ROOTFS    ROOTFS_TAG    ROOTFS_HASH
+windows  x86_64-w64-mingw32   x86_64     VERBOSE=1,JL_CFLAGS="-Werror -Wno-error=array-bounds -Wno-error=array-bounds= -Wno-error=infinite-recursion",JL_CXXFLAGS="-Werror -Wno-error=array-bounds -Wno-error=array-bounds= -Wno-error=infinite-recursion"                                 .           package_windows            x86_64         v8.14         c1ee19169e6c3ddc16a28d609a00245aa5241a78
 
 # These special lines allow us to embed default values for the columns above.
 # Any column without a default mapping here will simply substitute a `.` to the empty string

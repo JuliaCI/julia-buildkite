@@ -1,6 +1,6 @@
 # ROOTFS_IMAGE_NAME    TRIPLET                ARCH      ARCH_ROOTFS    TIMEOUT    USE_RR    ROOTFS_TAG     ROOTFS_HASH    SCHED_CPUS    SCHED_CPUS_LIMIT    SCHED_MEM_GIB    SCHED_MEM_LIMIT_GIB
-tester_linux           x86_64-linux-gnuopt    x86_64    x86_64         .          .         v8.13           3908b6728770c9d6ffdde835fbe8957948bf6d93    .    .    .    .
-tester_linux           aarch64-linux-gnuopt   aarch64   aarch64        165        .         v8.13           6720d73609cc299fb87bdb8052695cf090237695    8    8    12    .
+tester_linux           x86_64-linux-gnuopt    x86_64    x86_64         .          .         v8.14           9a9c90f4967a788db36f48c9fb8c0c9bfa4f3c04    .    .    .    .
+tester_linux           aarch64-linux-gnuopt   aarch64   aarch64        165        .         v8.14           6c552b9856386db27dd2ed365233fea2e15bbdd3    8    8    12    .
 
 # These special lines allow us to embed default values for the columns above.
 # Any column without a default mapping here will simply substitute a `.` to the empty string
