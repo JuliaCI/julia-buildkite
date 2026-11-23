@@ -177,8 +177,8 @@ class RenderLaunchPipelineTests(unittest.TestCase):
         # Check the new platform's rendered jobs, including agent routing and
         # sandbox images: aggregate job counts alone cannot catch a wrong arch.
         for job, image, tag, treehash, timeout, soft_fail in (
-            ("build", "package_linux", "v8.8", "52b733db5ed13474c82a64dcacfef1291b5c7725", 420, "false"),
-            ("test", "tester_linux", "v8.5", "c5927d46d70cb83c9baa94c0886c049998beb7cc", 255, "true"),
+            ("build", "package_linux", "v8.14", "d9b875772d8c569935492b36580bd7658ff99b13", 420, "false"),
+            ("test", "tester_linux", "v8.14", "6c552b9856386db27dd2ed365233fea2e15bbdd3", 255, "true"),
         ):
             with self.subTest(job=job):
                 match = re.search(
@@ -308,15 +308,15 @@ class RenderLaunchPipelineTests(unittest.TestCase):
                         jobs[key[1]] = block
 
                 build = jobs["build_i686-linux-gnuopt"]
-                self.assertIn("/v8.8/package_linux.i686.tar.gz", build)
-                self.assertIn('rootfs_treehash: "58ec4d9a27f63c5512f2eddb2b401828c8af5910"', build)
+                self.assertIn("/v8.14/package_linux.i686.tar.gz", build)
+                self.assertIn('rootfs_treehash: "26c3228ee5de81261653334e3471a1ff65c536ee"', build)
                 self.assertIn('JULIA_CI_BUILD_MODE: "opt"', build)
                 self.assertIn("soft_fail: false", build)
 
                 for suffix, group in (("", "no-net"), ("net", "net")):
                     job = jobs[f"test_i686-linux-gnuopt{suffix}"]
-                    self.assertIn("/v8.5/tester_linux.i686.tar.gz", job)
-                    self.assertIn('rootfs_treehash: "732df9bae7e11ac7c03bd6bd4f15027750552057"', job)
+                    self.assertIn("/v8.14/tester_linux.i686.tar.gz", job)
+                    self.assertIn('rootfs_treehash: "dadccd1d8e59d17633a8dc689acdf0a2165b27cd"', job)
                     self.assertIn(f'i686_GROUP: "{group}"', job)
                     self.assertIn("soft_fail: true", job)
                     self.assertIn('depends_on:\n          - "build_i686-linux-gnuopt"', job)
