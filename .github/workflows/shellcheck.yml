@@ -30,3 +30,8 @@ jobs:
         run: python3 utilities/tests/test_width.py
       - name: Test the core dump limits
         run: python3 utilities/tests/test_core_dumps.py
+      - uses: julia-actions/setup-julia@da908477b5db94c10ffce8cfea9f2b3b9d5db687 # v3.0.3
+        with:
+          version: '1'
+      - name: Test the choice of sources of the Windows toolchain installer
+        run: julia --startup-file=no utilities/tests/test_install_toolchain.jl
