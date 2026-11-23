@@ -1,5 +1,5 @@
 # ROOTFS_IMAGE_NAME    TRIPLET                          ARCH           ARCH_ROOTFS    TIMEOUT    USE_RR   ROOTFS_TAG    ROOTFS_HASH    SCHED_CPUS    SCHED_CPUS_LIMIT    SCHED_MEM_GIB    SCHED_MEM_LIMIT_GIB
-tester_linux           aarch64-linux-gnu                aarch64        aarch64        165        .        v8.5         c5927d46d70cb83c9baa94c0886c049998beb7cc    8    8    13    .
+tester_linux           aarch64-linux-gnu                aarch64        aarch64        165        .        v8.14        6c552b9856386db27dd2ed365233fea2e15bbdd3    8    8    13    .
 # tester_linux         armv7l-linux-gnueabihf           armv7l         armv7l         .          .        ----          ----------------------------------------    .    .    .    .
 # tester_musl            x86_64-linux-musl                x86_64         x86_64         .          .        v6.00         6eaef301e981bbcdbc054c5b6d4f33c7eaedb64a    .    .    .    .
 # tester_linux         x86_64-linux-gnummtk      x86_64         x86_64         .          .          v8.5         0180f0aba045c63c44e4732b7981716aa77eaf71    .    .    23    96
