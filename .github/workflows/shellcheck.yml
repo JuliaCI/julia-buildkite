@@ -36,6 +36,11 @@ jobs:
         run: python3 utilities/tests/test_core_dumps.py
       - name: Test the S3 upload helper
         run: python3 utilities/tests/test_upload_to_s3.py
+      - uses: julia-actions/setup-julia@da908477b5db94c10ffce8cfea9f2b3b9d5db687 # v3.0.3
+        with:
+          version: '1'
+      - name: Test the choice of sources of the Windows toolchain installer
+        run: julia --startup-file=no utilities/tests/test_install_toolchain.jl
       - name: Install buildkite-agent
         # The same release (and sha256) that JuliaCI/sandboxed-buildkite-agent
         # deploys to the Linux agents

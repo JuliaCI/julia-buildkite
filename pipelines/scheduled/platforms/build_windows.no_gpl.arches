@@ -1,5 +1,5 @@
-# OS       TRIPLET                    ARCH       MAKE_FLAGS      TIMEOUT     DOCKER_TAG
-windows    x86_64-w64-mingw32nogpl    x86_64     USE_GPL_LIBS=0  .           v8.10
+# OS       TRIPLET                    ARCH       MAKE_FLAGS      TIMEOUT     ROOTFS_IMAGE_NAME          ARCH_ROOTFS    ROOTFS_TAG    ROOTFS_HASH
+windows    x86_64-w64-mingw32nogpl    x86_64     USE_GPL_LIBS=0  .           package_windows            x86_64         v8.14         c1ee19169e6c3ddc16a28d609a00245aa5241a78
 # TODO: fix gcc warning, and add flags `JL_CFLAGS=-Werror,JL_CXXFLAGS=-Werror` to MAKE_FLAGS
 
 # These special lines allow us to embed default values for the columns above.
