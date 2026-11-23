@@ -3,7 +3,7 @@ package_linux          i686-linux-gnu                 x86_64         i686       
 package_linux          x86_64-linux-gnu               x86_64         x86_64         JL_CFLAGS=-Werror,JL_CXXFLAGS=-Werror                                                   .             v8.14         411212e14a3c8c4af1aae5ebe367c24728dcee65    .    .    .    .
 package_linux          x86_64-linux-gnuassert         x86_64         x86_64         FORCE_ASSERTIONS=1,LLVM_ASSERTIONS=1,JL_CFLAGS=-Werror,JL_CXXFLAGS=-Werror              .             v8.14         411212e14a3c8c4af1aae5ebe367c24728dcee65    .    .    .    .
 package_linux          x86_64-linux-gnuprofiling      x86_64         x86_64         WITH_TRACY=1,WITH_ITTAPI=1,WITH_TIMING_COUNTS=1,JL_CFLAGS=-Werror,JL_CXXFLAGS=-Werror           .             v8.14         411212e14a3c8c4af1aae5ebe367c24728dcee65    .    .    .    .
-package_linux          aarch64-linux-gnu              aarch64        aarch64        JL_CFLAGS=-Werror,JL_CXXFLAGS=-Werror                                                    .             v8.14         d9b875772d8c569935492b36580bd7658ff99b13    .    .    .    .
+package_linux          aarch64-linux-gnu              aarch64        aarch64        JL_CFLAGS=-Werror,JL_CXXFLAGS=-Werror                                                    .             v8.5          002faf91417acac72e7ae843e8601711ffbb60f9    .    .    .    .
 # package_musl           x86_64-linux-musl              x86_64         x86_64         JL_CFLAGS=-Werror,JL_CXXFLAGS=-Werror                                                   .             v7.3          0566496527284ed8b638273babbb5735b44d2b7e    .    .    .    .
 
 # These special lines allow us to embed default values for the columns above.
