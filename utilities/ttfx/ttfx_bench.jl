@@ -419,7 +419,7 @@ function run_repeats(task_cmd::Cmd, repeats::Int, timeout::Float64, logname::Str
     err_msg = ""
     for _ in 1:repeats
         out, err, ok, timed_out = run_timed(task_cmd, timeout)
-        m = match(r"([\d.]+),\s*([\d.]+),\s*([\d.]+)\s+seconds", out)
+        m = match(r"([\d.eE+-]+),\s*([\d.eE+-]+),\s*([\d.eE+-]+)\s+seconds", out)
         if m === nothing || !ok
             err_msg = failure_message("task", out, err, timed_out, timeout; logname = logname * "$(length(load) + 1)")
             break
