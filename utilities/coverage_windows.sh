@@ -21,7 +21,7 @@ else
 fi
 
 echo "--- Build Julia from source"
-make -j"${JULIA_NUM_THREADS}" VERBOSE=1 JULIA_COVERAGE_IMAGES=1 JULIA_CHECK_BOUNDS_PKGIMAGES="${JULIA_CHECK_BOUNDS_PKGIMAGES:-1}"
+make -j"${JULIA_CPU_THREADS:?}" VERBOSE=1 JULIA_COVERAGE_IMAGES=1 JULIA_CHECK_BOUNDS_PKGIMAGES="${JULIA_CHECK_BOUNDS_PKGIMAGES:-1}"
 
 echo "--- Print Julia version info"
 ./usr/bin/julia.exe --color=yes -e 'using InteractiveUtils; InteractiveUtils.versioninfo()'
