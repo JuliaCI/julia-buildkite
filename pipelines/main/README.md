@@ -83,10 +83,12 @@ their own path lists and labels (`needs TTFX check`, `needs runtime benchmarks`;
 see `utilities/ttfx/README.md` and `utilities/runtime_benchmarks/README.md`).
 
 Pull requests with the `needs extended CI` label also run the scheduled workloads
-and coverage, and those with the `needs coverage CI` label run only coverage; like
-`needs full CI`, these labels count on a rebuild too. Pull request coverage is
-uploaded to Codecov without a token (Codecov comments on the pull request with
-the result), and is not uploaded to Coveralls, which needs one.
+and coverage, and the TTFX and runtime benchmark jobs of the macOS from-source
+build, which measure LLVM changes (`utilities/ttfx/README.md`). Those with the `needs coverage CI`
+label run only coverage. Like `needs full CI`, these labels count on a rebuild
+too. Pull request coverage is uploaded to Codecov without a token (Codecov
+comments on the pull request with the result), and is not uploaded to
+Coveralls, which needs one.
 
 The x86-64 Linux assertion build is tested under rr (with the `rr` and
 `rr-net` jobs) only in `julia-ci`; pull requests test it without rr.

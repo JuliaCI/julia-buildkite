@@ -20,8 +20,11 @@ source .buildkite/utilities/build_envs.sh
 TTFX_THREADS="${TTFX_THREADS:-4}"
 export JULIA_CPU_THREADS="${TTFX_THREADS}"
 
-# An optimized build's OS is macosopt
-if [[ "${OS%opt}" != "macos" ]]; then
+# The base build is always a regular one, also when the head is an optimized
+# (macosopt) or from-source (macossrc) build
+BASE_OS="${OS%opt}"
+BASE_OS="${BASE_OS%src}"
+if [[ "${BASE_OS}" != "macos" ]]; then
     echo "The TTFX job only knows how to re-sign and run macOS builds (got ${TRIPLET})" >&2
     exit 1
 fi
@@ -109,9 +112,7 @@ install_julia() {
 
 # The base tarball of a commit: staged by julia-ci below the commit sha, already promoted
 # to the nightlies, or staged by julia-pr when the commit is on a pull request's branch.
-# All are readable anonymously. The base is always a regular build, also when the head
-# is an optimized one.
-BASE_OS="${OS%opt}"
+# All are readable anonymously.
 fetch_base_build() {
     local commit="$1" out="$2"
     local short="${commit:0:${SHORT_COMMIT_LENGTH}}"

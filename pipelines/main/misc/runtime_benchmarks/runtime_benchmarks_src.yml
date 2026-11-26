@@ -1,0 +1,31 @@
+# The from-source build (USE_BINARYBUILDER=0) on the runtime benchmarks: the same job as
+# runtime_benchmarks_macos.yml, so that a pull request changing LLVM can be measured with
+# the `needs extended CI` label, as the TTFX job does (pipelines/main/misc/ttfx/ttfx_src.yml).
+# On a pull request it is compared with the master build of the merge-base; on the daily
+# julia-ci schedule, which has no merge-base, with the regular build of the same commit.
+# The renderer puts it in the Runtime benchmarks group and fills in RTB_BASE accordingly.
+# The job's own label and key keep it apart from the master job for julia-ci-timing. It
+# posts no commit status and may fail without failing the build.
+steps:
+  - group: "Runtime benchmarks"
+    steps:
+      - label: ":macos: Runtime benchmarks src aarch64-apple-darwin"
+        key: "runtime_benchmarks_src_aarch64-apple-darwin"
+        depends_on:
+          - "build_aarch64-apple-darwinsrc"
+        plugins:
+          - JuliaCI/external-buildkite#v1:
+              version: "./.buildkite-external-version"
+              repo_url: "https://github.com/JuliaCI/julia-buildkite"
+        commands: "bash .buildkite/utilities/runtime_benchmarks/runtime_benchmarks_ci.sh"
+        timeout_in_minutes: 90
+        soft_fail: true
+        agents:
+          queue: "test"
+          os: "macos"
+          # Timings are only comparable on one CPU model, as for the master job
+          cpu: "apple-m6"
+          arch: "aarch64"
+        env:
+          TRIPLET: "aarch64-apple-darwinsrc"
+          RTB_BASE: "${RTB_BASE?}"

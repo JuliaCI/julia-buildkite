@@ -21,6 +21,9 @@ RTB_THREADS="${RTB_THREADS:-4}"
 # Restrict to some categories (space separated); empty runs them all
 RTB_CATEGORIES="${RTB_CATEGORIES:-}"
 RTB_RELEASE="${RTB_RELEASE:-}"
+# "commit": compare with the regular build of this build's own commit rather than with
+# the merge-base (the nightly from-source build, runtime_benchmarks_src.yml)
+RTB_BASE="${RTB_BASE:-}"
 # Where julia-ci stages its tarballs, the promoted nightlies, and julia-pr's staging for
 # stacked pull requests; the same lookup as the TTFX job
 RTB_BASE_STAGING_BUCKET="${RTB_BASE_STAGING_BUCKET:-julialang-ephemeral-ci}"
@@ -49,6 +52,10 @@ upload_results() {
 trap upload_results EXIT
 
 ARMS_DIR="${RTB_DIR}/arms"
+# The base build is always a regular one, also when the head is an optimized
+# (macosopt) or from-source (macossrc) build
+BASE_OS="${OS%opt}"
+BASE_OS="${BASE_OS%src}"
 
 # Extract a tarball to ${ARMS_DIR}/<name>; on macOS re-sign it and repair the stdlib
 # pkgimage checksums the signing invalidated, as test_julia.sh and the TTFX job do
@@ -57,14 +64,13 @@ install_julia() {
     local dir="${ARMS_DIR}/${name}"
     mkdir -p "${dir}"
     tar -C "${dir}" --strip-components=1 -zxf "${tarball}"
-    if [[ "${OS%opt}" == "macos" ]]; then
+    if [[ "${BASE_OS}" == "macos" ]]; then
         .buildkite/utilities/macos/codesign.sh "${dir}"
         JULIA_DEBUG=all "${dir}/bin/julia" .buildkite/utilities/update_stdlib_pkgimage_checksums.jl
     fi
     echo "${name}: $("${dir}/bin/julia" --startup-file=no -e 'print(VERSION, "  ", Base.GIT_VERSION_INFO.commit)')"
 }
 
-BASE_OS="${OS%opt}"
 fetch_base_build() {
     local commit="$1" out="$2"
     local short="${commit:0:${SHORT_COMMIT_LENGTH}}"
@@ -125,6 +131,10 @@ ARMS=( "--arm=head=${HEAD_JULIA}" )
 MERGE_BASE=""
 if [[ -n "${RTB_RELEASE}" ]]; then
     : # a release stands alone
+elif [[ "${RTB_BASE}" == "commit" ]]; then
+    BASE_BRANCH="${BUILDKITE_BRANCH:-master}"
+    MERGE_BASE="$(git rev-parse HEAD)"
+    echo "--- Comparing against the regular ${BASE_BRANCH} build of this commit"
 elif [[ "${BUILDKITE_PIPELINE_SLUG:-}" == "julia-pr" && "${BUILDKITE_PULL_REQUEST:-false}" != "false" ]]; then
     BASE_BRANCH="${BUILDKITE_PULL_REQUEST_BASE_BRANCH:-master}"
     echo "--- Find the merge-base with ${BASE_BRANCH}"
@@ -215,8 +225,10 @@ set -e
 
 # A regression on a pull request is measured again with a control arm: the master build
 # before the merge-base. Two master builds differ in code placement as well, so a change
-# stands only when head also differs that way from the control.
-if [[ "${verdict}" == 1 && "${BUILDKITE_PIPELINE_SLUG:-}" == "julia-pr" && -n "${MERGE_BASE}" ]]; then
+# stands only when head also differs that way from the control. A from-source head is
+# skipped: it differs from both regular builds in how it was built, so the control would
+# keep every regression.
+if [[ "${verdict}" == 1 && "${BUILDKITE_PIPELINE_SLUG:-}" == "julia-pr" && -n "${MERGE_BASE}" && "${OS}" != *src ]]; then
     echo "--- Confirm the regressions against the master build before the merge-base"
     flagged="$("${HEAD_JULIA}" --startup-file=no "${RTB_DIR}/suite/tools/flagged.jl" "${RTB_DIR}/out")"
     flagged_categories="$(sed -n 1p <<< "${flagged}")"

@@ -1,0 +1,15 @@
+# OS       TRIPLET                     ARCH          MAKE_FLAGS                                                                                                                                                                  TIMEOUT
+macos      aarch64-apple-darwinsrc     aarch64       USE_BINARYBUILDER=0,USE_BINARYBUILDER_OPENBLAS=1,USE_BINARYBUILDER_LIBSUITESPARSE=1,USE_BINARYBUILDER_CSL=1,USE_BINARYBUILDER_NGHTTP2=1,JL_CFLAGS=-Werror,JL_CXXFLAGS=-Werror     .
+
+# These special lines allow us to embed default values for the columns above.
+# Any column without a default mapping here will simply substitute a `.` to the empty string
+
+# Built only to be measured on the TTFX tasks (pipelines/main/misc/ttfx/ttfx_src.yml), so
+# that a pull request changing LLVM can be measured before BinaryBuilder has built it.
+# Unlike the Linux source build it has no assertions, which would skew the timings.
+# The macOS agents have no Fortran compiler. Without one, Julia's Make.inc refuses to
+# build OpenBLAS or SuiteSparse, and CompilerSupportLibraries is copied from it, so
+# those three come from BinaryBuilder. They have no pkg-config either, which nghttp2's
+# configure requires, so nghttp2 does too.
+# Everything else, LLVM included, is built from source.
+#default TIMEOUT 240

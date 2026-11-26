@@ -9,7 +9,7 @@ repository's `main` branch at job time; everything that runs them lives here.
 
 | file | role |
 |---|---|
-| `pipelines/main/misc/ttfx/` | the group launcher (registered in `render_launch_pipeline.py`), the macOS job, and its release and optimized-build variants |
+| `pipelines/main/misc/ttfx/` | the group launcher (registered in `render_launch_pipeline.py`), the macOS job, and its release, optimized-build and from-source-build variants |
 | `ttfx_launch.sh` | the launch step: decides whether this build is measured, uploads the job |
 | `paths.txt` | the paths a pull request must touch to be measured without the label |
 | `ttfx_ci.sh` | the job: fetch the builds, check out the snippets, benchmark, compare, report |
@@ -27,6 +27,8 @@ repository's `main` branch at job time; everything that runs them lives here.
 | `julia-pr` (pull requests) | only when the pull request touches a path in `paths.txt` (`src/`, `Compiler/`, `base/loading.jl`, `base/precompilation.jl`), or has the `needs TTFX check` label | comparison: the pull request's build against the build of its merge-base (master's, or the base pull request's when stacked) |
 | `julia-ci` (master, release branches) | every build | absolute: the build alone |
 | `julia-ci` (the daily schedule) | the optimized macOS aarch64 build | comparison: the optimized build against the regular build of the same commit |
+| `julia-ci` (the daily schedule) | the from-source macOS aarch64 build | comparison: the from-source build against the regular build of the same commit |
+| `julia-pr` (pull requests with the `needs extended CI` label) | the from-source macOS aarch64 build | comparison: the from-source build against the build of the merge-base |
 | `julia-ci` (the weekly `TTFX_RELEASE` schedule) | the newest stable release, the LTS, and the next release's nightly | absolute: each release alone, as a reference |
 | `julia-buildkite-ci` (this repository's self-test) | every build | comparison: the julia master commit under test against its parent |
 
@@ -345,6 +347,26 @@ the job is `soft_fail`, so it never fails the nightly, and it posts no commit st
 (the master job's `TTFX` status is on the same commit). Its label and key
 (`:macos: TTFX opt <triplet>`, `ttfx_opt_<triplet>`) keep it apart for julia-ci-timing,
 which draws the optimized build next to the master series with the paired difference.
+
+## From-source builds: LLVM changes (the schedule, `needs extended CI`)
+
+The scheduled workloads include a macOS aarch64 build with `USE_BINARYBUILDER=0`
+(`aarch64-apple-darwinsrc`, `pipelines/scheduled/platforms/build_macos.schedule.arches`),
+which builds LLVM from `deps/llvm.version` rather than using the LLVM_jll. A few
+dependencies still come from BinaryBuilder: OpenBLAS, SuiteSparse and
+CompilerSupportLibraries, as the macOS agents have no Fortran compiler, and nghttp2, as
+they have no pkg-config. It is how an LLVM patch can be measured before BinaryBuilder has
+built it: add the `needs extended CI` label. After the build, a job in the `TTFX` group
+(`pipelines/main/misc/ttfx/ttfx_src.yml`) measures it in the comparison mode. On a pull
+request the base is the master build of the merge-base, as for the regular job. The
+daily schedule has no merge-base, so there the renderer sets `TTFX_BASE=commit` and the
+base is the regular build of the same commit.
+
+The base was built with BinaryBuilder's dependencies, so part of any difference is how
+those were built, not what the pull request changed. The schedule's paired difference
+shows that part on master. The job is `soft_fail` and posts no commit status; the build
+is not, like the Linux source build. Its label and key (`:macos: TTFX src <triplet>`, `ttfx_src_<triplet>`)
+keep it apart for julia-ci-timing.
 
 ## Knobs
 
