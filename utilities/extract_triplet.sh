@@ -63,6 +63,9 @@ case "${TRIPLET_BASE}" in
     *-apple-darwinnogpl) # builds that use `USE_GPL_LIBS=0`
         OS="macosnogpl"
         ;;
+    *-apple-darwinsrc) # "from source" builds (`USE_BINARYBUILDER=0`)
+        OS="macossrc"
+        ;;
     # FreeBSD
     *-freebsd)
         OS="freebsd"

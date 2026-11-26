@@ -34,8 +34,9 @@ current master (1.14) it is a no-op, so the powerpc arches are intentionally
 omitted (see OMITTED_POWERPC below). This matches the runtime behaviour.
 
 Schedule builds emit the scheduled workload groups and publish triggers instead
-of the per-commit groups, and the TTFX job of the optimized macOS build; the
-weekly TTFX_RELEASE build (a second julia-ci schedule) emits the release and LTS
+of the per-commit groups, the TTFX job of the optimized macOS build, and the
+TTFX and runtime benchmark jobs of the from-source one; the weekly
+TTFX_RELEASE build (a second julia-ci schedule) emits the release and LTS
 TTFX and runtime benchmark jobs alone. Release branch and tag builds add the
 no-GPL group (and its publish triggers) to the per-commit groups, and NOGPL_ONLY=true
 renders only those; they also add the optimized groups (OPT_ONLY=true
@@ -43,8 +44,9 @@ renders only those), whose tests gate their publish triggers on tags unless
 OPT_TESTS_ALLOW_FAIL=true. ONLY_TRIPLETS=<triplet>[,...] renders only the
 build, test and publish jobs of those platforms, from whichever groups the
 build would otherwise contain. Pull requests with the EXTENDED_CI_LABEL add
-the scheduled workload groups and coverage, without publish triggers, and
-those with the COVERAGE_CI_LABEL add only coverage. A
+the scheduled workload groups, the TTFX and runtime benchmark jobs of the
+from-source macOS build and coverage, without publish triggers, and those with
+the COVERAGE_CI_LABEL add only coverage. A
 julia-pr pull request skips the jobs whose paths it does not change (PR_GATED_FILES, PR_GATED_TRIPLETS). Per-commit results are grouped
 into one `group:` per label: Build, Check, Test, Allow Fail, JuliaSyntax,
 JuliaC, TTFX, Runtime benchmarks, Publish.
@@ -565,6 +567,8 @@ RISCV64_GROUP = ("RISC-V Build (Allow Fail)", "true", [
 SCHEDULE_GROUPS = [
     ("Source Build", "false", [
         ("build_linux.schedule.arches", "build_linux.yml"),
+        # Measured on the TTFX tasks, not tested
+        ("build_macos.schedule.arches", "build_macos.yml"),
     ]),
     ("Source Tests (Allow Fail)", "true", [
         ("test_linux.schedule.arches", "test_linux.yml"),
@@ -1021,6 +1025,19 @@ def scheduled_workload_blocks():
             for label, allow_fail, arches in SCHEDULE_GROUPS]
 
 
+def src_benchmark_steps(base):
+    """The TTFX and runtime benchmark jobs of the macOS from-source build, which
+    the scheduled workloads build, for their groups. `base` is their TTFX_BASE
+    and RTB_BASE: "commit" on the schedule, which has no merge-base, and ""
+    (the merge-base) on a pull request."""
+    steps = []
+    for path, var in ((os.path.join(MISC, "ttfx", "ttfx_src.yml"), "TTFX_BASE"),
+                      (os.path.join(MISC, "runtime_benchmarks", "runtime_benchmarks_src.yml"), "RTB_BASE")):
+        _, text = load_group_text(path)
+        steps.append(interpolate(text, {var: base}, path))
+    return steps
+
+
 def main():
     # TTFX_RELEASE (set by the weekly julia-ci schedule, or on a build created
     # by hand) measures a published release on the TTFX tasks and the runtime
@@ -1038,6 +1055,9 @@ def main():
         # commit, for julia-ci-timing; not on labeled pull requests, which
         # would hold a macOS agent for hours (utilities/ttfx/README.md)
         blocks.append(verbatim_group_text(os.path.join(MISC, "ttfx", "ttfx_opt.yml")))
+        ttfx_src, rtb_src = src_benchmark_steps("commit")
+        blocks.append(emit_group("TTFX", ttfx_src))
+        blocks.append(emit_group("Runtime benchmarks", rtb_src))
         triplets = upload_triplets(SCHEDULE_UPLOAD_ARCHES, SCHEDULED_PLATFORMS)
         blocks.append(publish_group_text(triplets, scheduled=True))
         sys.stdout.write(pipeline_text(blocks))
@@ -1110,16 +1130,25 @@ def main():
     # master build of the merge-base on pull requests, which are measured only
     # when they touch the compiler, runtime or loading code or carry the
     # `needs TTFX check` label (utilities/ttfx/README.md). A launcher with its
-    # own group -- include verbatim.
-    blocks.append(verbatim_group_text(os.path.join(MISC, "ttfx", "ttfx.yml")))
+    # own group -- include verbatim. With EXTENDED_CI_LABEL the group also
+    # measures the from-source build of the scheduled workloads.
+    # Decided here rather than by an `if:` on the step, which sees only the
+    # labels Buildkite recorded, so that a rebuild after adding the label works.
+    extended = (os.environ.get("BUILDKITE_PULL_REQUEST", "false") != "false"
+                and pr_has_label(EXTENDED_CI_LABEL))
+    ttfx_src, rtb_src = src_benchmark_steps("") if extended else ("", "")
+    ttfx = verbatim_group_text(os.path.join(MISC, "ttfx", "ttfx.yml"))
+    blocks.append(ttfx + "\n" + ttfx_src if ttfx_src else ttfx)
 
     # Runtime benchmarks: the julia-ci-benchmarks suite (codegen, the runtime, GC,
     # scheduler, compiler throughput) on the build, against the master build of the
     # merge-base on pull requests, which are measured only when they touch a path
     # in utilities/runtime_benchmarks/paths.txt or carry the `needs runtime
     # benchmarks` label (utilities/runtime_benchmarks/README.md). A launcher with
-    # its own group -- include verbatim.
-    blocks.append(verbatim_group_text(os.path.join(MISC, "runtime_benchmarks", "runtime_benchmarks.yml")))
+    # its own group -- include verbatim. With EXTENDED_CI_LABEL it also measures
+    # the from-source build, as the TTFX group does.
+    rtb = verbatim_group_text(os.path.join(MISC, "runtime_benchmarks", "runtime_benchmarks.yml"))
+    blocks.append(rtb + "\n" + rtb_src if rtb_src else rtb)
 
     # Release branches and tags also come as no-GPL, optimized and riscv64
     # builds, the nightlies (x.y-nightly+opt) and releases (x.y+opt) of their
@@ -1136,10 +1165,8 @@ def main():
         gated += release_blocks
         triplets += nogpl_triplets() + opt_triplets() + riscv64_triplets()
 
-    # Decided here rather than by an `if:` on the step, which sees only the
-    # labels Buildkite recorded, so that a rebuild after adding the label works.
     if os.environ.get("BUILDKITE_PULL_REQUEST", "false") != "false":
-        if pr_has_label(EXTENDED_CI_LABEL):
+        if extended:
             log(f"The pull request has the '{EXTENDED_CI_LABEL}' label; "
                 "adding the scheduled workloads and coverage")
             blocks.extend(scheduled_workload_blocks())

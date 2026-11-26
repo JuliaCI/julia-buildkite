@@ -1,0 +1,34 @@
+# The from-source build (USE_BINARYBUILDER=0) on the TTFX tasks: the same job as
+# ttfx_macos.yml, so that a pull request changing LLVM (deps/llvm.version, before
+# BinaryBuilder has built it) can be measured with the `needs extended CI` label. On a
+# pull request it is compared with the master build of the merge-base; on the daily
+# julia-ci schedule, which has no merge-base, with the regular build of the same commit.
+# The renderer puts it in the TTFX group and fills in TTFX_BASE accordingly
+# (utilities/ttfx/README.md). The job's own label and key keep it apart from the master
+# job for julia-ci-timing. It posts no commit status and may fail without failing the
+# build: part of any difference is how the dependencies were built rather than what
+# changed.
+steps:
+  - group: "TTFX"
+    steps:
+      - label: ":macos: TTFX src aarch64-apple-darwin"
+        key: "ttfx_src_aarch64-apple-darwin"
+        depends_on:
+          - "build_aarch64-apple-darwinsrc"
+        plugins:
+          - JuliaCI/external-buildkite#v1:
+              version: "./.buildkite-external-version"
+              repo_url: "https://github.com/JuliaCI/julia-buildkite"
+        commands: "bash .buildkite/utilities/ttfx/ttfx_ci.sh"
+        # Two arms, as on a pull request
+        timeout_in_minutes: 180
+        soft_fail: true
+        agents:
+          queue: "test"
+          os: "macos"
+          # Timings are only comparable on one CPU model; other Macs also serve "test".
+          cpu: "apple-m2"
+          arch: "aarch64"
+        env:
+          TRIPLET: "aarch64-apple-darwinsrc"
+          TTFX_BASE: "${TTFX_BASE?}"

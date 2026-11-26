@@ -129,10 +129,11 @@ class RenderLaunchPipelineTests(unittest.TestCase):
         self.assertNotIn('group: "Build"', output)
         self.assertNotIn('group: "Test"', output)
 
-        self.assertEqual(output.count('key: "build_'), 13)
+        self.assertEqual(output.count('key: "build_'), 14)
         self.assertEqual(output.count('key: "test_'), 9)
-        self.assertEqual(output.count("soft_fail: false"), 11)
-        self.assertEqual(output.count("soft_fail: true"), 12)  # the tests, TTFX opt, riscv64
+        self.assertEqual(output.count("soft_fail: false"), 12)
+        # the tests, riscv64, TTFX opt, and the source build's TTFX and runtime benchmarks
+        self.assertEqual(output.count("soft_fail: true"), 14)
         self.assertEqual(
             output.count('depends_on:\n          - "build_x86_64-linux-gnusrcassert"'),
             2,
@@ -678,7 +679,7 @@ class RenderLaunchPipelineTests(unittest.TestCase):
         self.assertIn('pipeline.slug == "julia-pr" || pipeline.slug == "julia-ci"', group)
         self.assertIn('queue: "launch"', group)
         # Not part of the scheduled workloads
-        self.assertNotIn('group: "Runtime benchmarks"', render(source="schedule"))
+        self.assertNotIn("runtime_benchmarks_launch.sh", render(source="schedule"))
 
     def test_schedule_measures_the_optimized_build_on_ttfx(self):
         output = render(source="schedule", BUILDKITE_PIPELINE_SLUG="julia-ci")
@@ -698,6 +699,30 @@ class RenderLaunchPipelineTests(unittest.TestCase):
         # Not on labeled pull requests, nor on per-commit builds
         for build_env in (EXTENDED_PR, {}):
             self.assertNotIn("TTFX opt", render(**build_env))
+
+    def test_source_build_benchmarks(self):
+        # The schedule compares with the regular build of the same commit, a
+        # labeled pull request with the merge-base
+        for source, build_env, base in (("schedule", {}, "commit"), (None, EXTENDED_PR, "")):
+            output = render(source=source, BUILDKITE_PIPELINE_SLUG="julia-ci", **build_env)
+            self.assertEqual(job_keys(output, "Source Build"),
+                             ["build_x86_64-linux-gnusrcassert", "build_aarch64-apple-darwinsrc"])
+            # On a pull request, next to the launch steps
+            for group, label, key, var in (
+                    ("TTFX", "TTFX src", "ttfx_src", "TTFX_BASE"),
+                    ("Runtime benchmarks", "Runtime benchmarks src", "runtime_benchmarks_src", "RTB_BASE")):
+                self.assertEqual(output.count(f'group: "{group}"'), 1)
+                self.assertEqual(job_keys(output, group), [f"{key}_aarch64-apple-darwin"])
+                step = re.search(
+                    rf'^      - label: ":macos: {label} aarch64-apple-darwin"\n'
+                    r'.*?(?=^      - |^  - group:|\Z)', output, re.M | re.S,
+                ).group()
+                self.assertIn('depends_on:\n          - "build_aarch64-apple-darwinsrc"', step)
+                self.assertIn('TRIPLET: "aarch64-apple-darwinsrc"', step)
+                self.assertIn(f'{var}: "{base}"', step)
+                self.assertIn("soft_fail: true", step)
+                self.assertNotIn("github_commit_status", step)
+        self.assertNotIn("darwinsrc", render())
 
     def test_publish_dependencies_exist(self):
         for source, build_env in ((None, {}), ("schedule", {}),
