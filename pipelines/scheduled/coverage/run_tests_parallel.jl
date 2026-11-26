@@ -45,3 +45,15 @@ cmd = `$(Base.julia_cmd()) --code-coverage=all --code-coverage=lcov-%p.info $exc
 @info "Running command" cmd
 p = run(pipeline(cmd; stdin, stdout, stderr); wait = false)
 wait(p)
+
+# With Base instrumented, the optimizer sees coverage markers in every Base function it
+# inlines, so the Compiler tests miss the passes they target (finalizer inlining, for
+# one). Run them again with only the compiler's own source instrumented.
+compiler_src = normpath(Sys.BINDIR, "..", "share", "julia", "Compiler", "src")
+if hasfield(Base.JLOptions, :coverage_exclude) && isdir(compiler_src)
+    compiler_script = "Base.runtests([\"compiler\"]; ncores = $(ncores))"
+    cmd = `$(Base.julia_cmd()) --code-coverage=@$(compiler_src) --code-coverage=lcov-compiler-%p.info $exclude_flag -e $(compiler_script)`
+    @info "Running command" cmd
+    p = run(pipeline(cmd; stdin, stdout, stderr); wait = false)
+    wait(p)
+end
