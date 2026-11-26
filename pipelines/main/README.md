@@ -84,9 +84,10 @@ see `utilities/ttfx/README.md` and `utilities/runtime_benchmarks/README.md`).
 
 Pull requests with the `needs extended CI` label also run the scheduled workloads
 and coverage, and the TTFX and runtime benchmark jobs of the macOS from-source
-build, which measure LLVM changes (`utilities/ttfx/README.md`). Those with the `needs coverage CI`
-label run only coverage. Like `needs full CI`, these labels count on a rebuild
-too. Pull request coverage is uploaded to Codecov without a token (Codecov
+build, which measure LLVM changes (`utilities/ttfx/README.md`). Those with the
+`needs source build` label run only the source builds, their tests and those
+benchmark jobs, and those with the `needs coverage CI` label run only coverage.
+Like `needs full CI`, these labels count on a rebuild too. Pull request coverage is uploaded to Codecov without a token (Codecov
 comments on the pull request with the result), and is not uploaded to
 Coveralls, which needs one.
 

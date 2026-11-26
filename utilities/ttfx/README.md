@@ -28,7 +28,7 @@ repository's `main` branch at job time; everything that runs them lives here.
 | `julia-ci` (master, release branches) | every build | absolute: the build alone |
 | `julia-ci` (the daily schedule) | the optimized macOS aarch64 build | comparison: the optimized build against the regular build of the same commit |
 | `julia-ci` (the daily schedule) | the from-source macOS aarch64 build | comparison: the from-source build against the regular build of the same commit |
-| `julia-pr` (pull requests with the `needs extended CI` label) | the from-source macOS aarch64 build | comparison: the from-source build against the merge-base built from source |
+| `julia-pr` (pull requests with the `needs extended CI` or `needs source build` label) | the from-source macOS aarch64 build | comparison: the from-source build against the merge-base built from source |
 | `julia-ci` (the weekly `TTFX_RELEASE` schedule) | the newest stable release, the LTS, and the next release's nightly | absolute: each release alone, as a reference |
 | `julia-buildkite-ci` (this repository's self-test) | every build | comparison: the julia master commit under test against its parent |
 
@@ -348,7 +348,7 @@ the job is `soft_fail`, so it never fails the nightly, and it posts no commit st
 (`:macos: TTFX opt <triplet>`, `ttfx_opt_<triplet>`) keep it apart for julia-ci-timing,
 which draws the optimized build next to the master series with the paired difference.
 
-## From-source builds: LLVM changes (the schedule, `needs extended CI`)
+## From-source builds: LLVM changes (the schedule, `needs source build`, `needs extended CI`)
 
 The scheduled workloads include a macOS aarch64 build with `USE_BINARYBUILDER=0`
 (`aarch64-apple-darwinsrc`, `pipelines/scheduled/platforms/build_macos.schedule.arches`),
@@ -356,7 +356,8 @@ which builds LLVM from `deps/llvm.version` rather than using the LLVM_jll. A few
 dependencies still come from BinaryBuilder: OpenBLAS, SuiteSparse and
 CompilerSupportLibraries, as the macOS agents have no Fortran compiler, and nghttp2, as
 they have no pkg-config. It is how an LLVM patch can be measured before BinaryBuilder has
-built it: add the `needs extended CI` label. After the build, a job in the `TTFX` group
+built it: add the `needs source build` label (or `needs extended CI`, which also runs
+the other scheduled workloads). After the build, a job in the `TTFX` group
 (`pipelines/main/misc/ttfx/ttfx_src.yml`) measures it in the comparison mode.
 
 On a pull request (`TTFX_BASE=src`) the base is the merge-base built from source in the

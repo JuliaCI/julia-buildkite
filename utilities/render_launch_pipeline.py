@@ -45,8 +45,9 @@ OPT_TESTS_ALLOW_FAIL=true. ONLY_TRIPLETS=<triplet>[,...] renders only the
 build, test and publish jobs of those platforms, from whichever groups the
 build would otherwise contain. Pull requests with the EXTENDED_CI_LABEL add
 the scheduled workload groups, the TTFX and runtime benchmark jobs of the
-from-source macOS build and coverage, without publish triggers, and those with
-the COVERAGE_CI_LABEL add only coverage. A
+from-source macOS build and coverage, without publish triggers. The
+SOURCE_BUILD_LABEL adds only the source builds, their tests and those benchmark
+jobs, and the COVERAGE_CI_LABEL only coverage. A
 julia-pr pull request skips the jobs whose paths it does not change (PR_GATED_FILES, PR_GATED_TRIPLETS). Per-commit results are grouped
 into one `group:` per label: Build, Check, Test, Allow Fail, JuliaSyntax,
 JuliaC, TTFX, Runtime benchmarks, Publish.
@@ -530,6 +531,8 @@ FULL_CI_LABEL = "needs full CI"
 EXTENDED_CI_LABEL = "needs extended CI"
 # Adds only coverage to a pull request
 COVERAGE_CI_LABEL = "needs coverage CI"
+# Adds only the source builds and their tests to a pull request
+SOURCE_BUILD_LABEL = "needs source build"
 
 # Buildkite job priorities; a higher one takes the next free agent first.
 HIGH_PRIORITY, NORMAL_PRIORITY, LOW_PRIORITY = 1, 0, -1
@@ -1026,12 +1029,17 @@ def only_triplets_text(only):
     return pipeline_text(blocks)
 
 
-def scheduled_workload_blocks(merge_base=False):
-    """The scheduled workload groups. With `merge_base`, on a pull request, the
-    Source Build group also builds the merge-base from source."""
+# The source builds and their tests, which the SOURCE_BUILD_LABEL adds alone
+SOURCE_GROUPS = ("Source Build", "Source Tests (Allow Fail)")
+
+
+def scheduled_workload_blocks(merge_base=False, groups=None):
+    """The scheduled workload groups, or those named in `groups`. With
+    `merge_base`, on a pull request, the Source Build group also builds the
+    merge-base from source."""
     return [schedule_group_text(label, arches, allow_fail,
                                 src_merge_base_build_text() if merge_base and label == "Source Build" else "")
-            for label, allow_fail, arches in SCHEDULE_GROUPS]
+            for label, allow_fail, arches in SCHEDULE_GROUPS if groups is None or label in groups]
 
 
 def src_merge_base_build_text():
@@ -1158,13 +1166,14 @@ def main():
     # master build of the merge-base on pull requests, which are measured only
     # when they touch the compiler, runtime or loading code or carry the
     # `needs TTFX check` label (utilities/ttfx/README.md). A launcher with its
-    # own group -- include verbatim. With EXTENDED_CI_LABEL the group also
-    # measures the from-source build of the scheduled workloads.
+    # own group -- include verbatim. With EXTENDED_CI_LABEL or SOURCE_BUILD_LABEL
+    # the group also measures the macOS from-source build.
     # Decided here rather than by an `if:` on the step, which sees only the
     # labels Buildkite recorded, so that a rebuild after adding the label works.
-    extended = (os.environ.get("BUILDKITE_PULL_REQUEST", "false") != "false"
-                and pr_has_label(EXTENDED_CI_LABEL))
-    ttfx_src, rtb_src = src_benchmark_steps("src") if extended else ("", "")
+    is_pr = os.environ.get("BUILDKITE_PULL_REQUEST", "false") != "false"
+    extended = is_pr and pr_has_label(EXTENDED_CI_LABEL)
+    source = extended or (is_pr and pr_has_label(SOURCE_BUILD_LABEL))
+    ttfx_src, rtb_src = src_benchmark_steps("src") if source else ("", "")
     ttfx = verbatim_group_text(os.path.join(MISC, "ttfx", "ttfx.yml"))
     blocks.append(ttfx + "\n" + ttfx_src if ttfx_src else ttfx)
 
@@ -1173,8 +1182,8 @@ def main():
     # merge-base on pull requests, which are measured only when they touch a path
     # in utilities/runtime_benchmarks/paths.txt or carry the `needs runtime
     # benchmarks` label (utilities/runtime_benchmarks/README.md). A launcher with
-    # its own group -- include verbatim. With EXTENDED_CI_LABEL it also measures
-    # the from-source build, as the TTFX group does.
+    # its own group -- include verbatim. It also measures the from-source build
+    # when the TTFX group does.
     rtb = verbatim_group_text(os.path.join(MISC, "runtime_benchmarks", "runtime_benchmarks.yml"))
     blocks.append(rtb + "\n" + rtb_src if rtb_src else rtb)
 
@@ -1193,13 +1202,16 @@ def main():
         gated += release_blocks
         triplets += nogpl_triplets() + opt_triplets() + riscv64_triplets()
 
-    if os.environ.get("BUILDKITE_PULL_REQUEST", "false") != "false":
-        if extended:
-            log(f"The pull request has the '{EXTENDED_CI_LABEL}' label; "
-                "adding the scheduled workloads and coverage")
-            blocks.extend(scheduled_workload_blocks(merge_base=True))
-            blocks.append(verbatim_group_text(COVERAGE))
-        elif pr_has_label(COVERAGE_CI_LABEL):
+    if extended:
+        log(f"The pull request has the '{EXTENDED_CI_LABEL}' label; "
+            "adding the scheduled workloads and coverage")
+        blocks.extend(scheduled_workload_blocks(merge_base=True))
+        blocks.append(verbatim_group_text(COVERAGE))
+    elif is_pr:
+        if source:
+            log(f"The pull request has the '{SOURCE_BUILD_LABEL}' label; adding the source builds")
+            blocks.extend(scheduled_workload_blocks(merge_base=True, groups=SOURCE_GROUPS))
+        if pr_has_label(COVERAGE_CI_LABEL):
             log(f"The pull request has the '{COVERAGE_CI_LABEL}' label; adding coverage")
             blocks.append(verbatim_group_text(COVERAGE))
     blocks.append(publish_group_text(triplets, docs=True, gate=release_gate(gated)))
