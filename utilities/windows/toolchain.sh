@@ -10,7 +10,8 @@
 #    fails instead of resolving to Git's;
 #  - MSYSTEM and MSYS2_PATH_TYPE from toolchain.env;
 #  - HOME, TMP, TEMP and TMPDIR outside the tree (the user profile and its temp directory),
-#    so that the tree is never written to (it is an artifact, which Pkg verifies by hash).
+#    so that the tree is never written to (it is an artifact, which Pkg verifies by hash);
+#  - `pwd` in POSIX form (/c/...), as in the containers.
 # The exit code is CMD's.
 #
 # The agent's shell is Git for Windows bash, whose MSYS runtime is a different
@@ -119,6 +120,9 @@ TOOLCHAIN_TEMP="${temp_win}" \
         $env:HOME = $env:TOOLCHAIN_HOME
         $env:TMP = $env:TOOLCHAIN_TEMP; $env:TEMP = $env:TOOLCHAIN_TEMP; $env:TMPDIR = $env:TOOLCHAIN_TEMP
         Get-ChildItem env:TOOLCHAIN_* | Remove-Item
+        # Git bash PWD arrives in Windows form, and bash would keep it as `pwd`. A C:/ path
+        # breaks colon-separated lists such as PATH, so let bash derive it instead.
+        Remove-Item env:PWD, env:OLDPWD -ErrorAction SilentlyContinue
         & $bash $cmdfile
         exit $LASTEXITCODE
     ' || status=$?
