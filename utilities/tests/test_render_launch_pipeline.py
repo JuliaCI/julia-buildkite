@@ -70,6 +70,9 @@ ALL_OPT_TRIPLETS = sorted(OPT_TRIPLETS + ("i686-linux-gnuopt",))
 # A pull request with the `needs extended CI` label
 EXTENDED_PR = {"BUILDKITE_PULL_REQUEST": "123",
                "BUILDKITE_PULL_REQUEST_LABELS": "bugfix,needs extended CI"}
+# A pull request with the `needs source build` label
+SOURCE_PR = {"BUILDKITE_PULL_REQUEST": "123",
+             "BUILDKITE_PULL_REQUEST_LABELS": "needs source build"}
 
 
 def publish_group(output):
@@ -702,11 +705,21 @@ class RenderLaunchPipelineTests(unittest.TestCase):
 
     def test_source_build_benchmarks(self):
         # The schedule compares with the regular build of the same commit, a
-        # labeled pull request with the merge-base
-        for source, build_env, base in (("schedule", {}, "commit"), (None, EXTENDED_PR, "")):
+        # labeled pull request with its merge-base built from source
+        for source, build_env, base in (("schedule", {}, "commit"), (None, EXTENDED_PR, "src"),
+                                        (None, SOURCE_PR, "src")):
             output = render(source=source, BUILDKITE_PIPELINE_SLUG="julia-ci", **build_env)
-            self.assertEqual(job_keys(output, "Source Build"),
-                             ["build_x86_64-linux-gnusrcassert", "build_aarch64-apple-darwinsrc"])
+            builds = ["build_x86_64-linux-gnusrcassert", "build_aarch64-apple-darwinsrc"]
+            deps = ["build_aarch64-apple-darwinsrc"]
+            if base == "src":
+                builds.append("build_aarch64-apple-darwinsrc_merge_base")
+                deps.append("build_aarch64-apple-darwinsrc_merge_base")
+                merge_base = re.search(r'^      - label: ":macos: build aarch64-apple-darwinsrc merge-base"\n'
+                                       r'.*?(?=^      - |^  - group:|\Z)', output, re.M | re.S).group()
+                self.assertIn("utilities/build_julia_merge_base.sh", merge_base)
+                self.assertIn(re.search(r'MAKE_FLAGS: "[^"]*"', build_step(output, "aarch64-apple-darwinsrc")).group(),
+                              merge_base)
+            self.assertEqual(job_keys(output, "Source Build"), builds)
             # On a pull request, next to the launch steps
             for group, label, key, var in (
                     ("TTFX", "TTFX src", "ttfx_src", "TTFX_BASE"),
@@ -717,7 +730,7 @@ class RenderLaunchPipelineTests(unittest.TestCase):
                     rf'^      - label: ":macos: {label} aarch64-apple-darwin"\n'
                     r'.*?(?=^      - |^  - group:|\Z)', output, re.M | re.S,
                 ).group()
-                self.assertIn('depends_on:\n          - "build_aarch64-apple-darwinsrc"', step)
+                self.assertIn("depends_on:\n" + "".join(f'          - "{d}"\n' for d in deps), step)
                 self.assertIn('TRIPLET: "aarch64-apple-darwinsrc"', step)
                 self.assertIn(f'{var}: "{base}"', step)
                 self.assertIn("soft_fail: true", step)
@@ -756,6 +769,19 @@ class RenderLaunchPipelineTests(unittest.TestCase):
 
         for group in ("Source Build", "Coverage"):
             self.assertNotIn(f'group: "{group}"', render())
+
+    def test_source_build_label_adds_only_the_source_builds(self):
+        output = render(**SOURCE_PR)
+        for group in ("Source Build", "Source Tests (Allow Fail)"):
+            self.assertEqual(output.count(f'group: "{group}"'), 1)
+        for group in ("no_GPL", "Optimized Build", "RISC-V Build (Allow Fail)", "Coverage"):
+            self.assertNotIn(f'group: "{group}"', output)
+        self.assertEqual(publish_group(output), publish_group(render()))
+        # With the coverage label too
+        output = render(BUILDKITE_PULL_REQUEST="123",
+                        BUILDKITE_PULL_REQUEST_LABELS="needs source build,needs coverage CI")
+        for group in ("Source Build", "Coverage"):
+            self.assertEqual(output.count(f'group: "{group}"'), 1)
 
     def test_coverage_ci_label_adds_only_coverage(self):
         output = render(BUILDKITE_PULL_REQUEST="123",

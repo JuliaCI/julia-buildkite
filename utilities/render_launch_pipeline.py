@@ -45,8 +45,9 @@ OPT_TESTS_ALLOW_FAIL=true. ONLY_TRIPLETS=<triplet>[,...] renders only the
 build, test and publish jobs of those platforms, from whichever groups the
 build would otherwise contain. Pull requests with the EXTENDED_CI_LABEL add
 the scheduled workload groups, the TTFX and runtime benchmark jobs of the
-from-source macOS build and coverage, without publish triggers, and those with
-the COVERAGE_CI_LABEL add only coverage. A
+from-source macOS build and coverage, without publish triggers. The
+SOURCE_BUILD_LABEL adds only the source builds, their tests and those benchmark
+jobs, and the COVERAGE_CI_LABEL only coverage. A
 julia-pr pull request skips the jobs whose paths it does not change (PR_GATED_FILES, PR_GATED_TRIPLETS). Per-commit results are grouped
 into one `group:` per label: Build, Check, Test, Allow Fail, JuliaSyntax,
 JuliaC, TTFX, Runtime benchmarks, Publish.
@@ -359,7 +360,7 @@ def record_platform_job(yaml_file, triplet, step_text, allow_fail, where):
 
 
 def render_arches_group_text(arches_file, yaml_file, group, allow_fail,
-                             extra_env=None, arches_dir=PLATFORMS):
+                             extra_env=None, arches_dir=PLATFORMS, record=True):
     """Render the inner step block of an arches-templated platform YAML once
     per arch. Interpolation is applied to the source TEXT first, then the inner
     steps are sliced out. Returns the concatenated re-indented step text."""
@@ -385,7 +386,8 @@ def render_arches_group_text(arches_file, yaml_file, group, allow_fail,
         where = f"{yaml_file} [{arch_env.get('TRIPLET', '?')}]"
         rendered = interpolate(template_text, env, where)
         step_text = extract_inner_steps_text(rendered, where)
-        record_platform_job(yaml_file, arch_env["TRIPLET"], step_text, allow_fail, where)
+        if record:
+            record_platform_job(yaml_file, arch_env["TRIPLET"], step_text, allow_fail, where)
         if yaml_file.startswith("build_") and step_priority() != ci_priority():
             first, rest = step_text.split("\n", 1)
             indent = " " * (STEP_INDENT + 2)
@@ -529,6 +531,8 @@ FULL_CI_LABEL = "needs full CI"
 EXTENDED_CI_LABEL = "needs extended CI"
 # Adds only coverage to a pull request
 COVERAGE_CI_LABEL = "needs coverage CI"
+# Adds only the source builds and their tests to a pull request
+SOURCE_BUILD_LABEL = "needs source build"
 
 # Buildkite job priorities; a higher one takes the next free agent first.
 HIGH_PRIORITY, NORMAL_PRIORITY, LOW_PRIORITY = 1, 0, -1
@@ -564,11 +568,15 @@ RISCV64_GROUP = ("RISC-V Build (Allow Fail)", "true", [
     ("build_linux.riscv64.arches", "build_linux.riscv64.yml"),
 ])
 
+# Measured on the TTFX tasks and the runtime benchmarks, not tested
+SRC_BUILD = ("build_macos.schedule.arches", "build_macos.yml")
+SRC_TRIPLET = "aarch64-apple-darwinsrc"
+SRC_MERGE_BASE_KEY = f"build_{SRC_TRIPLET}_merge_base"
+
 SCHEDULE_GROUPS = [
     ("Source Build", "false", [
         ("build_linux.schedule.arches", "build_linux.yml"),
-        # Measured on the TTFX tasks, not tested
-        ("build_macos.schedule.arches", "build_macos.yml"),
+        SRC_BUILD,
     ]),
     ("Source Tests (Allow Fail)", "true", [
         ("test_linux.schedule.arches", "test_linux.yml"),
@@ -767,11 +775,12 @@ def allow_fail_group_text():
     return emit_group("Allow Fail", "\n".join(c for c in chunks if c))
 
 
-def schedule_group_text(label, arches_list, allow_fail):
+def schedule_group_text(label, arches_list, allow_fail, extra_steps=""):
     chunks = []
     for arches, yml in arches_list:
         chunks.append(render_arches_group_text(
             arches, yml, label, allow_fail, arches_dir=SCHEDULED_PLATFORMS))
+    chunks.append(extra_steps)
     return emit_group(label, "\n".join(c for c in chunks if c))
 
 
@@ -1020,21 +1029,48 @@ def only_triplets_text(only):
     return pipeline_text(blocks)
 
 
-def scheduled_workload_blocks():
-    return [schedule_group_text(label, arches, allow_fail)
-            for label, allow_fail, arches in SCHEDULE_GROUPS]
+# The source builds and their tests, which the SOURCE_BUILD_LABEL adds alone
+SOURCE_GROUPS = ("Source Build", "Source Tests (Allow Fail)")
+
+
+def scheduled_workload_blocks(merge_base=False, groups=None):
+    """The scheduled workload groups, or those named in `groups`. With
+    `merge_base`, on a pull request, the Source Build group also builds the
+    merge-base from source."""
+    return [schedule_group_text(label, arches, allow_fail,
+                                src_merge_base_build_text() if merge_base and label == "Source Build" else "")
+            for label, allow_fail, arches in SCHEDULE_GROUPS if groups is None or label in groups]
+
+
+def src_merge_base_build_text():
+    """A pull request's merge-base built from source, with the flags of its own
+    from-source build, for that build's benchmark jobs to compare against."""
+    arches, yml = SRC_BUILD
+    text = render_arches_group_text(arches, yml, "Source Build", "false",
+                                    arches_dir=SCHEDULED_PLATFORMS, record=False)
+    for old, new in ((f'build {SRC_TRIPLET}"', f'build {SRC_TRIPLET} merge-base"'),
+                     (f'key: "build_{SRC_TRIPLET}"', f'key: "{SRC_MERGE_BASE_KEY}"'),
+                     ("utilities/build_julia.sh", "utilities/build_julia_merge_base.sh")):
+        assert text.count(old) == 1, f"{yml}: no single {old}"
+        text = text.replace(old, new)
+    return text
 
 
 def src_benchmark_steps(base):
     """The TTFX and runtime benchmark jobs of the macOS from-source build, which
     the scheduled workloads build, for their groups. `base` is their TTFX_BASE
-    and RTB_BASE: "commit" on the schedule, which has no merge-base, and ""
-    (the merge-base) on a pull request."""
+    and RTB_BASE: "commit" on the schedule, which has no merge-base, and "src"
+    (the merge-base built from source) on a pull request."""
     steps = []
     for path, var in ((os.path.join(MISC, "ttfx", "ttfx_src.yml"), "TTFX_BASE"),
                       (os.path.join(MISC, "runtime_benchmarks", "runtime_benchmarks_src.yml"), "RTB_BASE")):
         _, text = load_group_text(path)
-        steps.append(interpolate(text, {var: base}, path))
+        text = interpolate(text, {var: base}, path)
+        if base == "src":
+            dep = f'          - "build_{SRC_TRIPLET}"'
+            assert text.count(dep) == 1, f"{path}: no single {dep}"
+            text = text.replace(dep, f'{dep}\n          - "{SRC_MERGE_BASE_KEY}"')
+        steps.append(text)
     return steps
 
 
@@ -1130,13 +1166,14 @@ def main():
     # master build of the merge-base on pull requests, which are measured only
     # when they touch the compiler, runtime or loading code or carry the
     # `needs TTFX check` label (utilities/ttfx/README.md). A launcher with its
-    # own group -- include verbatim. With EXTENDED_CI_LABEL the group also
-    # measures the from-source build of the scheduled workloads.
+    # own group -- include verbatim. With EXTENDED_CI_LABEL or SOURCE_BUILD_LABEL
+    # the group also measures the macOS from-source build.
     # Decided here rather than by an `if:` on the step, which sees only the
     # labels Buildkite recorded, so that a rebuild after adding the label works.
-    extended = (os.environ.get("BUILDKITE_PULL_REQUEST", "false") != "false"
-                and pr_has_label(EXTENDED_CI_LABEL))
-    ttfx_src, rtb_src = src_benchmark_steps("") if extended else ("", "")
+    is_pr = os.environ.get("BUILDKITE_PULL_REQUEST", "false") != "false"
+    extended = is_pr and pr_has_label(EXTENDED_CI_LABEL)
+    source = extended or (is_pr and pr_has_label(SOURCE_BUILD_LABEL))
+    ttfx_src, rtb_src = src_benchmark_steps("src") if source else ("", "")
     ttfx = verbatim_group_text(os.path.join(MISC, "ttfx", "ttfx.yml"))
     blocks.append(ttfx + "\n" + ttfx_src if ttfx_src else ttfx)
 
@@ -1145,8 +1182,8 @@ def main():
     # merge-base on pull requests, which are measured only when they touch a path
     # in utilities/runtime_benchmarks/paths.txt or carry the `needs runtime
     # benchmarks` label (utilities/runtime_benchmarks/README.md). A launcher with
-    # its own group -- include verbatim. With EXTENDED_CI_LABEL it also measures
-    # the from-source build, as the TTFX group does.
+    # its own group -- include verbatim. It also measures the from-source build
+    # when the TTFX group does.
     rtb = verbatim_group_text(os.path.join(MISC, "runtime_benchmarks", "runtime_benchmarks.yml"))
     blocks.append(rtb + "\n" + rtb_src if rtb_src else rtb)
 
@@ -1165,13 +1202,16 @@ def main():
         gated += release_blocks
         triplets += nogpl_triplets() + opt_triplets() + riscv64_triplets()
 
-    if os.environ.get("BUILDKITE_PULL_REQUEST", "false") != "false":
-        if extended:
-            log(f"The pull request has the '{EXTENDED_CI_LABEL}' label; "
-                "adding the scheduled workloads and coverage")
-            blocks.extend(scheduled_workload_blocks())
-            blocks.append(verbatim_group_text(COVERAGE))
-        elif pr_has_label(COVERAGE_CI_LABEL):
+    if extended:
+        log(f"The pull request has the '{EXTENDED_CI_LABEL}' label; "
+            "adding the scheduled workloads and coverage")
+        blocks.extend(scheduled_workload_blocks(merge_base=True))
+        blocks.append(verbatim_group_text(COVERAGE))
+    elif is_pr:
+        if source:
+            log(f"The pull request has the '{SOURCE_BUILD_LABEL}' label; adding the source builds")
+            blocks.extend(scheduled_workload_blocks(merge_base=True, groups=SOURCE_GROUPS))
+        if pr_has_label(COVERAGE_CI_LABEL):
             log(f"The pull request has the '{COVERAGE_CI_LABEL}' label; adding coverage")
             blocks.append(verbatim_group_text(COVERAGE))
     blocks.append(publish_group_text(triplets, docs=True, gate=release_gate(gated)))

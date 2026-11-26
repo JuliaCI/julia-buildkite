@@ -1,13 +1,12 @@
 # The from-source build (USE_BINARYBUILDER=0) on the TTFX tasks: the same job as
 # ttfx_macos.yml, so that a pull request changing LLVM (deps/llvm.version, before
-# BinaryBuilder has built it) can be measured with the `needs extended CI` label. On a
-# pull request it is compared with the master build of the merge-base; on the daily
+# BinaryBuilder has built it) can be measured with the `needs source build` label. On a
+# pull request it is compared with the merge-base built from source; on the daily
 # julia-ci schedule, which has no merge-base, with the regular build of the same commit.
-# The renderer puts it in the TTFX group and fills in TTFX_BASE accordingly
-# (utilities/ttfx/README.md). The job's own label and key keep it apart from the master
-# job for julia-ci-timing. It posts no commit status and may fail without failing the
-# build: part of any difference is how the dependencies were built rather than what
-# changed.
+# The renderer puts it in the TTFX group, fills in TTFX_BASE accordingly and, on a pull
+# request, makes it wait for the merge-base build too (utilities/ttfx/README.md). The
+# job's own label and key keep it apart from the master job for julia-ci-timing. It posts
+# no commit status and may fail without failing the build.
 steps:
   - group: "TTFX"
     steps:

@@ -202,6 +202,13 @@ echo "--- Upload build artifacts to buildkite"
 # buildkite artifact.
 buildkite-agent artifact upload "${UPLOAD_FILENAME}.tar.gz"
 
+# A pull request's merge-base built from source (build_julia_merge_base.sh) is not this
+# build's commit, so it is not staged
+if [[ "${SKIP_STAGING:-}" == "true" ]]; then
+    echo "--- Not staging: SKIP_STAGING is set"
+    exit 0
+fi
+
 echo "--- Stage unsigned tarball to s3://${STAGING_TARGET}.tar.gz"
 # Stage straight from the build job (no relay through buildkite artifacts):
 # a write-once upload to this pipeline's ephemeral staging bucket, gated by

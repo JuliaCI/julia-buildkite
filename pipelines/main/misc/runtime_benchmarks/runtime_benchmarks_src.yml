@@ -1,9 +1,10 @@
 # The from-source build (USE_BINARYBUILDER=0) on the runtime benchmarks: the same job as
 # runtime_benchmarks_macos.yml, so that a pull request changing LLVM can be measured with
-# the `needs extended CI` label, as the TTFX job does (pipelines/main/misc/ttfx/ttfx_src.yml).
-# On a pull request it is compared with the master build of the merge-base; on the daily
+# the `needs source build` label, as the TTFX job does (pipelines/main/misc/ttfx/ttfx_src.yml).
+# On a pull request it is compared with the merge-base built from source; on the daily
 # julia-ci schedule, which has no merge-base, with the regular build of the same commit.
-# The renderer puts it in the Runtime benchmarks group and fills in RTB_BASE accordingly.
+# The renderer puts it in the Runtime benchmarks group, fills in RTB_BASE accordingly and,
+# on a pull request, makes it wait for the merge-base build too.
 # The job's own label and key keep it apart from the master job for julia-ci-timing. It
 # posts no commit status and may fail without failing the build.
 steps:
