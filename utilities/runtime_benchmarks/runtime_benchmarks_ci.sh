@@ -120,11 +120,17 @@ if [[ -n "${RTB_RELEASE}" ]]; then
         *) exit 1 ;;
     esac
     install_julia "${RTB_DIR}/release.tar.gz" head
+    HEAD_NOTE="julia ${PUBLISHED_VERSION:-${RTB_RELEASE}}"
 else
     echo "--- Download the julia build under test (${SHORT_COMMIT})"
     buildkite-agent artifact download --step "build_${TRIPLET}" "${UPLOAD_FILENAME}.tar.gz" .
     install_julia "${UPLOAD_FILENAME}.tar.gz" head
+    # shellcheck source=SCRIPTDIR/../build_note.sh
+    source .buildkite/utilities/build_note.sh
+    HEAD_NOTE="$(build_note)"
 fi
+# What the head is compared with, for the report's title
+BASE_NOTE=""
 HEAD_JULIA="${ARMS_DIR}/head/bin/julia"
 
 MODE="standalone"
@@ -135,6 +141,7 @@ if [[ -n "${RTB_RELEASE}" ]]; then
 elif [[ "${RTB_BASE}" == "commit" ]]; then
     BASE_BRANCH="${BUILDKITE_BRANCH:-master}"
     MERGE_BASE="$(git rev-parse HEAD)"
+    BASE_NOTE="the regular ${BASE_BRANCH} build of the same commit"
     echo "--- Comparing against the regular ${BASE_BRANCH} build of this commit"
 elif [[ "${RTB_BASE}" == "src" ]]; then
     echo "--- Fetch the from-source build of the merge-base"
@@ -142,6 +149,7 @@ elif [[ "${RTB_BASE}" == "src" ]]; then
     source .buildkite/utilities/src_merge_base.sh
     fetch_src_merge_base "${RTB_DIR}/base.tar.gz"
     echo "merge-base: ${MERGE_BASE}"
+    BASE_NOTE="the ${BASE_BRANCH} merge-base built from source"
     MODE="compare"
     install_julia "${RTB_DIR}/base.tar.gz" base
     ARMS=( "--arm=base=${ARMS_DIR}/base/bin/julia" "--arm=head=${HEAD_JULIA}" )
@@ -150,12 +158,14 @@ elif [[ "${BUILDKITE_PIPELINE_SLUG:-}" == "julia-pr" && "${BUILDKITE_PULL_REQUES
     echo "--- Find the merge-base with ${BASE_BRANCH}"
     git fetch --no-tags --quiet "${BUILDKITE_REPO}" "refs/heads/${BASE_BRANCH}"
     MERGE_BASE="$(git merge-base HEAD FETCH_HEAD)"
+    BASE_NOTE="the ${BASE_BRANCH} build of the merge-base"
     echo "merge-base: ${MERGE_BASE}"
 elif [[ "${BUILDKITE_PIPELINE_SLUG:-}" == julia-buildkite* ]]; then
     # Self-test: the build against itself. Two builds differ in code placement even when
     # nothing they run changed (and this pipeline's builds differ from julia-ci's), so any
     # verdict here would not be about the harness. Against itself, every flag is a bug.
     echo "--- Self-test: comparing the build against itself"
+    BASE_NOTE="itself"
     MODE="compare"
     ARMS=( "--arm=base=${HEAD_JULIA}" "--arm=head=${HEAD_JULIA}" )
 fi
@@ -276,6 +286,11 @@ fi
 RUN_URL="https://perf.julialang.org/runtime-run?pipeline=${BUILDKITE_PIPELINE_SLUG:-}&build=${BUILDKITE_BUILD_NUMBER:-}&job=${BUILDKITE_JOB_ID:-}"
 if [[ -f "${RTB_DIR}/out/report.md" ]]; then
     printf '\n[Every benchmark of this run, with its samples, on perf.julialang.org](%s)\n' "${RUN_URL}" >> "${RTB_DIR}/out/report.md"
+    # The suite's title does not say which build this job measured, or against what, so
+    # the reports of two jobs on one build would look alike
+    title="Runtime benchmarks (${HEAD_NOTE}${BASE_NOTE:+, against ${BASE_NOTE}})"
+    sed -i.orig "1s|Runtime benchmarks|${title}|" "${RTB_DIR}/out/report.md"
+    rm -f "${RTB_DIR}/out/report.md.orig"
 fi
 echo "Run page: ${RUN_URL}"
 annotate() {

@@ -177,7 +177,9 @@ else
     echo "--- Download the julia build under test (${SHORT_COMMIT})"
     buildkite-agent artifact download --step "build_${TRIPLET}" "${UPLOAD_FILENAME}.tar.gz" .
     install_julia "${UPLOAD_FILENAME}.tar.gz" head
-    HEAD_NOTE="${TRIPLET}"
+    # shellcheck source=SCRIPTDIR/../build_note.sh
+    source .buildkite/utilities/build_note.sh
+    HEAD_NOTE="$(build_note)"
 fi
 HEAD_JULIA="${ARMS_DIR}/head/bin/julia"
 
@@ -316,7 +318,7 @@ elif [[ "${BUILDKITE_PIPELINE_SLUG:-}" == "julia-ci" && -z "${TTFX_RELEASE}" ]];
 fi
 compare_args=( --results "${TTFX_DIR}/results.json" --startup "${TTFX_DIR}/startup.json" --meta "${TTFX_DIR}/results-meta.json"
                --head head --report "${TTFX_DIR}/report.md" --json "${TTFX_DIR}/compare.json"
-               --title "TTFX benchmarks: ${HEAD_NOTE}" --url "${BUILDKITE_BUILD_URL:-}#${BUILDKITE_JOB_ID:-}" )
+               --title "TTFX benchmarks (${HEAD_NOTE})" --url "${BUILDKITE_BUILD_URL:-}#${BUILDKITE_JOB_ID:-}" )
 if [[ -n "${PERF_REF}" ]]; then
     compare_args+=( --perf-url "https://perf.julialang.org/?tab=commit&c=${PERF_REF}" )
 fi
