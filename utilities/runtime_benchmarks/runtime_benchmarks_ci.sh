@@ -22,7 +22,8 @@ RTB_THREADS="${RTB_THREADS:-4}"
 RTB_CATEGORIES="${RTB_CATEGORIES:-}"
 RTB_RELEASE="${RTB_RELEASE:-}"
 # "commit": compare with the regular build of this build's own commit rather than with
-# the merge-base (the nightly from-source build, runtime_benchmarks_src.yml)
+# the merge-base (the nightly from-source build, runtime_benchmarks_src.yml). "src":
+# compare with the merge-base built from source (a pull request's from-source build).
 RTB_BASE="${RTB_BASE:-}"
 # Where julia-ci stages its tarballs, the promoted nightlies, and julia-pr's staging for
 # stacked pull requests; the same lookup as the TTFX job
@@ -135,6 +136,15 @@ elif [[ "${RTB_BASE}" == "commit" ]]; then
     BASE_BRANCH="${BUILDKITE_BRANCH:-master}"
     MERGE_BASE="$(git rev-parse HEAD)"
     echo "--- Comparing against the regular ${BASE_BRANCH} build of this commit"
+elif [[ "${RTB_BASE}" == "src" ]]; then
+    echo "--- Fetch the from-source build of the merge-base"
+    # shellcheck source=SCRIPTDIR/../src_merge_base.sh
+    source .buildkite/utilities/src_merge_base.sh
+    fetch_src_merge_base "${RTB_DIR}/base.tar.gz"
+    echo "merge-base: ${MERGE_BASE}"
+    MODE="compare"
+    install_julia "${RTB_DIR}/base.tar.gz" base
+    ARMS=( "--arm=base=${ARMS_DIR}/base/bin/julia" "--arm=head=${HEAD_JULIA}" )
 elif [[ "${BUILDKITE_PIPELINE_SLUG:-}" == "julia-pr" && "${BUILDKITE_PULL_REQUEST:-false}" != "false" ]]; then
     BASE_BRANCH="${BUILDKITE_PULL_REQUEST_BASE_BRANCH:-master}"
     echo "--- Find the merge-base with ${BASE_BRANCH}"
@@ -149,7 +159,7 @@ elif [[ "${BUILDKITE_PIPELINE_SLUG:-}" == julia-buildkite* ]]; then
     MODE="compare"
     ARMS=( "--arm=base=${HEAD_JULIA}" "--arm=head=${HEAD_JULIA}" )
 fi
-if [[ -n "${MERGE_BASE}" ]]; then
+if [[ -n "${MERGE_BASE}" && "${RTB_BASE}" != "src" ]]; then
     MODE="compare"
     built="$(nearest_built_commit "${MERGE_BASE}")"
     if [[ -n "${built}" && "${built}" != "${MERGE_BASE}" ]]; then
@@ -226,8 +236,8 @@ set -e
 # A regression on a pull request is measured again with a control arm: the master build
 # before the merge-base. Two master builds differ in code placement as well, so a change
 # stands only when head also differs that way from the control. A from-source head is
-# skipped: it differs from both regular builds in how it was built, so the control would
-# keep every regression.
+# skipped: the control is a regular build, which differs from it in how it was built, so
+# it would keep every regression.
 if [[ "${verdict}" == 1 && "${BUILDKITE_PIPELINE_SLUG:-}" == "julia-pr" && -n "${MERGE_BASE}" && "${OS}" != *src ]]; then
     echo "--- Confirm the regressions against the master build before the merge-base"
     flagged="$("${HEAD_JULIA}" --startup-file=no "${RTB_DIR}/suite/tools/flagged.jl" "${RTB_DIR}/out")"

@@ -702,11 +702,20 @@ class RenderLaunchPipelineTests(unittest.TestCase):
 
     def test_source_build_benchmarks(self):
         # The schedule compares with the regular build of the same commit, a
-        # labeled pull request with the merge-base
-        for source, build_env, base in (("schedule", {}, "commit"), (None, EXTENDED_PR, "")):
+        # labeled pull request with its merge-base built from source
+        for source, build_env, base in (("schedule", {}, "commit"), (None, EXTENDED_PR, "src")):
             output = render(source=source, BUILDKITE_PIPELINE_SLUG="julia-ci", **build_env)
-            self.assertEqual(job_keys(output, "Source Build"),
-                             ["build_x86_64-linux-gnusrcassert", "build_aarch64-apple-darwinsrc"])
+            builds = ["build_x86_64-linux-gnusrcassert", "build_aarch64-apple-darwinsrc"]
+            deps = ["build_aarch64-apple-darwinsrc"]
+            if base == "src":
+                builds.append("build_aarch64-apple-darwinsrc_merge_base")
+                deps.append("build_aarch64-apple-darwinsrc_merge_base")
+                merge_base = re.search(r'^      - label: ":macos: build aarch64-apple-darwinsrc merge-base"\n'
+                                       r'.*?(?=^      - |^  - group:|\Z)', output, re.M | re.S).group()
+                self.assertIn("utilities/build_julia_merge_base.sh", merge_base)
+                self.assertIn(re.search(r'MAKE_FLAGS: "[^"]*"', build_step(output, "aarch64-apple-darwinsrc")).group(),
+                              merge_base)
+            self.assertEqual(job_keys(output, "Source Build"), builds)
             # On a pull request, next to the launch steps
             for group, label, key, var in (
                     ("TTFX", "TTFX src", "ttfx_src", "TTFX_BASE"),
@@ -717,7 +726,7 @@ class RenderLaunchPipelineTests(unittest.TestCase):
                     rf'^      - label: ":macos: {label} aarch64-apple-darwin"\n'
                     r'.*?(?=^      - |^  - group:|\Z)', output, re.M | re.S,
                 ).group()
-                self.assertIn('depends_on:\n          - "build_aarch64-apple-darwinsrc"', step)
+                self.assertIn("depends_on:\n" + "".join(f'          - "{d}"\n' for d in deps), step)
                 self.assertIn('TRIPLET: "aarch64-apple-darwinsrc"', step)
                 self.assertIn(f'{var}: "{base}"', step)
                 self.assertIn("soft_fail: true", step)

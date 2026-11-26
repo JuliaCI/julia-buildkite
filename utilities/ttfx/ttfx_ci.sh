@@ -69,7 +69,9 @@ TTFX_RELEASES_URL="${TTFX_RELEASES_URL:-https://julialang-s3.julialang.org/bin}"
 TTFX_LATEST_RELEASE_API="${TTFX_LATEST_RELEASE_API:-https://api.github.com/repos/JuliaLang/julia/releases/latest}"
 TTFX_VERSIONS_URL="${TTFX_VERSIONS_URL:-${TTFX_RELEASES_URL}/versions.json}"
 # "commit": compare with the regular build of this build's own commit rather than with
-# the merge-base (the nightly optimized build, pipelines/main/misc/ttfx/ttfx_opt.yml)
+# the merge-base (the nightly optimized build, pipelines/main/misc/ttfx/ttfx_opt.yml).
+# "src": compare with the merge-base built from source (a pull request's from-source
+# build, pipelines/main/misc/ttfx/ttfx_src.yml).
 TTFX_BASE="${TTFX_BASE:-}"
 
 rm -rf "${TTFX_DIR}"
@@ -198,6 +200,16 @@ elif [[ "${TTFX_BASE}" == "commit" ]]; then
     BASE_BRANCH="${BUILDKITE_BRANCH:-master}"
     MERGE_BASE="$(git rev-parse HEAD)"
     echo "--- Comparing against the regular ${BASE_BRANCH} build of this commit"
+elif [[ "${TTFX_BASE}" == "src" ]]; then
+    echo "--- Fetch the from-source build of the merge-base"
+    # shellcheck source=SCRIPTDIR/../src_merge_base.sh
+    source .buildkite/utilities/src_merge_base.sh
+    fetch_src_merge_base "${TTFX_DIR}/base.tar.gz"
+    echo "merge-base: ${MERGE_BASE}"
+    MODE="compare"
+    BASE_NOTE="the ${BASE_BRANCH} merge-base built from source"
+    install_julia "${TTFX_DIR}/base.tar.gz" base
+    ARMS=( "base=${ARMS_DIR}/base" "head=${ARMS_DIR}/head" )
 elif [[ "${BUILDKITE_PIPELINE_SLUG:-}" == "julia-pr" && "${BUILDKITE_PULL_REQUEST:-false}" != "false" ]]; then
     BASE_BRANCH="${BUILDKITE_PULL_REQUEST_BASE_BRANCH:-master}"
     echo "--- Find the merge-base with ${BASE_BRANCH}"
@@ -214,7 +226,7 @@ base_unavailable_status=1
 if [[ "${SELF_TEST}" == true ]]; then
     base_unavailable_status="${SELF_TEST_INCONCLUSIVE}"
 fi
-if [[ -n "${MERGE_BASE}" ]]; then
+if [[ -n "${MERGE_BASE}" && "${TTFX_BASE}" != "src" ]]; then
     MODE="compare"
     built="$(nearest_built_commit "${MERGE_BASE}")"
     if [[ -n "${built}" && "${built}" != "${MERGE_BASE}" ]]; then

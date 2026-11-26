@@ -31,7 +31,7 @@ TTFX job's (`utilities/ttfx/README.md`), and the build state comes from
 | `julia-ci` (master, release branches) | every build | absolute: the build alone, kept for perf.julialang.org |
 | `julia-ci` (the weekly `TTFX_RELEASE` schedule) | the newest stable release, the LTS, and the next release's nightly | absolute: each release alone, as a reference |
 | `julia-ci` (the daily schedule) | the from-source macOS aarch64 build | comparison against the regular build of the same commit (`RTB_BASE=commit`) |
-| `julia-pr` (pull requests with the `needs extended CI` label) | the from-source macOS aarch64 build | comparison against the master build of the merge-base |
+| `julia-pr` (pull requests with the `needs extended CI` label) | the from-source macOS aarch64 build | comparison against the merge-base built from source (`RTB_BASE=src`) |
 | `julia-buildkite-ci` (self-test) | every build | comparison: the build against itself (A/A), so any flag is a harness bug |
 
 ## Where it runs
@@ -100,9 +100,9 @@ The macOS from-source build that the TTFX tasks measure for LLVM changes
 group (`pipelines/main/misc/runtime_benchmarks/runtime_benchmarks_src.yml`), with the
 same bases as its TTFX job. Its label and key (`:macos: Runtime benchmarks src <triplet>`,
 `runtime_benchmarks_src_<triplet>`) keep it apart for julia-ci-timing. It is `soft_fail`
-and posts no commit status. On a pull request it skips the confirmation run: its head
-differs from both regular builds in how it was built, so the control would keep every
-regression.
+and posts no commit status. On a pull request it skips the confirmation run: the control
+is a regular build, which differs from the head in how it was built, so it would keep
+every regression.
 
 ## Artifacts
 
